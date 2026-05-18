@@ -1,5 +1,16 @@
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import { WebhookServerImpl } from '@server/webhook/WebhookServer.impl';
+
+async function startServer(server: WebhookServerImpl): Promise<number> {
+  server.start();
+  const httpServer = (server as any).server as import('node:http').Server;
+  if (!httpServer.listening) {
+    await once(httpServer, 'listening');
+  }
+  return ((httpServer.address() as AddressInfo | null)?.port ?? 0) as number;
+}
 
 describe('WebhookServerImpl coverage', () => {
   it('uses default port when not specified', () => {
@@ -114,5 +125,107 @@ describe('WebhookServerImpl coverage', () => {
     const stats1 = server.getStats();
     const stats2 = server.getStats();
     expect(stats1).not.toBe(stats2);
+  });
+
+  it('returns not found for unknown routes', async () => {
+    const server = new WebhookServerImpl({ port: 0 });
+    const port = await startServer(server);
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/missing`, { method: 'POST' });
+      expect(response.status).toBe(404);
+      await expect(response.text()).resolves.toBe('not found');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('rejects webhook requests with the wrong secret', async () => {
+    const server = new WebhookServerImpl({ port: 0 });
+    server.registerEndpoint({ path: '/secure', secret: 'expected-secret' });
+    const port = await startServer(server);
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/secure`, {
+        method: 'POST',
+        headers: { 'x-webhook-secret': 'wrong-secret' },
+      });
+      expect(response.status).toBe(401);
+      await expect(response.text()).resolves.toBe('unauthorized');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('queues raw payloads and ignores unknown event names', async () => {
+    const queue = { enqueue: vi.fn() };
+    const handler = vi.fn();
+    const server = new WebhookServerImpl({ port: 0, commandQueue: queue as any });
+    server.registerEndpoint({ path: '/hook' });
+    server.registerEvent('tool_called', handler);
+    const port = await startServer(server);
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/hook`, {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' },
+        body: 'not-json',
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toMatchObject({ ok: true, endpointId: 'ep-1' });
+      expect(queue.enqueue).toHaveBeenCalledWith({
+        endpointId: 'ep-1',
+        payload: { rawBody: 'not-json' },
+      });
+      expect(handler).not.toHaveBeenCalled();
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('invokes registered event handlers and tracks sent webhooks', async () => {
+    const queue = { enqueue: vi.fn() };
+    const handler = vi.fn();
+    const server = new WebhookServerImpl({ port: 0, commandQueue: queue as any });
+    server.registerEndpoint({ path: '/events', secret: 'top-secret' });
+    server.registerEvent('tool_called', handler);
+    const port = await startServer(server);
+    const originalFetch = global.fetch;
+
+    try {
+      const response = await originalFetch(`http://127.0.0.1:${port}/events`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-webhook-secret': 'top-secret',
+        },
+        body: JSON.stringify({ event: 'tool_called', payload: { id: 1 } }),
+      });
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ ok: true, endpointId: 'ep-1' });
+      expect(queue.enqueue).toHaveBeenCalledWith({
+        endpointId: 'ep-1',
+        payload: { event: 'tool_called', payload: { id: 1 } },
+      });
+      expect(handler).toHaveBeenCalledWith({ event: 'tool_called', payload: { id: 1 } });
+
+      global.fetch = vi.fn(async () => new Response(null, { status: 204 })) as typeof fetch;
+      await server.sendWebhook('http://127.0.0.1:43210/hook', 'tool_called', { value: 1 });
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://127.0.0.1:43210/hook',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ event: 'tool_called', payload: { value: 1 } }),
+        }),
+      );
+      const stats = server.getStats();
+      expect(stats.webhooksSent).toBe(1);
+      expect(stats.lastSentAt).toBeTruthy();
+    } finally {
+      global.fetch = originalFetch;
+      await server.stop();
+    }
   });
 });
