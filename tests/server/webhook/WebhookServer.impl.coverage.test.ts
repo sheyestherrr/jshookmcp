@@ -1,4 +1,4 @@
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import { WebhookServerImpl } from '@server/webhook/WebhookServer.impl';
@@ -111,6 +111,18 @@ describe('WebhookServerImpl coverage', () => {
     expect(server.isRunning()).toBe(false);
   });
 
+  it('propagates close callback failures during stop', async () => {
+    const server = new WebhookServerImpl({ port: 8080 });
+    (server as any).server = {
+      close: (callback: (error?: Error | null) => void) => {
+        callback(new Error('close failed'));
+      },
+    };
+
+    await expect(server.stop()).rejects.toThrow('close failed');
+    expect(server.isRunning()).toBe(false);
+  });
+
   it('listEndpoints returns copies', () => {
     const server = new WebhookServerImpl({ port: 8080 });
     server.registerEndpoint({ path: '/hook' });
@@ -125,6 +137,54 @@ describe('WebhookServerImpl coverage', () => {
     const stats1 = server.getStats();
     const stats2 = server.getStats();
     expect(stats1).not.toBe(stats2);
+  });
+
+  it('handles empty request bodies with default method and url fallbacks', async () => {
+    const server = new WebhookServerImpl({ port: 8080 });
+    server.registerEndpoint({ path: '/', method: 'GET' });
+
+    const request = new EventEmitter() as any;
+    request.method = undefined;
+    request.url = undefined;
+    request.headers = {};
+    request.setEncoding = vi.fn();
+
+    const response = {
+      statusCode: 200,
+      setHeader: vi.fn(),
+      end: vi.fn(),
+    } as any;
+
+    const pending = (server as any).handleRequest(request, response) as Promise<void>;
+    request.emit('end');
+    await pending;
+
+    expect(request.setEncoding).toHaveBeenCalledWith('utf8');
+    expect(response.setHeader).toHaveBeenCalledWith('content-type', 'application/json');
+    expect(response.end).toHaveBeenCalledWith(JSON.stringify({ ok: true, endpointId: 'ep-1' }));
+  });
+
+  it('rejects when request streaming fails before completion', async () => {
+    const server = new WebhookServerImpl({ port: 8080 });
+    server.registerEndpoint({ path: '/hook' });
+
+    const request = new EventEmitter() as any;
+    request.method = 'POST';
+    request.url = '/hook';
+    request.headers = {};
+    request.setEncoding = vi.fn();
+
+    const response = {
+      statusCode: 200,
+      setHeader: vi.fn(),
+      end: vi.fn(),
+    } as any;
+
+    const pending = (server as any).handleRequest(request, response) as Promise<void>;
+    request.emit('error', new Error('stream failed'));
+
+    await expect(pending).rejects.toThrow('stream failed');
+    expect(response.end).not.toHaveBeenCalled();
   });
 
   it('returns not found for unknown routes', async () => {
@@ -227,5 +287,40 @@ describe('WebhookServerImpl coverage', () => {
       global.fetch = originalFetch;
       await server.stop();
     }
+  });
+
+  it('covers remaining webhook event branches without registered listeners', async () => {
+    const server = new WebhookServerImpl({ port: 8080 });
+    const domainActivated = vi.fn();
+    const evidenceAdded = vi.fn();
+    const workflowCompleted = vi.fn();
+
+    server.registerEvent('domain_activated', domainActivated);
+    server.registerEvent('evidence_added', evidenceAdded);
+    server.registerEvent('workflow_completed', workflowCompleted);
+
+    await expect(
+      (server as any).invokeEventHandlers('domain_activated', { event: 'domain_activated' }),
+    ).resolves.toBeUndefined();
+    await expect(
+      (server as any).invokeEventHandlers('evidence_added', { event: 'evidence_added' }),
+    ).resolves.toBeUndefined();
+    await expect(
+      (server as any).invokeEventHandlers('workflow_completed', {
+        event: 'workflow_completed',
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      (server as any).invokeEventHandlers('tool_called', { event: 'tool_called' }),
+    ).resolves.toBeUndefined();
+    await expect(
+      (server as any).invokeEventHandlers('not_a_webhook_event', {
+        event: 'not_a_webhook_event',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(domainActivated).toHaveBeenCalledWith({ event: 'domain_activated' });
+    expect(evidenceAdded).toHaveBeenCalledWith({ event: 'evidence_added' });
+    expect(workflowCompleted).toHaveBeenCalledWith({ event: 'workflow_completed' });
   });
 });
