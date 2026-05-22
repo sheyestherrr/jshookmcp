@@ -3,9 +3,8 @@
  * to scanning plugin/workflow roots for legacy manifest files.
  */
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { basename, dirname, relative, resolve } from 'node:path';
-import { glob } from 'tinyglobby';
 import {
   INSTALLED_EXTENSION_METADATA_FILENAME,
   type InstalledExtensionMetadata,
@@ -34,26 +33,46 @@ async function collectMatchingFiles(
 ): Promise<string[]> {
   const files = new Set<string>();
   for (const root of roots) {
-    let matchedPaths: string[];
     try {
-      matchedPaths = await glob('**/*', {
-        cwd: root,
-        absolute: true,
-        onlyFiles: true,
-        dot: true,
-        ignore: ['**/node_modules/**', '**/.git/**', '**/.pnpm/**'],
-      });
+      await collectFilesFromRoot(root, matcher, files);
     } catch {
       continue;
     }
+  }
+  return [...files].toSorted((a, b) => a.localeCompare(b));
+}
 
-    for (const file of matchedPaths) {
-      if (matcher(basename(file))) {
-        files.add(file);
+const IGNORED_DIRECTORY_NAMES = new Set(['node_modules', '.git', '.pnpm']);
+
+async function collectFilesFromRoot(
+  root: string,
+  matcher: (filename: string) => boolean,
+  files: Set<string>,
+): Promise<void> {
+  const stack = [root];
+
+  while (stack.length > 0) {
+    const currentDir = stack.pop();
+    if (!currentDir) {
+      continue;
+    }
+
+    const entries = await readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = resolve(currentDir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+          stack.push(fullPath);
+        }
+        continue;
+      }
+
+      if (entry.isFile() && matcher(basename(fullPath))) {
+        files.add(fullPath);
       }
     }
   }
-  return [...files].toSorted((a, b) => a.localeCompare(b));
 }
 
 function normalizeExtensionCandidateKey(root: string, file: string): string {

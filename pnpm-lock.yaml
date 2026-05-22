@@ -58,9 +58,6 @@ importers:
       rebrowser-puppeteer-core:
         specifier: ^24.8.1
         version: 24.8.1
-      tinyglobby:
-        specifier: ^0.2.16
-        version: 0.2.16
       yauzl:
         specifier: ^3.3.0
         version: 3.3.0
@@ -104,6 +101,9 @@ importers:
       rollup-plugin-visualizer:
         specifier: ^7.0.1
         version: 7.0.1(rolldown@1.0.0)(rollup@4.60.2)
+      tinyglobby:
+        specifier: ^0.2.16
+        version: 0.2.16
       tsdown:
         specifier: ^0.22.0
         version: 0.22.0(tsx@4.21.0)(typescript@6.0.3)(unrun@0.2.37)

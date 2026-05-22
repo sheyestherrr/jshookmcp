@@ -230,6 +230,20 @@ function smokeExec(command, args, cwd) {
   });
 }
 
+function assertSmokeResult(label, smokeResult) {
+  if (smokeResult.stdout.trim().length > 0) {
+    throw new Error(
+      `${label} wrote to stdout before any MCP handshake.\nstdout:\n${smokeResult.stdout}\nstderr:\n${smokeResult.stderr}`,
+    );
+  }
+
+  if (/\[Config\]/.test(smokeResult.stderr)) {
+    throw new Error(
+      `${label} emitted config bootstrap noise before handshake.\nstderr:\n${smokeResult.stderr}`,
+    );
+  }
+}
+
 const tarballPath = resolveTarballPath(inputPath);
 const installDir = createTempProject('jshook-pack-install-');
 const execDir = createTempProject('jshook-pack-exec-');
@@ -319,27 +333,15 @@ try {
     throw new Error(`Installed executable shim is missing: ${installedBinPath}`);
   }
 
-  const smokeCommand =
-    process.platform === 'win32'
-      ? { command: installedBinPath, args: [] }
-      : {
-          command: npmRunner.command,
-          args: [...npmRunner.prefixArgs, 'exec', '--yes', '--package', tarballPath, binName],
-        };
+  const installedSmokeResult = await smokeExec(installedBinPath, [], execDir);
+  assertSmokeResult('Installed executable shim smoke test', installedSmokeResult);
 
-  const smokeResult = await smokeExec(smokeCommand.command, smokeCommand.args, execDir);
-
-  if (smokeResult.stdout.trim().length > 0) {
-    throw new Error(
-      `Packed tarball wrote to stdout before any MCP handshake.\nstdout:\n${smokeResult.stdout}\nstderr:\n${smokeResult.stderr}`,
-    );
-  }
-
-  if (/\[Config\]/.test(smokeResult.stderr)) {
-    throw new Error(
-      `Packed tarball emitted config bootstrap noise before handshake.\nstderr:\n${smokeResult.stderr}`,
-    );
-  }
+  const npmExecSmokeResult = await smokeExec(
+    npmRunner.command,
+    [...npmRunner.prefixArgs, 'exec', '--yes', '--package', tarballPath, binName],
+    execDir,
+  );
+  assertSmokeResult('npm exec smoke test', npmExecSmokeResult);
 
   console.log(`Verified packed install + npm exec smoke test for ${tarballPath}`);
 } finally {
