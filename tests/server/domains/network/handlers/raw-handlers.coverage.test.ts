@@ -625,6 +625,19 @@ describe('RawHandlers', () => {
       );
       expect(state.httpRequest).not.toHaveBeenCalled();
     });
+
+    it('supports pinned lookup callbacks that request all addresses', () => {
+      const lookup = (handler as any).createPinnedLookup('93.184.216.34') as (
+        hostname: string,
+        options: { all: boolean },
+        callback: (error: Error | null, address: unknown, family: number) => void,
+      ) => void;
+
+      const callback = vi.fn();
+      lookup('example.com', { all: true }, callback);
+
+      expect(callback).toHaveBeenCalledWith(null, [{ address: '93.184.216.34', family: 4 }]);
+    });
   });
 
   describe('ICMP helpers', () => {

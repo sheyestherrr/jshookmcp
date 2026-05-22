@@ -46,6 +46,57 @@ export interface TracerouteResult {
   totalTime: number;
 }
 
+type WinIcmpSendEchoFn = ((
+  handle: bigint,
+  destAddr: number,
+  sendData: Buffer,
+  sendLength: number,
+  options: Buffer,
+  replyBuf: Buffer,
+  replySize: number,
+  timeoutMs: number,
+) => number) & {
+  async: (
+    handle: bigint,
+    destAddr: number,
+    sendData: Buffer,
+    sendLength: number,
+    options: Buffer,
+    replyBuf: Buffer,
+    replySize: number,
+    timeoutMs: number,
+    callback: (err: unknown, result: number) => void,
+  ) => void;
+};
+
+type WinIcmpFns = {
+  inetAddr: (ip: string) => number;
+  createFile: () => bigint;
+  closeHandle: (handle: bigint) => number;
+  sendEcho: WinIcmpSendEchoFn;
+};
+
+type PosixFns = {
+  socket: (domain: number, type: number, protocol: number) => number;
+  setsockopt: (
+    fd: number,
+    level: number,
+    optname: number,
+    optval: Buffer,
+    optlen: number,
+  ) => number;
+  sendto: (
+    fd: number,
+    buf: Buffer,
+    len: number,
+    flags: number,
+    addr: Buffer,
+    addrLen: number,
+  ) => number;
+  recv: (fd: number, buf: Buffer, len: number, flags: number) => number;
+  close: (fd: number) => number;
+};
+
 // ── Shared Helpers ──
 
 function ipToString(addr: number): string {
@@ -100,10 +151,12 @@ function winStatusClass(s: number): string {
   return 'error';
 }
 
-let iphlpapi: koffi.IKoffiLib | null = null;
-let ws2_32: koffi.IKoffiLib | null = null;
+let iphlpapi: koffi.LibraryHandle | null = null;
+let ws2_32: koffi.LibraryHandle | null = null;
+let winIcmpFns: WinIcmpFns | null = null;
+let posixFns: PosixFns | null = null;
 
-function getIphlpapi(): koffi.IKoffiLib {
+function getIphlpapi(): koffi.LibraryHandle {
   if (!iphlpapi) {
     iphlpapi = koffi.load('iphlpapi.dll');
     logger.debug('Loaded iphlpapi.dll via koffi');
@@ -111,12 +164,29 @@ function getIphlpapi(): koffi.IKoffiLib {
   return iphlpapi;
 }
 
-function getWs2_32(): koffi.IKoffiLib {
+function getWs2_32(): koffi.LibraryHandle {
   if (!ws2_32) {
     ws2_32 = koffi.load('ws2_32.dll');
     logger.debug('Loaded ws2_32.dll via koffi');
   }
   return ws2_32;
+}
+
+function getWinIcmpFns() {
+  if (!winIcmpFns) {
+    const iphlpapiLib = getIphlpapi();
+    const ws2Lib = getWs2_32();
+    const sendEcho = iphlpapiLib.func(
+      'uint32 IcmpSendEcho(void *, uint32, void *, uint16, void *, void *, uint32, uint32)',
+    ) as WinIcmpSendEchoFn;
+    winIcmpFns = {
+      inetAddr: ws2Lib.func('uint32 inet_addr(char *)'),
+      createFile: iphlpapiLib.func('void * IcmpCreateFile()'),
+      closeHandle: iphlpapiLib.func('int IcmpCloseHandle(void *)'),
+      sendEcho,
+    };
+  }
+  return winIcmpFns;
 }
 
 const IP_OPT_SIZE = 16;
@@ -143,50 +213,53 @@ function parseReply(buf: Buffer) {
 }
 
 function win_inet_addr(ip: string): number {
-  const fn = getWs2_32().func('uint32 inet_addr(char *)');
-  return fn(ip);
+  return getWinIcmpFns().inetAddr(ip);
 }
 
 function win_IcmpCreateFile(): bigint {
-  const fn = getIphlpapi().func('void * IcmpCreateFile()');
-  return fn();
+  return getWinIcmpFns().createFile();
 }
 
 function win_IcmpCloseHandle(h: bigint): boolean {
-  const fn = getIphlpapi().func('int IcmpCloseHandle(void *)');
-  return fn(h) !== 0;
+  return getWinIcmpFns().closeHandle(h) !== 0;
 }
 
-function win_IcmpSendEcho(
+async function win_IcmpSendEchoAsync(
   handle: bigint,
   destAddr: number,
   sendData: Buffer,
   optionBuf: Buffer,
   timeoutMs: number,
-): { numReplies: number; replyBuf: Buffer } {
-  const fn = getIphlpapi().func(
-    'uint32 IcmpSendEcho(void *, uint32, void *, uint16, void *, void *, uint32, uint32)',
-  );
+): Promise<{ numReplies: number; replyBuf: Buffer }> {
   const replyBuf = Buffer.alloc(getReplyBufferSize(sendData.length));
-  const n = fn(
-    handle,
-    destAddr,
-    sendData,
-    sendData.length,
-    optionBuf,
-    replyBuf,
-    replyBuf.length,
-    timeoutMs,
-  );
-  return { numReplies: Number(n), replyBuf };
+  const n = await new Promise<number>((resolve, reject) => {
+    getWinIcmpFns().sendEcho.async(
+      handle,
+      destAddr,
+      sendData,
+      sendData.length,
+      optionBuf,
+      replyBuf,
+      replyBuf.length,
+      timeoutMs,
+      (err, result) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(Number(result));
+      },
+    );
+  });
+  return { numReplies: n, replyBuf };
 }
 
-function winIcmpProbe(params: {
+async function winIcmpProbe(params: {
   target: string;
   ttl?: number;
   packetSize?: number;
   timeout?: number;
-}): IcmpProbeResult {
+}): Promise<IcmpProbeResult> {
   const {
     target,
     ttl = 128,
@@ -212,7 +285,7 @@ function winIcmpProbe(params: {
   try {
     const sendData = Buffer.alloc(packetSize, 0xaa);
     const optionBuf = buildOptionBuf(ttl);
-    const { numReplies, replyBuf } = win_IcmpSendEcho(
+    const { numReplies, replyBuf } = await win_IcmpSendEchoAsync(
       handle,
       destAddr,
       sendData,
@@ -249,12 +322,12 @@ function winIcmpProbe(params: {
   }
 }
 
-function winTraceroute(params: {
+async function winTraceroute(params: {
   target: string;
   maxHops?: number;
   timeout?: number;
   packetSize?: number;
-}): TracerouteResult {
+}): Promise<TracerouteResult> {
   const {
     target,
     maxHops = ICMP_TRACEROUTE_MAX_HOPS,
@@ -275,7 +348,7 @@ function winTraceroute(params: {
     for (let ttl = 1; ttl <= maxHops; ttl++) {
       const sendData = Buffer.alloc(packetSize, 0xaa);
       const optionBuf = buildOptionBuf(ttl);
-      const { numReplies, replyBuf } = win_IcmpSendEcho(
+      const { numReplies, replyBuf } = await win_IcmpSendEchoAsync(
         handle,
         destAddr,
         sendData,
@@ -334,9 +407,9 @@ const SOL_SOCKET = 1;
 const SO_RCVTIMEO = process.platform === 'darwin' ? 0x1006 : 20;
 const POSIX_LIB = process.platform === 'darwin' ? '/usr/lib/libSystem.B.dylib' : 'libc.so.6';
 
-let posixLib: koffi.IKoffiLib | null = null;
+let posixLib: koffi.LibraryHandle | null = null;
 
-function getPosixLib(): koffi.IKoffiLib {
+function getPosixLib(): koffi.LibraryHandle {
   if (!posixLib) {
     posixLib = koffi.load(POSIX_LIB);
     logger.debug(`Loaded ${POSIX_LIB} via koffi for ICMP`);
@@ -344,9 +417,22 @@ function getPosixLib(): koffi.IKoffiLib {
   return posixLib;
 }
 
+function getPosixFns() {
+  if (!posixFns) {
+    const lib = getPosixLib();
+    posixFns = {
+      socket: lib.func('int socket(int, int, int)'),
+      setsockopt: lib.func('int setsockopt(int, int, int, void *, int)'),
+      sendto: lib.func('int sendto(int, void *, int, int, void *, int)'),
+      recv: lib.func('int recv(int, void *, int, int)'),
+      close: lib.func('int close(int)'),
+    };
+  }
+  return posixFns;
+}
+
 function posixSocket(domain: number, type: number, protocol: number): number {
-  const fn = getPosixLib().func('int socket(int, int, int)');
-  return fn(domain, type, protocol);
+  return getPosixFns().socket(domain, type, protocol);
 }
 
 function posixSetsockopt(
@@ -356,23 +442,19 @@ function posixSetsockopt(
   optval: Buffer,
   optlen: number,
 ): number {
-  const fn = getPosixLib().func('int setsockopt(int, int, int, void *, int)');
-  return fn(fd, level, optname, optval, optlen);
+  return getPosixFns().setsockopt(fd, level, optname, optval, optlen);
 }
 
 function posixSendto(fd: number, buf: Buffer, addr: Buffer): number {
-  const fn = getPosixLib().func('int sendto(int, void *, int, int, void *, int)');
-  return fn(fd, buf, buf.length, 0, addr, 16);
+  return getPosixFns().sendto(fd, buf, buf.length, 0, addr, 16);
 }
 
 function posixRecv(fd: number, buf: Buffer): number {
-  const fn = getPosixLib().func('int recv(int, void *, int, int)');
-  return fn(fd, buf, buf.length, 0);
+  return getPosixFns().recv(fd, buf, buf.length, 0);
 }
 
 function posixClose(fd: number): number {
-  const fn = getPosixLib().func('int close(int)');
-  return fn(fd);
+  return getPosixFns().close(fd);
 }
 
 // ── ICMP Packet Helpers ──
@@ -732,12 +814,12 @@ export function isIcmpAvailable(): boolean {
   return false;
 }
 
-export function icmpProbe(params: {
+export async function icmpProbe(params: {
   target: string;
   ttl?: number;
   packetSize?: number;
   timeout?: number;
-}): IcmpProbeResult {
+}): Promise<IcmpProbeResult> {
   const {
     target,
     ttl = 128,
@@ -765,12 +847,12 @@ export function icmpProbe(params: {
   return posixIcmpProbe({ target, ttl, packetSize, timeout });
 }
 
-export function traceroute(params: {
+export async function traceroute(params: {
   target: string;
   maxHops?: number;
   timeout?: number;
   packetSize?: number;
-}): TracerouteResult {
+}): Promise<TracerouteResult> {
   const {
     target,
     maxHops = ICMP_TRACEROUTE_MAX_HOPS,
@@ -789,19 +871,30 @@ export function traceroute(params: {
   return posixTraceroute({ target, maxHops, timeout, packetSize });
 }
 
-export function unloadIcmpLibraries(): void {
+export function unloadIcmpLibraries(): {
+  unloadedWindows: boolean;
+  unloadedPosix: boolean;
+} {
+  let unloadedWindows = false;
+  let unloadedPosix = false;
   if (iphlpapi) {
     iphlpapi.unload();
     iphlpapi = null;
+    unloadedWindows = true;
   }
   if (ws2_32) {
     ws2_32.unload();
     ws2_32 = null;
+    unloadedWindows = true;
   }
+  winIcmpFns = null;
   if (posixLib) {
     posixLib.unload();
     posixLib = null;
+    unloadedPosix = true;
   }
+  posixFns = null;
   available = null;
   logger.debug('Unloaded ICMP native libraries');
+  return { unloadedWindows, unloadedPosix };
 }

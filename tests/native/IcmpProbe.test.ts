@@ -27,6 +27,34 @@ const { state, mockKoffi, posixMocks } = vi.hoisted(() => {
       return 1;
     },
   );
+  Object.assign(sendEcho, {
+    async: (
+      handle: bigint,
+      destAddr: number,
+      sendData: Buffer,
+      sendLength: number,
+      options: Buffer,
+      replyBuf: Buffer,
+      replySize: number,
+      _timeoutMs: number,
+      callback: (err: unknown, result: number) => void,
+    ) => {
+      try {
+        const result = sendEcho(
+          handle,
+          destAddr,
+          sendData,
+          sendLength,
+          options,
+          replyBuf,
+          replySize,
+        );
+        queueMicrotask(() => callback(null, result));
+      } catch (error) {
+        queueMicrotask(() => callback(error, 0));
+      }
+    },
+  });
 
   const posixSocket = vi.fn(() => 10);
   const posixClose = vi.fn(() => 0);
@@ -76,7 +104,7 @@ describe('IcmpProbe Windows reply buffer sizing', () => {
     vi.resetModules();
     const { icmpProbe, unloadIcmpLibraries } = await import('@src/native/IcmpProbe');
 
-    const result = icmpProbe({ target: '1.1.1.1', packetSize: 2048, timeout: 1000 });
+    const result = await icmpProbe({ target: '1.1.1.1', packetSize: 2048, timeout: 1000 });
 
     expect(result.alive).toBe(true);
     expect(state.replySizes).toHaveLength(1);
@@ -90,7 +118,12 @@ describe('IcmpProbe Windows reply buffer sizing', () => {
     vi.resetModules();
     const { traceroute, unloadIcmpLibraries } = await import('@src/native/IcmpProbe');
 
-    const result = traceroute({ target: '1.1.1.1', maxHops: 1, packetSize: 4096, timeout: 1000 });
+    const result = await traceroute({
+      target: '1.1.1.1',
+      maxHops: 1,
+      packetSize: 4096,
+      timeout: 1000,
+    });
 
     expect(result.totalHops).toBe(1);
     expect(state.replySizes).toHaveLength(1);
@@ -116,10 +149,10 @@ describe('IcmpProbe POSIX traceroute SEND_ERROR', () => {
     vi.resetModules();
     const { traceroute, unloadIcmpLibraries } = await import('@src/native/IcmpProbe');
 
-    const result = traceroute({ target: '1.1.1.1', maxHops: 30, timeout: 1000 });
+    const result = await traceroute({ target: '1.1.1.1', maxHops: 30, timeout: 1000 });
 
     expect(result.hops.length).toBeLessThanOrEqual(5);
-    expect(result.hops.every((h) => h.status === 'SEND_ERROR')).toBe(true);
+    expect(result.hops.every((h: { status: string }) => h.status === 'SEND_ERROR')).toBe(true);
     expect(result.reached).toBe(false);
 
     unloadIcmpLibraries();

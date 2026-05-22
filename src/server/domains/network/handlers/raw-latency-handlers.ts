@@ -16,6 +16,17 @@ import {
 import { emitEvent, parseNumberArg } from './shared';
 import { icmpProbe, traceroute, isIcmpAvailable } from '@native/IcmpProbe';
 
+type PinnedLookupOneCallback = (
+  error: NodeJS.ErrnoException | null,
+  address: string,
+  family: number,
+) => void;
+
+type PinnedLookupAllCallback = (
+  error: NodeJS.ErrnoException | null,
+  addresses: Array<{ address: string; family: number }>,
+) => void;
+
 export class RawLatencyHandlers {
   constructor(private readonly eventBus?: EventBus<ServerEventMap>) {}
 
@@ -125,7 +136,7 @@ export class RawLatencyHandlers {
         65500,
       );
 
-      const result = traceroute({ target: resolvedTarget, maxHops, timeout, packetSize });
+      const result = await traceroute({ target: resolvedTarget, maxHops, timeout, packetSize });
       return R.ok()
         .merge({ resolvedFrom: target })
         .json(result as unknown as Record<string, unknown>);
@@ -242,7 +253,7 @@ export class RawLatencyHandlers {
         65500,
       );
 
-      const result = icmpProbe({ target: resolvedTarget, ttl, packetSize, timeout });
+      const result = await icmpProbe({ target: resolvedTarget, ttl, packetSize, timeout });
       return R.ok()
         .merge({ resolvedFrom: target })
         .json(result as unknown as Record<string, unknown>);
@@ -270,19 +281,27 @@ export class RawLatencyHandlers {
     }
   }
 
-  createPinnedLookup(address: string) {
+  createPinnedLookup(address: string): net.LookupFunction {
     const family = net.isIP(address) === 6 ? 6 : 4;
     return (
       _hostname: string,
       optionsOrCallback: unknown,
-      maybeCallback?: (
-        error: NodeJS.ErrnoException | null,
-        resolvedAddress: string,
-        resolvedFamily: number,
-      ) => void,
+      maybeCallback?: PinnedLookupOneCallback | PinnedLookupAllCallback,
     ): void => {
       const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-      callback?.(null, address, family);
+      if (!callback) {
+        return;
+      }
+      if (
+        optionsOrCallback &&
+        typeof optionsOrCallback === 'object' &&
+        'all' in (optionsOrCallback as Record<string, unknown>) &&
+        (optionsOrCallback as { all?: boolean }).all
+      ) {
+        (callback as PinnedLookupAllCallback)(null, [{ address, family }]);
+        return;
+      }
+      (callback as PinnedLookupOneCallback)(null, address, family);
     };
   }
 
