@@ -16,6 +16,7 @@ vi.mock('@utils/logger', () => ({
 function createPage(overrides: Record<string, any> = {}) {
   return {
     evaluate: vi.fn(),
+    screenshot: vi.fn().mockResolvedValue(Buffer.from('test')),
     url: vi.fn(() => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: 'page' })),
     ...overrides,
   };
@@ -86,6 +87,7 @@ describe('captcha-solver runtime coverage', () => {
         mode: 'external_service',
         apiKey: 'test-key',
         challengeType: 'image',
+        imageBase64: 'dGVzdA==',
         timeoutMs: 6_000,
         maxRetries: 0,
       },
@@ -104,17 +106,14 @@ describe('captcha-solver runtime coverage', () => {
   it('captures a widget token in hook mode', async () => {
     const { handleWidgetChallengeSolve } = await loadModule();
     const page = createPage({
-      evaluate: vi.fn(async (pageFunction: any, hookTimeoutMs: number) => {
+      evaluate: vi.fn(async (pageFunction: any, hookTimeoutMs: number, callbackName: string) => {
         const prevWindow = (globalThis as any).window;
         (globalThis as any).window = {
-          __turnstile_callbacks: {
-            challenge: vi.fn(),
-          },
+          [callbackName]: vi.fn(),
         };
         try {
-          const promise = pageFunction(hookTimeoutMs);
-          const callbacks = (globalThis as any).window.__turnstile_callbacks;
-          callbacks.challenge('hook-token');
+          const promise = pageFunction(hookTimeoutMs, callbackName);
+          (globalThis as any).window[callbackName]('hook-token');
           return await promise;
         } finally {
           (globalThis as any).window = prevWindow;
@@ -128,6 +127,7 @@ describe('captcha-solver runtime coverage', () => {
         {
           mode: 'hook',
           siteKey: 'site-key-123',
+          callbackName: 'captchaDone',
         },
         collector,
       ),
@@ -141,7 +141,7 @@ describe('captcha-solver runtime coverage', () => {
   it('injects a solved widget token when requested', async () => {
     vi.useFakeTimers();
     const { handleWidgetChallengeSolve } = await loadModule();
-    const inputs = [{ value: '' }, { value: '' }];
+    let injectedInputValue = '';
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/in.php')) {
@@ -159,24 +159,59 @@ describe('captcha-solver runtime coverage', () => {
     (globalThis as any).fetch = fetchMock;
 
     const page = createPage({
-      evaluate: vi.fn(async (pageFunction: any, token: string) => {
-        const prevDocument = (globalThis as any).document;
-        const prevWindow = (globalThis as any).window;
-        (globalThis as any).document = {
-          querySelectorAll: vi.fn(() => inputs),
-        };
-        (globalThis as any).window = {
-          turnstile: {
-            getResponse: vi.fn(),
-          },
-        };
-        try {
-          return await pageFunction(token);
-        } finally {
-          (globalThis as any).document = prevDocument;
-          (globalThis as any).window = prevWindow;
-        }
-      }),
+      evaluate: vi.fn(
+        async (
+          pageFunction: any,
+          token: string,
+          injectionConfig: { responseSelector?: string; callbackName?: string },
+        ) => {
+          const prevDocument = (globalThis as any).document;
+          const prevWindow = (globalThis as any).window;
+          const prevHtmlInputElement = (globalThis as any).HTMLInputElement;
+          const prevHtmlTextAreaElement = (globalThis as any).HTMLTextAreaElement;
+          const prevHtmlSelectElement = (globalThis as any).HTMLSelectElement;
+          const prevHtmlElement = (globalThis as any).HTMLElement;
+          const prevEvent = (globalThis as any).Event;
+          const prevCustomEvent = (globalThis as any).CustomEvent;
+          class MockElement {
+            value = '';
+            dispatchEvent = vi.fn();
+            setAttribute = vi.fn();
+          }
+          class MockInputElement extends MockElement {}
+          class MockTextAreaElement extends MockElement {}
+          class MockSelectElement extends MockElement {}
+          const input = new MockInputElement();
+          (globalThis as any).document = {
+            querySelector: vi.fn((selector: string) =>
+              selector === injectionConfig.responseSelector ? input : null,
+            ),
+          };
+          (globalThis as any).window = {
+            [injectionConfig.callbackName ?? '']: vi.fn(),
+          };
+          (globalThis as any).HTMLInputElement = MockInputElement;
+          (globalThis as any).HTMLTextAreaElement = MockTextAreaElement;
+          (globalThis as any).HTMLSelectElement = MockSelectElement;
+          (globalThis as any).HTMLElement = MockElement;
+          (globalThis as any).Event = function MockEvent() {};
+          (globalThis as any).CustomEvent = function MockCustomEvent() {};
+          try {
+            const result = await pageFunction(token, injectionConfig);
+            injectedInputValue = input.value;
+            return result;
+          } finally {
+            (globalThis as any).document = prevDocument;
+            (globalThis as any).window = prevWindow;
+            (globalThis as any).HTMLInputElement = prevHtmlInputElement;
+            (globalThis as any).HTMLTextAreaElement = prevHtmlTextAreaElement;
+            (globalThis as any).HTMLSelectElement = prevHtmlSelectElement;
+            (globalThis as any).HTMLElement = prevHtmlElement;
+            (globalThis as any).Event = prevEvent;
+            (globalThis as any).CustomEvent = prevCustomEvent;
+          }
+        },
+      ),
     });
     const collector = createCollector(page);
 
@@ -185,6 +220,9 @@ describe('captcha-solver runtime coverage', () => {
         mode: 'external_service',
         apiKey: 'test-key',
         siteKey: 'site-key-456',
+        taskKind: 'hcaptcha',
+        responseSelector: '#captcha-response',
+        callbackName: 'onCaptchaSolved',
         timeoutMs: 6_000,
       },
       collector,
@@ -195,9 +233,6 @@ describe('captcha-solver runtime coverage', () => {
     expect(parsed.success).toBe(true);
     expect(parsed.token).toBe('widget-token-456');
     expect(parsed.injected).toBe(true);
-    // @ts-expect-error
-    expect(inputs[0].value).toBe('widget-token-456');
-    // @ts-expect-error
-    expect(inputs[1].value).toBe('widget-token-456');
+    expect(injectedInputValue).toBe('widget-token-456');
   });
 });

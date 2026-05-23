@@ -40,10 +40,18 @@
 - ⚡ **搜索优先** — `search` 档 ≈ 3K tokens vs `full` 档 ≈ 40K+ tokens，按需加载
 - 🎯 **渐进分层** — `search` → `workflow` → `full`，按需激活
 - 🌐 **全栈浏览器自动化** — Chromium/Camoufox + CDP + 反检测 + CAPTCHA 处理
+- 🔁 **运行时恢复与会话隔离** — HTTP 会话支持恢复已激活域、浏览器 attach 状态、coverage 状态，并为每个客户端隔离浏览器侧会话状态
+- 🧭 **Schema 优先元工具** — `describe_tool`、带参数校验的 `call_tool`、以及 `coverage_report` 降低参数错误并暴露工具覆盖率
 - 📡 **网络拦截** — HTTP/2 帧构造、MiTM 捕获、GraphQL、Burp Suite 桥接
 - 🛠️ **全能逆向工具链** — WASM 反编译、二进制分析、Frida、Ghidra/IDA 桥接
 - 🧰 **进程与内存取证** — 原生 FFI 扫描、硬件断点、PE 内省
 - 🧩 **动态热插拔** — 热重载插件、声明式工作流、自发现域
+
+## 最近运行时变更
+
+- HTTP 传输现在支持多路复用独立 MCP 会话，并在重连后恢复运行时状态。
+- `proxy_start` 在需要时会自动生成本地 HTTPS 拦截 CA。
+- Browser 域的 CAPTCHA 求解已改为显式参数驱动：按需传入 `taskKind`、`siteKey`、`imageBase64`、`callbackName`、`responseSelector`。不会再内置页面/组件特征探测。
 
 ## 架构
 

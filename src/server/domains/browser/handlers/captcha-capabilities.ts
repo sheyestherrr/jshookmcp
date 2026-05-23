@@ -2,11 +2,6 @@ import { capabilityReport, type CapabilityEntryOptions } from '@server/domains/s
 import { R, type ToolResponse } from '@server/domains/shared/ResponseBuilder';
 import type { CodeCollector } from '@server/domains/shared/modules/collector';
 
-type WidgetHookProbe = {
-  url: string;
-  callbackCount: number;
-};
-
 function getConfiguredProvider(): string {
   return (process.env.CAPTCHA_PROVIDER || '').trim().toLowerCase() || 'manual';
 }
@@ -19,9 +14,19 @@ function getConfiguredBaseUrl(): string {
   );
 }
 
+function getProviderBaseUrl(provider: '2captcha' | 'anticaptcha' | 'capsolver'): string {
+  if (provider === '2captcha') {
+    return getConfiguredBaseUrl();
+  }
+  if (provider === 'anticaptcha') {
+    return process.env.CAPTCHA_ANTICAPTCHA_BASE_URL?.trim() || '';
+  }
+  return process.env.CAPTCHA_CAPSOLVER_BASE_URL?.trim() || '';
+}
+
 function getTwoCaptchaCapability(): CapabilityEntryOptions {
   const configuredProvider = getConfiguredProvider();
-  const baseUrl = getConfiguredBaseUrl();
+  const baseUrl = getProviderBaseUrl('2captcha');
   const apiKeyConfigured = Boolean(process.env.CAPTCHA_API_KEY?.trim());
   const baseUrlConfigured = baseUrl.length > 0;
   const available = apiKeyConfigured && baseUrlConfigured;
@@ -46,6 +51,34 @@ function getTwoCaptchaCapability(): CapabilityEntryOptions {
   };
 }
 
+function getJsonTaskProviderCapability(
+  provider: 'anticaptcha' | 'capsolver',
+): CapabilityEntryOptions {
+  const configuredProvider = getConfiguredProvider();
+  const baseUrl = getProviderBaseUrl(provider);
+  const apiKeyConfigured = Boolean(process.env.CAPTCHA_API_KEY?.trim());
+  const available = apiKeyConfigured && baseUrl.length > 0;
+
+  return {
+    capability: `captcha_external_service_${provider}`,
+    status: available ? 'available' : 'unavailable',
+    reason: available
+      ? undefined
+      : `${provider} requires CAPTCHA_API_KEY and a reachable API base URL.`,
+    fix: available
+      ? undefined
+      : `Set CAPTCHA_API_KEY and ${provider === 'anticaptcha' ? 'CAPTCHA_ANTICAPTCHA_BASE_URL' : 'CAPTCHA_CAPSOLVER_BASE_URL'}.`,
+    details: {
+      tools: ['captcha_vision_solve', 'widget_challenge_solve'],
+      configuredProvider,
+      defaultExternalProviderSupported: configuredProvider === provider,
+      apiKeyConfigured,
+      baseUrlConfigured: baseUrl.length > 0,
+      baseUrl,
+    },
+  };
+}
+
 async function getWidgetHookCapability(collector: CodeCollector): Promise<CapabilityEntryOptions> {
   let page;
   try {
@@ -55,7 +88,7 @@ async function getWidgetHookCapability(collector: CodeCollector): Promise<Capabi
     return {
       capability: 'captcha_widget_hook_current_page',
       status: 'unknown',
-      reason: `Current page probe failed: ${message}`,
+      reason: `Current page availability check failed: ${message}`,
       fix: 'Attach or launch a browser page before using hook mode.',
       details: {
         tools: ['widget_challenge_solve'],
@@ -77,51 +110,17 @@ async function getWidgetHookCapability(collector: CodeCollector): Promise<Capabi
     };
   }
 
-  try {
-    const probe = (await page.evaluate(() => {
-      const callbacksRaw = (window as unknown as { __turnstile_callbacks?: unknown })
-        .__turnstile_callbacks;
-      const callbackCount =
-        callbacksRaw && typeof callbacksRaw === 'object' && !Array.isArray(callbacksRaw)
-          ? Object.keys(callbacksRaw as Record<string, unknown>).length
-          : 0;
-
-      return {
-        url: location.href,
-        callbackCount,
-      } satisfies WidgetHookProbe;
-    })) as WidgetHookProbe;
-
-    return {
-      capability: 'captcha_widget_hook_current_page',
-      status: probe.callbackCount > 0 ? 'available' : 'unavailable',
-      reason:
-        probe.callbackCount > 0
-          ? undefined
-          : 'The current page does not expose window.__turnstile_callbacks for hook mode.',
-      fix:
-        probe.callbackCount > 0
-          ? undefined
-          : 'Use manual mode, or configure the external 2captcha-compatible service for widget solving.',
-      details: {
-        tools: ['widget_challenge_solve'],
-        pageAttached: true,
-        ...probe,
-      },
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      capability: 'captcha_widget_hook_current_page',
-      status: 'unknown',
-      reason: `Current page probe failed: ${message}`,
-      fix: 'Ensure the attached page is reachable before using hook mode.',
-      details: {
-        tools: ['widget_challenge_solve'],
-        pageAttached: true,
-      },
-    };
-  }
+  return {
+    capability: 'captcha_widget_hook_current_page',
+    status: 'available',
+    reason: 'Hook mode is available when the caller provides an explicit callbackName.',
+    details: {
+      tools: ['widget_challenge_solve'],
+      pageAttached: true,
+      requiresExplicitCallbackName: true,
+      requiresExplicitSiteKey: true,
+    },
+  };
 }
 
 export async function handleCaptchaSolverCapabilities(
@@ -142,26 +141,8 @@ export async function handleCaptchaSolverCapabilities(
           },
         },
         getTwoCaptchaCapability(),
-        {
-          capability: 'captcha_external_service_anticaptcha',
-          status: 'unavailable',
-          reason: 'AntiCaptcha integration is not implemented in this build.',
-          fix: 'Use manual mode or the configured 2captcha-compatible service instead.',
-          details: {
-            tools: ['captcha_vision_solve', 'widget_challenge_solve'],
-            configuredProvider,
-          },
-        },
-        {
-          capability: 'captcha_external_service_capsolver',
-          status: 'unavailable',
-          reason: 'CapSolver integration is not implemented in this build.',
-          fix: 'Use manual mode or the configured 2captcha-compatible service instead.',
-          details: {
-            tools: ['captcha_vision_solve', 'widget_challenge_solve'],
-            configuredProvider,
-          },
-        },
+        getJsonTaskProviderCapability('anticaptcha'),
+        getJsonTaskProviderCapability('capsolver'),
         widgetHookCapability,
       ],
       {

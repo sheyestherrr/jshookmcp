@@ -18,11 +18,15 @@ describe('handleCaptchaSolverCapabilities', () => {
       CAPTCHA_PROVIDER: process.env.CAPTCHA_PROVIDER,
       CAPTCHA_SOLVER_BASE_URL: process.env.CAPTCHA_SOLVER_BASE_URL,
       CAPTCHA_2CAPTCHA_BASE_URL: process.env.CAPTCHA_2CAPTCHA_BASE_URL,
+      CAPTCHA_ANTICAPTCHA_BASE_URL: process.env.CAPTCHA_ANTICAPTCHA_BASE_URL,
+      CAPTCHA_CAPSOLVER_BASE_URL: process.env.CAPTCHA_CAPSOLVER_BASE_URL,
     };
     delete process.env.CAPTCHA_API_KEY;
     delete process.env.CAPTCHA_PROVIDER;
     delete process.env.CAPTCHA_SOLVER_BASE_URL;
     delete process.env.CAPTCHA_2CAPTCHA_BASE_URL;
+    delete process.env.CAPTCHA_ANTICAPTCHA_BASE_URL;
+    delete process.env.CAPTCHA_CAPSOLVER_BASE_URL;
   });
 
   afterEach(() => {
@@ -32,7 +36,7 @@ describe('handleCaptchaSolverCapabilities', () => {
     }
   });
 
-  it('reports manual availability, unsupported providers, and missing page state truthfully', async () => {
+  it('reports manual availability, external provider availability, and missing page state truthfully', async () => {
     const parsed = parseJson<any>(await handleCaptchaSolverCapabilities(createCollector()));
 
     expect(parsed.tool).toBe('captcha_solver_capabilities');
@@ -68,12 +72,7 @@ describe('handleCaptchaSolverCapabilities', () => {
     process.env.CAPTCHA_API_KEY = 'test-key';
     process.env.CAPTCHA_SOLVER_BASE_URL = buildTestUrl('solver', { suffix: 'example', path: '/' });
 
-    const page = {
-      evaluate: vi.fn().mockResolvedValue({
-        url: buildTestUrl('example', { suffix: 'test', path: 'captcha' }),
-        callbackCount: 2,
-      }),
-    };
+    const page = {};
 
     const parsed = parseJson<any>(await handleCaptchaSolverCapabilities(createCollector(page)));
     const external = parsed.capabilities.find(
@@ -93,8 +92,36 @@ describe('handleCaptchaSolverCapabilities', () => {
     expect(hook).toMatchObject({
       available: true,
       pageAttached: true,
-      callbackCount: 2,
-      url: buildTestUrl('example', { suffix: 'test', path: 'captcha' }),
+      requiresExplicitCallbackName: true,
+      requiresExplicitSiteKey: true,
+    });
+  });
+
+  it('reports anticaptcha and capsolver as available when configured', async () => {
+    process.env.CAPTCHA_PROVIDER = 'anticaptcha';
+    process.env.CAPTCHA_API_KEY = 'test-key';
+    process.env.CAPTCHA_ANTICAPTCHA_BASE_URL = 'https://api.anti-captcha.com';
+    process.env.CAPTCHA_CAPSOLVER_BASE_URL = 'https://api.capsolver.com';
+
+    const parsed = parseJson<any>(await handleCaptchaSolverCapabilities(createCollector()));
+    const anticaptcha = parsed.capabilities.find(
+      (entry: { capability: string }) =>
+        entry.capability === 'captcha_external_service_anticaptcha',
+    );
+    const capsolver = parsed.capabilities.find(
+      (entry: { capability: string }) => entry.capability === 'captcha_external_service_capsolver',
+    );
+
+    expect(anticaptcha).toMatchObject({
+      available: true,
+      configuredProvider: 'anticaptcha',
+      defaultExternalProviderSupported: true,
+      apiKeyConfigured: true,
+    });
+    expect(capsolver).toMatchObject({
+      available: true,
+      apiKeyConfigured: true,
+      baseUrl: 'https://api.capsolver.com',
     });
   });
 });

@@ -52,11 +52,15 @@ Clone 仓库后，在项目根目录创建 `.env` 文件（参考 `.env.example`
 | `CAPTCHA_API_KEY`            | 自动验证码求解 provider 的 API Key。       | 无默认值                                       |
 | `CAPTCHA_SOLVER_BASE_URL`    | 外部验证码求解服务基址。                   | 无默认值                                       |
 | `CAPTCHA_2CAPTCHA_BASE_URL`  | 2Captcha 兼容求解服务备用基址。            | 无默认值                                       |
+| `CAPTCHA_ANTICAPTCHA_BASE_URL` | Anti-Captcha JSON Task API 基址。        | 无默认值                                       |
+| `CAPTCHA_CAPSOLVER_BASE_URL`   | CapSolver JSON Task API 基址。           | 无默认值                                       |
 | `CAPTCHA_DEFAULT_TIMEOUT_MS` | CAPTCHA 默认等待超时。                     | `180000`                                       |
 | `CAPTCHA_MIN_TIMEOUT_MS`     | CAPTCHA 最小等待超时。                     | `5000`                                         |
 | `CAPTCHA_MAX_TIMEOUT_MS`     | CAPTCHA 最大等待超时。                     | `600000`                                       |
 | `CAPTCHA_MAX_RETRIES`        | CAPTCHA 最大求解重试次数。                 | `5`                                            |
 | `CAPTCHA_DEFAULT_RETRIES`    | CAPTCHA 默认求解重试次数。                 | `2`                                            |
+
+> `captcha_vision_solve` 和 `widget_challenge_solve` 现在采用显式参数模式。自动化调用时应显式提供 `taskKind`、`siteKey`、`imageBase64`、`callbackName`、`responseSelector`，而不是依赖页面特征自动探测。
 
 ### 2. 主程序身份与日志
 

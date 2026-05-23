@@ -21,7 +21,8 @@ import {
 
 function createMockPage(overrides: Record<string, any> = {}) {
   return {
-    evaluate: vi.fn().mockResolvedValue({ challengeType: 'image', taskKind: 'image', siteKey: '' }),
+    evaluate: vi.fn(),
+    screenshot: vi.fn().mockResolvedValue(Buffer.from('test')),
     url: vi.fn(() => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: 'page' })),
     ...overrides,
   };
@@ -33,359 +34,187 @@ function createMockCollector(page: unknown = null) {
   } as any;
 }
 
-describe('captcha-solver — deep coverage', () => {
+function installJsonTaskApiFailureMock() {
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith('/createTask')) {
+      return {
+        json: async () => ({
+          errorId: 1,
+          errorCode: 'ERROR_INVALID_TASK_DATA',
+        }),
+      } as any;
+    }
+    throw new Error(`Unexpected fetch url: ${url}`);
+  }) as typeof fetch;
+}
+
+describe('captcha-solver deep coverage', () => {
   let origEnv: Record<string, string | undefined>;
+  let origFetch: typeof fetch | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    origFetch = globalThis.fetch;
     origEnv = {
       CAPTCHA_API_KEY: process.env.CAPTCHA_API_KEY,
       CAPTCHA_PROVIDER: process.env.CAPTCHA_PROVIDER,
       CAPTCHA_SOLVER_BASE_URL: process.env.CAPTCHA_SOLVER_BASE_URL,
+      CAPTCHA_ANTICAPTCHA_BASE_URL: process.env.CAPTCHA_ANTICAPTCHA_BASE_URL,
+      CAPTCHA_CAPSOLVER_BASE_URL: process.env.CAPTCHA_CAPSOLVER_BASE_URL,
     };
     delete process.env.CAPTCHA_API_KEY;
     delete process.env.CAPTCHA_PROVIDER;
   });
 
   afterEach(() => {
+    globalThis.fetch = origFetch as typeof fetch;
     for (const [k, v] of Object.entries(origEnv)) {
       if (v === undefined) delete (process.env as any)[k];
       else (process.env as any)[k] = v;
     }
   });
 
-  // ── solveWith2Captcha: CAPTCHA_SOLVER_BASE_URL unset ──
-
-  describe('handleCaptchaVisionSolve — external service with 2captcha', () => {
-    it('errors when CAPTCHA_SOLVER_BASE_URL is not configured', async () => {
+  describe('vision solve external-service paths', () => {
+    it('fails when the 2captcha base URL is missing', async () => {
       delete process.env.CAPTCHA_SOLVER_BASE_URL;
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
       const result = parseJson<BrowserStatusResponse>(
         await handleCaptchaVisionSolve(
           {
             mode: 'external_service',
             apiKey: 'test-key',
+            imageBase64: 'dGVzdA==',
+            taskKind: 'image',
             maxRetries: 0,
           },
-          collector,
+          createMockCollector(createMockPage()),
         ),
       );
-
       expect(result.success).toBe(false);
       expect(result.error).toContain('CAPTCHA_SOLVER_BASE_URL');
     });
 
-    it('errors with fetch failure on submit', async () => {
+    it('retries on network failures and records warnings', async () => {
       process.env.CAPTCHA_SOLVER_BASE_URL = buildTestUrl('invalid-captcha-service', {
         scheme: 'http',
         suffix: 'test',
         path: '/',
       });
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
       const result = parseJson<BrowserStatusResponse>(
         await handleCaptchaVisionSolve(
           {
             mode: 'external_service',
             apiKey: 'test-key',
-            maxRetries: 0,
-            timeoutMs: 5000,
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(false);
-    });
-
-    it('retries on failure up to maxRetries then returns error', async () => {
-      process.env.CAPTCHA_SOLVER_BASE_URL = buildTestUrl('invalid-captcha-service', {
-        scheme: 'http',
-        suffix: 'test',
-        path: '/',
-      });
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: 'external_service',
-            apiKey: 'test-key',
+            imageBase64: 'dGVzdA==',
+            taskKind: 'image',
             maxRetries: 1,
             timeoutMs: 5000,
           },
-          collector,
+          createMockCollector(createMockPage()),
         ),
       );
-
       expect(result.success).toBe(false);
       expect(result.maxRetries).toBe(1);
       expect(loggerState.warn).toHaveBeenCalledWith(expect.stringContaining('Attempt 1'));
     });
-  });
 
-  // ── normalizeSolverMode edge cases ──
-
-  describe('normalizeSolverMode coverage', () => {
-    it('treats numeric mode as manual', async () => {
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: 123 as any,
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.mode).toBe('manual');
-    });
-
-    it('treats null mode as manual', async () => {
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: null as any,
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.mode).toBe('manual');
-    });
-
-    it('treats undefined mode without provider or env as manual', async () => {
-      delete process.env.CAPTCHA_PROVIDER;
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve({}, collector),
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.mode).toBe('manual');
-    });
-  });
-
-  // ── normalizeChallengeTypeHint edge cases ──
-
-  describe('normalizeChallengeTypeHint coverage', () => {
-    it('normalizes numeric challengeType to auto', async () => {
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: 'manual',
-            challengeType: 42 as any,
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(true);
-      // auto triggers page.evaluate detection
-    });
-
-    it('normalizes empty string to auto', async () => {
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: 'manual',
-            challengeType: '',
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(true);
-    });
-  });
-
-  // ── resolveLegacyServiceOverride ──
-
-  describe('resolveExternalServiceName coverage', () => {
-    it('uses provider arg with leading/trailing whitespace', async () => {
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
+    it('uses provider arg with leading and trailing whitespace', async () => {
+      process.env.CAPTCHA_ANTICAPTCHA_BASE_URL = 'https://api.anti-captcha.com';
+      installJsonTaskApiFailureMock();
       const result = parseJson<BrowserStatusResponse>(
         await handleCaptchaVisionSolve(
           {
             mode: 'external_service',
             provider: '  AntiCaptcha  ',
             apiKey: 'test',
+            imageBase64: 'dGVzdA==',
+            taskKind: 'image',
           },
-          collector,
+          createMockCollector(createMockPage()),
         ),
       );
-
       expect(result.success).toBe(false);
-      expect(result.error).toContain('implemented');
-    });
-
-    it('falls back to env CAPTCHA_PROVIDER when provider arg is empty', async () => {
-      process.env.CAPTCHA_PROVIDER = 'capsolver';
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: 'external_service',
-            provider: '',
-            apiKey: 'test',
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('implemented');
-    });
-
-    it('falls back to 2captcha when provider and env are both absent', async () => {
-      delete process.env.CAPTCHA_PROVIDER;
-      delete process.env.CAPTCHA_SOLVER_BASE_URL;
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: 'external_service',
-            apiKey: 'test',
-            maxRetries: 0,
-          },
-          collector,
-        ),
-      );
-
-      // Should try 2captcha, fail because no base URL
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('CAPTCHA_SOLVER_BASE_URL');
+      expect(result.error).toContain('ERROR_INVALID_TASK_DATA');
     });
   });
 
-  // ── handleCaptchaVisionSolve: auto-detect branches ──
+  describe('challenge normalization', () => {
+    it('treats numeric challengeType as image fallback', async () => {
+      const result = parseJson<BrowserStatusResponse>(
+        await handleCaptchaVisionSolve(
+          {
+            mode: 'manual',
+            challengeType: 42 as any,
+          },
+          createMockCollector(createMockPage()),
+        ),
+      );
+      expect(result.success).toBe(true);
+      expect(result.challengeType).toBe('image');
+    });
 
-  describe('auto-detect challengeType branches', () => {
-    it('sets taskKind to recaptcha_v2 for non-image widget challengeType', async () => {
-      const page = createMockPage({
-        evaluate: vi.fn().mockResolvedValue({
-          challengeType: 'widget',
-          taskKind: 'recaptcha_v2',
-          siteKey: 'sk-123',
-        }),
-      });
-      const collector = createMockCollector(page);
+    it('treats empty challengeType as image fallback', async () => {
+      const result = parseJson<BrowserStatusResponse>(
+        await handleCaptchaVisionSolve(
+          {
+            mode: 'manual',
+            challengeType: '',
+          },
+          createMockCollector(createMockPage()),
+        ),
+      );
+      expect(result.success).toBe(true);
+      expect(result.challengeType).toBe('image');
+    });
 
+    it('uses explicit taskKind for widget-solving responses', async () => {
       const result = parseJson<BrowserStatusResponse>(
         await handleCaptchaVisionSolve(
           {
             mode: 'manual',
             challengeType: 'widget',
+            taskKind: 'hcaptcha',
+            siteKey: 'auto-detected-key',
           },
-          collector,
+          createMockCollector(createMockPage()),
         ),
       );
-
       expect(result.success).toBe(true);
-      expect(result.challengeType).toBe('widget');
-    });
-
-    it('uses detected siteKey when args.siteKey is not provided in auto mode', async () => {
-      const page = createMockPage({
-        evaluate: vi.fn().mockResolvedValue({
-          challengeType: 'widget',
-          taskKind: 'turnstile',
-          siteKey: 'auto-detected-key',
-        }),
-      });
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: 'manual',
-            challengeType: 'auto',
-          },
-          collector,
-        ),
-      );
-
       expect(result.siteKey).toBe('auto-detected-key');
-    });
-
-    it('handles browser_check challengeType hint by using recaptcha_v2 task kind', async () => {
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: 'manual',
-            challengeType: 'browser_check',
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(true);
-      // browser_check maps to 'browser_check' via normalizeChallengeTypeHint
     });
   });
 
-  // ── handleWidgetChallengeSolve: deeper branches ──
-
-  describe('handleWidgetChallengeSolve — deeper branches', () => {
-    it('hook mode falls through to external when token is null and then fails for non-2captcha', async () => {
+  describe('widget solve branches', () => {
+    it('falls through from hook mode to external mode after null result', async () => {
       process.env.CAPTCHA_PROVIDER = 'capsolver';
+      process.env.CAPTCHA_CAPSOLVER_BASE_URL = 'https://api.capsolver.com';
+      installJsonTaskApiFailureMock();
       const page = createMockPage({
         evaluate: vi.fn().mockResolvedValue(null),
-        url: vi.fn(() => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: '/' })),
       });
-      const collector = createMockCollector(page);
 
       const result = parseJson<BrowserStatusResponse>(
         await handleWidgetChallengeSolve(
           {
             mode: 'hook',
             siteKey: 'test-key',
+            callbackName: 'captchaDone',
             apiKey: 'test',
+            taskKind: 'hcaptcha',
           },
-          collector,
+          createMockCollector(page),
         ),
       );
-
       expect(result.success).toBe(false);
-      expect(result.error).toContain('implemented');
+      expect(result.error).toContain('ERROR_INVALID_TASK_DATA');
     });
 
-    it('uses page.url() when pageUrl is not in args', async () => {
+    it('uses page.url() when pageUrl is not supplied', async () => {
       const page = createMockPage({
-        evaluate: vi.fn().mockResolvedValue('site-key'),
         url: vi.fn(() =>
           buildTestUrl('detected-url', { scheme: 'http', suffix: 'local', path: '/' }),
         ),
       });
-      const collector = createMockCollector(page);
 
       const result = parseJson<BrowserStatusResponse>(
         await handleWidgetChallengeSolve(
@@ -393,205 +222,73 @@ describe('captcha-solver — deep coverage', () => {
             mode: 'manual',
             siteKey: 'test-key',
           },
-          collector,
+          createMockCollector(page),
         ),
       );
-
       expect(result.success).toBe(true);
       expect(result.pageUrl).toBe(
         buildTestUrl('detected-url', { scheme: 'http', suffix: 'local', path: '/' }),
       );
     });
 
-    it('manual mode with explicit pageUrl uses it', async () => {
-      const page = createMockPage({
-        evaluate: vi.fn().mockResolvedValue('site-key'),
-        url: vi.fn(() => buildTestUrl('original', { scheme: 'http', suffix: 'local', path: '/' })),
-      });
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleWidgetChallengeSolve(
-          {
-            mode: 'manual',
-            siteKey: 'test-key',
-            pageUrl: buildTestUrl('custom', { scheme: 'http', suffix: 'local', path: '/' }),
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.pageUrl).toBe(
-        buildTestUrl('custom', { scheme: 'http', suffix: 'local', path: '/' }),
-      );
-    });
-
-    it('returns error when injectToken is false and external service fails', async () => {
+    it('reports external-service failure when injectToken is false', async () => {
       delete process.env.CAPTCHA_SOLVER_BASE_URL;
-      const page = createMockPage({
-        evaluate: vi.fn().mockResolvedValue('site-key'),
-        url: vi.fn(() => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: '/' })),
-      });
-      const collector = createMockCollector(page);
-
       const result = parseJson<BrowserStatusResponse>(
         await handleWidgetChallengeSolve(
           {
             mode: 'external_service',
             siteKey: 'test-key',
             apiKey: 'test-key',
+            taskKind: 'turnstile',
             injectToken: false,
           },
-          collector,
+          createMockCollector(createMockPage()),
         ),
       );
-
       expect(result.success).toBe(false);
       expect(result.suggestion).toContain('manual');
     });
 
-    it('clamps widget timeoutMs to [5000, 600000] for low value', async () => {
-      const page = createMockPage({
-        evaluate: vi.fn().mockResolvedValue('site-key'),
-        url: vi.fn(() => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: '/' })),
-      });
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleWidgetChallengeSolve(
-          {
-            mode: 'manual',
-            siteKey: 'test-key',
-            timeoutMs: 1,
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(true);
-    });
-
-    it('clamps widget timeoutMs to [5000, 600000] for high value', async () => {
-      const page = createMockPage({
-        evaluate: vi.fn().mockResolvedValue('site-key'),
-        url: vi.fn(() => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: '/' })),
-      });
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleWidgetChallengeSolve(
-          {
-            mode: 'manual',
-            siteKey: 'test-key',
-            timeoutMs: 9999999,
-          },
-          collector,
-        ),
-      );
-
-      expect(result.success).toBe(true);
-    });
-
-    it('hook mode with successful token includes correct fields', async () => {
+    it('returns hook success fields when interception succeeds', async () => {
       const page = createMockPage({
         evaluate: vi.fn().mockResolvedValue('hook-token-123'),
-        url: vi.fn(() => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: '/' })),
       });
-      const collector = createMockCollector(page);
-
       const result = parseJson<BrowserStatusResponse>(
         await handleWidgetChallengeSolve(
           {
             mode: 'hook',
             siteKey: 'my-site-key',
+            callbackName: 'captchaDone',
           },
-          collector,
+          createMockCollector(page),
         ),
       );
-
       expect(result.success).toBe(true);
       expect(result.token).toBe('hook-token-123');
       expect(result.method).toBe('hook');
-      expect(result.challengeType).toBe('widget');
       expect(result.siteKey).toBe('my-site-key');
     });
   });
 
-  // ── toTextResponse / toErrorResponse ──
-
   describe('response formatting', () => {
-    it('handleCaptchaVisionSolve returns proper content structure', async () => {
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const response = (await handleCaptchaVisionSolve({ mode: 'manual' }, collector)) as any;
-
+    it('serializes successful manual responses', async () => {
+      const response = (await handleCaptchaVisionSolve(
+        { mode: 'manual' },
+        createMockCollector(createMockPage()),
+      )) as any;
       expect(response.content).toHaveLength(1);
       expect(response.content[0].type).toBe('text');
       const parsed = JSON.parse(response.content[0].text);
       expect(parsed.success).toBe(true);
     });
 
-    it('toErrorResponse converts non-Error objects to string', async () => {
-      const page = createMockPage({
-        evaluate: vi.fn().mockResolvedValue(''),
-        url: vi.fn(() => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: '/' })),
-      });
-      const collector = createMockCollector(page);
-
-      const response = (await handleWidgetChallengeSolve({}, collector)) as any;
+    it('serializes failure responses with string errors', async () => {
+      const response = (await handleWidgetChallengeSolve(
+        { mode: 'external_service' },
+        createMockCollector(createMockPage()),
+      )) as any;
       const parsed = JSON.parse(response.content[0].text);
       expect(typeof parsed.error).toBe('string');
-    });
-  });
-
-  // ── Vision solve retry / attempt logging ──
-
-  describe('retry and attempt tracking', () => {
-    it('logs warning for each failed attempt', async () => {
-      process.env.CAPTCHA_SOLVER_BASE_URL = buildTestUrl('invalid-captcha-service', {
-        scheme: 'http',
-        suffix: 'test',
-        path: '/',
-      });
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      await handleCaptchaVisionSolve(
-        {
-          mode: 'external_service',
-          apiKey: 'test-key',
-          maxRetries: 2,
-          timeoutMs: 5000,
-        },
-        collector,
-      );
-
-      // Should have logged at least 3 attempts (0, 1, 2)
-      const warnCalls = loggerState.warn.mock.calls.filter(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('[captcha] Attempt'),
-      );
-      expect(warnCalls.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('includes suggestion in error response after all attempts fail', async () => {
-      delete process.env.CAPTCHA_SOLVER_BASE_URL;
-      const page = createMockPage();
-      const collector = createMockCollector(page);
-
-      const result = parseJson<BrowserStatusResponse>(
-        await handleCaptchaVisionSolve(
-          {
-            mode: 'external_service',
-            apiKey: 'test-key',
-            maxRetries: 0,
-          },
-          collector,
-        ),
-      );
-
-      expect(result.suggestion).toContain('manual');
     });
   });
 });

@@ -40,10 +40,18 @@ No global install needed — add to your MCP client config and you're ready:
 - ⚡ **Search-First Context Efficiency** — `search` profile ≈ 3K tokens vs `full` ≈ 40K+ tokens
 - 🎯 **Progressive Tiers** — `search` → `workflow` → `full`, activate on demand
 - 🌐 **Full-Stack Browser Automation** — Chromium/Camoufox + CDP + anti-detection + CAPTCHA handling
+- 🔁 **Runtime Recovery and Session Isolation** — HTTP sessions restore activated domains, browser attach state, coverage state, and isolate browser-side session state per client
+- 🧭 **Schema-First Meta Tools** — `describe_tool`, validated `call_tool`, and `coverage_report` reduce parameter errors and make tool coverage visible
 - 📡 **Network Interception** — HTTP/2 frame building, MiTM capture, GraphQL, Burp Suite bridge
 - 🛠️ **Reverse Engineering Toolchain** — WASM disassembly, binary analysis, Frida, Ghidra/IDA bridges
 - 🧰 **Process & Memory Forensics** — Native FFI scanning, hardware breakpoints, PE introspection
 - 🧩 **Dynamic Extensibility** — Hot-reload plugins, declarative workflows, auto-discovered domains
+
+## Recent Runtime Notes
+
+- HTTP transport now multiplexes independent MCP sessions and restores runtime state after reconnects.
+- `proxy_start` auto-generates a local HTTPS interception CA when needed.
+- Browser CAPTCHA solving is now explicit-input driven: pass `taskKind`, `siteKey`, `imageBase64`, `callbackName`, and `responseSelector` as needed. Built-in widget/page signature probing is intentionally not used.
 
 ## Architecture
 

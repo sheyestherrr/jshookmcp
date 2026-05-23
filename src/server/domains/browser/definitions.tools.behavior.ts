@@ -69,12 +69,18 @@ export const behaviorTools: Tool[] = [
       .enum('mode', ['external_service', 'manual'], 'Solver mode')
       .string('provider', 'External solver provider')
       .string('apiKey', 'API key')
-      .enum('challengeType', ['image', 'widget', 'browser_check', 'auto'], 'Challenge type', {
-        default: 'auto',
+      .enum('challengeType', ['image', 'widget', 'browser_check'], 'Challenge type', {
+        default: 'image',
       })
       .string('typeHint', 'Legacy alias for challengeType')
+      .enum(
+        'taskKind',
+        ['image', 'recaptcha_v2', 'recaptcha_v3', 'hcaptcha', 'funcaptcha', 'turnstile'],
+        'Explicit solver task kind',
+      )
       .string('siteKey', 'Widget site key')
       .string('pageUrl', 'Page URL')
+      .string('imageBase64', 'Explicit base64 image payload')
       .number('timeoutMs', 'Timeout ms', { default: 180000 })
       .number('maxRetries', 'Max retries', { default: 2 })
       .openWorld(),
@@ -91,6 +97,8 @@ export const behaviorTools: Tool[] = [
       .boolean('injectToken', 'Auto-inject token', {
         default: true,
       })
+      .string('responseSelector', 'Explicit selector to receive the solved token')
+      .string('callbackName', 'Explicit global callback name for hook or injection flows')
       .openWorld(),
   ),
 ];

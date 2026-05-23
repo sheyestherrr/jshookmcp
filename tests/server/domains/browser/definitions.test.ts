@@ -464,8 +464,8 @@ describe('browser tool definitions', () => {
     it('captcha_vision_solve has challengeType enum', async () => {
       const tool = getToolByName(behaviorTools, 'captcha_vision_solve');
       const prop = getSchemaProperty<Record<string, unknown>>(tool, 'challengeType');
-      expect(prop.enum).toEqual(['image', 'widget', 'browser_check', 'auto']);
-      expect(prop.default).toBe('auto');
+      expect(prop.enum).toEqual(['image', 'widget', 'browser_check']);
+      expect(prop.default).toBe('image');
     });
 
     it('widget_challenge_solve has mode enum with three options', async () => {
@@ -479,6 +479,29 @@ describe('browser tool definitions', () => {
       const prop = getSchemaProperty<Record<string, unknown>>(tool, 'injectToken');
       expect(prop.type).toBe('boolean');
       expect(prop.default).toBe(true);
+    });
+
+    it('captcha_vision_solve exposes explicit taskKind and imageBase64 fields', async () => {
+      const tool = getToolByName(behaviorTools, 'captcha_vision_solve');
+      const taskKind = getSchemaProperty<Record<string, unknown>>(tool, 'taskKind');
+      const imageBase64 = getSchemaProperty<Record<string, unknown>>(tool, 'imageBase64');
+      expect(taskKind.enum).toEqual([
+        'image',
+        'recaptcha_v2',
+        'recaptcha_v3',
+        'hcaptcha',
+        'funcaptcha',
+        'turnstile',
+      ]);
+      expect(imageBase64.type).toBe('string');
+    });
+
+    it('widget_challenge_solve exposes explicit responseSelector and callbackName fields', async () => {
+      const tool = getToolByName(behaviorTools, 'widget_challenge_solve');
+      const responseSelector = getSchemaProperty<Record<string, unknown>>(tool, 'responseSelector');
+      const callbackName = getSchemaProperty<Record<string, unknown>>(tool, 'callbackName');
+      expect(responseSelector.type).toBe('string');
+      expect(callbackName.type).toBe('string');
     });
   });
 

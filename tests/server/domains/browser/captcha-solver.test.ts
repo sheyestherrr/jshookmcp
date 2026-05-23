@@ -1,6 +1,6 @@
 import { parseJson } from '@tests/server/domains/shared/mock-factories';
 import type { BrowserStatusResponse } from '@tests/shared/common-test-types';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTestUrl } from '@tests/shared/test-urls';
 import {
   handleCaptchaVisionSolve,
@@ -10,9 +10,8 @@ import {
 function createMockCollector(hasPage = true) {
   const page = hasPage
     ? {
-        evaluate: vi
-          .fn()
-          .mockResolvedValue({ challengeType: 'image', taskKind: 'image', siteKey: '' }),
+        evaluate: vi.fn(),
+        screenshot: vi.fn().mockResolvedValue(Buffer.from('test')),
         url: () => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: 'page' }),
       }
     : null;
@@ -20,6 +19,17 @@ function createMockCollector(hasPage = true) {
 }
 
 describe('handleCaptchaVisionSolve', () => {
+  let originalFetch: typeof fetch | undefined;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    globalThis.fetch = originalFetch as typeof fetch;
+  });
+
   it('returns failure when no active page', async () => {
     const collector = createMockCollector(false);
     const result = parseJson<BrowserStatusResponse>(await handleCaptchaVisionSolve({}, collector));
@@ -37,36 +47,82 @@ describe('handleCaptchaVisionSolve', () => {
     expect(result.instruction).toBeDefined();
   });
 
-  it('rejects an unimplemented legacy external service override', async () => {
+  it('solves with anticaptcha legacy provider override', async () => {
     const collector = createMockCollector(true);
-    const result = parseJson<BrowserStatusResponse>(
-      await handleCaptchaVisionSolve(
-        {
-          mode: 'external_service',
-          provider: 'anticaptcha',
-          apiKey: 'test-key',
-        },
-        collector,
-      ),
+    process.env.CAPTCHA_ANTICAPTCHA_BASE_URL = buildTestUrl('solver-anticaptcha', {
+      path: 'anticaptcha',
+    });
+    vi.useFakeTimers();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/createTask')) {
+        return { json: async () => ({ errorId: 0, taskId: 77 }) } as any;
+      }
+      if (url.endsWith('/getTaskResult')) {
+        return {
+          json: async () => ({
+            errorId: 0,
+            status: 'ready',
+            solution: { text: 'anti-image-token' },
+          }),
+        } as any;
+      }
+      throw new Error(`Unexpected fetch url: ${url}`);
+    }) as typeof fetch;
+
+    const promise = handleCaptchaVisionSolve(
+      {
+        mode: 'external_service',
+        provider: 'anticaptcha',
+        apiKey: 'test-key',
+        timeoutMs: 6000,
+        maxRetries: 0,
+      },
+      collector,
     );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('implemented');
+    await vi.runAllTimersAsync();
+    const result = parseJson<BrowserStatusResponse>(await promise);
+    expect(result.success).toBe(true);
+    expect(result.token).toBe('anti-image-token');
   });
 
-  it('rejects another unimplemented legacy external service override', async () => {
+  it('solves with capsolver legacy provider override', async () => {
     const collector = createMockCollector(true);
-    const result = parseJson<BrowserStatusResponse>(
-      await handleCaptchaVisionSolve(
-        {
-          mode: 'external_service',
-          provider: 'capsolver',
-          apiKey: 'test-key',
-        },
-        collector,
-      ),
+    process.env.CAPTCHA_CAPSOLVER_BASE_URL = buildTestUrl('solver-capsolver', {
+      path: 'capsolver',
+    });
+    vi.useFakeTimers();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/createTask')) {
+        return { json: async () => ({ errorId: 0, taskId: 'capsolver-task' }) } as any;
+      }
+      if (url.endsWith('/getTaskResult')) {
+        return {
+          json: async () => ({
+            errorId: 0,
+            status: 'ready',
+            solution: { text: 'capsolver-image-token' },
+          }),
+        } as any;
+      }
+      throw new Error(`Unexpected fetch url: ${url}`);
+    }) as typeof fetch;
+
+    const promise = handleCaptchaVisionSolve(
+      {
+        mode: 'external_service',
+        provider: 'capsolver',
+        apiKey: 'test-key',
+        timeoutMs: 6000,
+        maxRetries: 0,
+      },
+      collector,
     );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('implemented');
+    await vi.runAllTimersAsync();
+    const result = parseJson<BrowserStatusResponse>(await promise);
+    expect(result.success).toBe(true);
+    expect(result.token).toBe('capsolver-image-token');
   });
 
   it('rejects unsupported external service overrides', async () => {
@@ -141,7 +197,7 @@ describe('handleCaptchaVisionSolve', () => {
       await handleCaptchaVisionSolve(
         {
           mode: 'manual',
-          typeHint: 'auto',
+          typeHint: 'image',
         },
         collector,
       ),
@@ -162,11 +218,6 @@ describe('handleWidgetChallengeSolve', () => {
 
   it('requires siteKey detection or manual input', async () => {
     const collector = createMockCollector(true);
-    // evaluate returns empty string for siteKey
-    (collector.getActivePage as any).mockResolvedValue({
-      evaluate: vi.fn().mockResolvedValue(''),
-      url: () => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: '/' }),
-    });
 
     const result = parseJson<BrowserStatusResponse>(
       await handleWidgetChallengeSolve({ mode: 'external_service' }, collector),
@@ -177,10 +228,6 @@ describe('handleWidgetChallengeSolve', () => {
 
   it('returns manual mode when mode is manual', async () => {
     const collector = createMockCollector(true);
-    (collector.getActivePage as any).mockResolvedValue({
-      evaluate: vi.fn().mockResolvedValue('test-site-key'),
-      url: () => buildTestUrl('test', { scheme: 'http', suffix: 'local', path: '/' }),
-    });
 
     const result = parseJson<BrowserStatusResponse>(
       await handleWidgetChallengeSolve(
@@ -196,20 +243,48 @@ describe('handleWidgetChallengeSolve', () => {
     expect(result.challengeType).toBe('widget');
   });
 
-  it('rejects unimplemented external service overrides', async () => {
+  it('solves widget challenges through anticaptcha', async () => {
     const collector = createMockCollector(true);
+    process.env.CAPTCHA_ANTICAPTCHA_BASE_URL = buildTestUrl('solver-anticaptcha', {
+      path: 'anticaptcha',
+    });
+    vi.useFakeTimers();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/createTask')) {
+        return { json: async () => ({ errorId: 0, taskId: 17 }) } as any;
+      }
+      if (url.endsWith('/getTaskResult')) {
+        return {
+          json: async () => ({
+            errorId: 0,
+            status: 'ready',
+            solution: { token: 'widget-token-anti' },
+          }),
+        } as any;
+      }
+      throw new Error(`Unexpected fetch url: ${url}`);
+    }) as typeof fetch;
+
     const result = parseJson<BrowserStatusResponse>(
-      await handleWidgetChallengeSolve(
-        {
-          mode: 'external_service',
-          provider: 'anticaptcha',
-          siteKey: 'test-key',
-        },
-        collector,
-      ),
+      await (async () => {
+        const promise = handleWidgetChallengeSolve(
+          {
+            mode: 'external_service',
+            provider: 'anticaptcha',
+            siteKey: 'test-key',
+            apiKey: 'test-key',
+            taskKind: 'hcaptcha',
+            timeoutMs: 6000,
+          },
+          collector,
+        );
+        await vi.runAllTimersAsync();
+        return promise;
+      })(),
     );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('implemented');
+    expect(result.success).toBe(true);
+    expect(result.token).toBe('widget-token-anti');
   });
 
   it('requires credentials for external service mode', async () => {
