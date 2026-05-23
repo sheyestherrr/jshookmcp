@@ -6,6 +6,7 @@ import { ToolError, type ToolErrorCode } from '@errors/ToolError';
 import type { ToolArgs } from '@server/types';
 import { buildZodShape } from '@server/MCPServer.schema';
 import type { MCPServerContext } from '@server/MCPServer.context';
+import { attachToolRequestMeta } from '@server/runtime/tool-request-meta';
 
 function mapErrorCode(code: ToolErrorCode): number {
   switch (code) {
@@ -114,8 +115,7 @@ export function registerSingleTool(ctx: MCPServerContext, toolDef: Tool): Regist
       { description, inputSchema: shape as Record<string, z.ZodAny> },
       async (args: ToolArgs, extra?: any) => {
         try {
-          const augmentedArgs = { ...args };
-          if (extra?._meta) augmentedArgs._meta = extra._meta;
+          const augmentedArgs = attachToolRequestMeta(args, extra);
           // If taskStore is provided (SDK handles polling), we can use it internally if needed
           return await ctx.executeToolWithTracking(toolDef.name, augmentedArgs);
         } catch (error) {
@@ -139,8 +139,7 @@ export function registerSingleTool(ctx: MCPServerContext, toolDef: Tool): Regist
     { description },
     async (_args: any, extra?: any) => {
       try {
-        const augmentedArgs: ToolArgs = {};
-        if (extra?._meta) augmentedArgs._meta = extra._meta;
+        const augmentedArgs = attachToolRequestMeta({}, extra);
         return await ctx.executeToolWithTracking(toolDef.name, augmentedArgs);
       } catch (error) {
         return handleToolError(toolDef.name, error);

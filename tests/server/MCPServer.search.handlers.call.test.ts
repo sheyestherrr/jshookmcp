@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
   getToolByName: vi.fn(),
   getSearchEngine: vi.fn(),
   activateToolNames: vi.fn(),
+  getToolInputSchema: vi.fn(),
 }));
 
 vi.mock('@utils/logger', () => ({
@@ -47,6 +48,10 @@ vi.mock('@server/MCPServer.search.helpers', () => ({
 
 vi.mock('@server/MCPServer.search.handlers.activate', () => ({
   activateToolNames: state.activateToolNames,
+}));
+
+vi.mock('@server/ToolRouter.probe', () => ({
+  getToolInputSchema: state.getToolInputSchema,
 }));
 
 import { handleCallTool } from '@server/MCPServer.search.handlers.call';
@@ -73,6 +78,7 @@ describe('MCPServer.search.handlers.call', () => {
     state.getSearchEngine.mockReturnValue({
       recordToolCallFeedback: vi.fn(),
     });
+    state.getToolInputSchema.mockReturnValue({ type: 'object', properties: {} });
     state.getToolByName.mockReturnValue(new Map([['test_tool', tool('test_tool')]]));
     state.activateToolNames.mockResolvedValue({
       activated: ['test_tool'],
@@ -137,6 +143,52 @@ describe('MCPServer.search.handlers.call', () => {
     await handleCallTool(ctx, { name: 'test_tool', args: 'not-an-object' });
 
     expect(ctx.executeToolWithTracking).toHaveBeenCalledWith('test_tool', {});
+  });
+
+  it('validates args against tool schema before execution', async () => {
+    state.getToolInputSchema.mockReturnValue({
+      type: 'object',
+      properties: {
+        url: { type: 'string' },
+        count: { type: 'number' },
+      },
+      required: ['url', 'count'],
+    });
+    const ctx = createCtx();
+
+    const response = await handleCallTool(ctx, {
+      name: 'test_tool',
+      args: { url: 'https://example.com', count: '5' },
+    });
+    const result = parseResponse(response);
+
+    expect(result.result).toBe('ok');
+    expect(ctx.executeToolWithTracking).toHaveBeenCalledWith('test_tool', {
+      url: 'https://example.com',
+      count: 5,
+    });
+  });
+
+  it('returns a clear validation error when required args are missing', async () => {
+    state.getToolInputSchema.mockReturnValue({
+      type: 'object',
+      properties: {
+        url: { type: 'string' },
+      },
+      required: ['url'],
+    });
+    const ctx = createCtx();
+
+    const response = await handleCallTool(ctx, {
+      name: 'test_tool',
+      args: {},
+    });
+    const result = parseResponse(response);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Invalid arguments for "test_tool"');
+    expect(result.error).toContain('url');
+    expect(ctx.executeToolWithTracking).not.toHaveBeenCalled();
   });
 
   it('uses empty object when args is an array', async () => {

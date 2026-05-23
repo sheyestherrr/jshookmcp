@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolPerformanceMetrics, ToolResult, ToolStatus } from '@tests/e2e/helpers/types';
 
 const KNOWN_EXPECTED_LIMITATION_PATTERNS = [
@@ -82,12 +83,14 @@ export class MCPTestClient {
   private transport: StdioClientTransport | null = null;
   private toolMap = new Map<string, { name: string; inputSchema?: Record<string, unknown> }>();
   readonly results: ToolResult[] = [];
+  private readonly envOverrides: Record<string, string>;
 
-  constructor() {
+  constructor(options?: { envOverrides?: Record<string, string> }) {
     this.client = new Client(
       { name: 'full-e2e-tool-test', version: '1.0.0' },
       { capabilities: {} },
     );
+    this.envOverrides = { ...options?.envOverrides };
   }
 
   private logResult(result: ToolResult): void {
@@ -218,6 +221,7 @@ export class MCPTestClient {
     env.MCP_TOOL_PROFILE = process.env.MCP_TOOL_PROFILE ?? 'full';
     env.LOG_LEVEL = 'error';
     env.PUPPETEER_HEADLESS = process.env.PUPPETEER_HEADLESS ?? 'false';
+    Object.assign(env, this.envOverrides);
 
     const transport = new StdioClientTransport({
       command: 'node',
@@ -252,13 +256,14 @@ export class MCPTestClient {
     name: string,
     args?: Record<string, unknown>,
     timeoutMs = 30000,
+    meta?: Record<string, unknown>,
   ): Promise<{ parsed: unknown; result: ToolResult }> {
     const collectPerformance = isPerformanceSamplingEnabled();
     const metrics = collectPerformance ? this.buildPerformanceMetrics(timeoutMs) : null;
 
     try {
       const resp = await withTimeout(
-        this.client.callTool({ name, arguments: args ?? {} }),
+        this.client.callTool({ name, arguments: args ?? {}, ...(meta ? { _meta: meta } : {}) }),
         timeoutMs,
         name,
       );
@@ -270,6 +275,39 @@ export class MCPTestClient {
           ? (parsedResponse['_executionMetrics'] as ToolPerformanceMetrics)
           : undefined;
       return this.record(name, resp, null, metrics ? metrics.finalize(serverMetrics) : undefined);
+    } catch (e) {
+      const error = e instanceof Error ? e : new Error(String(e));
+      return this.record(name, null, error, metrics ? metrics.finalize() : undefined);
+    }
+  }
+
+  async callWithMeta(
+    name: string,
+    args: Record<string, unknown>,
+    meta: Record<string, unknown>,
+    timeoutMs = 30000,
+  ): Promise<{ parsed: unknown; result: ToolResult }> {
+    const collectPerformance = isPerformanceSamplingEnabled();
+    const metrics = collectPerformance ? this.buildPerformanceMetrics(timeoutMs) : null;
+
+    try {
+      const resp = await withTimeout(
+        this.client.request(
+          {
+            method: 'tools/call',
+            params: {
+              name,
+              arguments: args,
+              _meta: meta,
+            },
+          },
+          CallToolResultSchema,
+          { timeout: timeoutMs },
+        ),
+        timeoutMs,
+        name,
+      );
+      return this.record(name, resp, null, metrics ? metrics.finalize() : undefined);
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
       return this.record(name, null, error, metrics ? metrics.finalize() : undefined);

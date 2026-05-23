@@ -13,6 +13,8 @@ import type { MCPServerContext } from '@server/MCPServer.context';
 import type { ToolResponse } from '@server/types';
 import { normalizeToolName } from '@server/MCPServer.search.validation';
 import { getSearchEngine } from '@server/MCPServer.search.helpers';
+import { getToolInputSchema } from '@server/ToolRouter.probe';
+import { validateToolArgsAgainstSchema } from '@server/MCPServer.search.validation.runtime';
 
 interface CallToolMetadata {
   wasAutoActivated?: boolean;
@@ -136,7 +138,12 @@ export async function handleCallTool(
 
   // Dispatch to the actual tool handler via executeToolWithTracking
   try {
-    const response = await ctx.executeToolWithTracking(name, toolArgs);
+    const validatedArgs = validateToolArgsAgainstSchema(
+      name,
+      getToolInputSchema(name, ctx),
+      toolArgs,
+    );
+    const response = await ctx.executeToolWithTracking(name, validatedArgs);
 
     // Record feedback for vector weight tuning (Phase 8)
     try {

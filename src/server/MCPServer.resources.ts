@@ -5,6 +5,7 @@ import type { InstrumentationSessionManager } from '@server/instrumentation/Inst
 import type { TabRegistry } from '@modules/browser/TabRegistry';
 import { getAllRegistrations, getAllKnownDomains } from '@server/registry/index';
 import { getSearchEngine } from '@server/MCPServer.search.helpers';
+import { getRuntimeState } from '@server/runtime/ServerRuntimeState';
 
 function asJsonResource(uri: string, payload: unknown) {
   return {
@@ -233,6 +234,29 @@ export function registerServerResources(ctx: MCPServerContext): void {
         domainTtls,
         clientSupportsListChanged: ctx.clientSupportsListChanged,
       });
+    },
+  );
+
+  ctx.server.registerResource(
+    'tool_coverage',
+    'jshook://tools/coverage',
+    {
+      title: 'Tool Coverage',
+      description: 'Called vs uncalled tools in the current runtime, with last-call metadata.',
+      mimeType: 'application/json',
+    },
+    async (uri) => {
+      const runtimeState = getRuntimeState(ctx);
+      const summary = runtimeState?.getCoverageSummary(ctx) ?? {
+        called: {},
+        calledCount: 0,
+        uncataloguedCalls: [],
+        uncataloguedCallCount: 0,
+        totalKnownTools: 0,
+        uncalled: [],
+        uncalledCount: 0,
+      };
+      return asJsonResource(uri.toString(), summary);
     },
   );
 

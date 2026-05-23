@@ -11,6 +11,7 @@ import { registerExtensionToolRecord } from '@server/extensions/ExtensionManager
 import { getAllKnownDomains, ensureDomainLoaded } from '@server/registry/index';
 import { getActiveToolNames } from '@server/MCPServer.search.helpers';
 import { startDomainTtl } from '@server/MCPServer.activation.ttl';
+import { getRuntimeState } from '@server/runtime/ServerRuntimeState';
 import { ACTIVATION_TTL_MINUTES } from '@src/constants';
 
 export async function handleActivateDomain(
@@ -85,6 +86,7 @@ export async function handleActivateDomain(
 
     // Start TTL timer for this domain activation
     startDomainTtl(ctx, domain, ttlMinutes, activated);
+    getRuntimeState(ctx)?.setPendingDomainActivation(domain, ttlMinutes, activated);
 
     try {
       await ctx.server.sendToolListChanged();

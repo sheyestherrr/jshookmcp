@@ -102,6 +102,7 @@ export async function main(): Promise<void> {
     }
 
     logger.info('Creating MCP server instance...');
+    const transportMode = (process.env.MCP_TRANSPORT ?? 'stdio').toLowerCase();
     const explicitProfile = (process.env.MCP_TOOL_PROFILE ?? '').trim().toLowerCase() as
       | 'search'
       | 'workflow'
@@ -203,25 +204,27 @@ export async function main(): Promise<void> {
     await server.start();
     logger.info('MCP server started successfully');
 
-    // Safety net: detect parent disconnect — cleanup only, exit is handled by
-    // StdioServerTransport's onclose + SIGINT/SIGTERM handlers above.
-    process.stdin.resume();
-    process.stdin.on('end', async () => {
-      logger.info('stdin EOF — parent disconnected, shutting down...');
-      const forceExitTimer = setTimeout(() => {
-        logger.error('Graceful shutdown timed out after stdin EOF, forcing exit');
-        process.exit(1);
-      }, SHUTDOWN_TIMEOUT_MS);
-      forceExitTimer.unref();
-      try {
-        stopArtifactRetentionScheduler?.();
-        await server.close();
-      } catch (error) {
-        logger.error('Error during stdin EOF shutdown:', error);
-      }
-      clearTimeout(forceExitTimer);
-      process.exit(0);
-    });
+    if (transportMode === 'stdio') {
+      // Safety net: detect parent disconnect for stdio mode only. HTTP mode may
+      // intentionally run detached from a parent stdin stream.
+      process.stdin.resume();
+      process.stdin.on('end', async () => {
+        logger.info('stdin EOF — parent disconnected, shutting down...');
+        const forceExitTimer = setTimeout(() => {
+          logger.error('Graceful shutdown timed out after stdin EOF, forcing exit');
+          process.exit(1);
+        }, SHUTDOWN_TIMEOUT_MS);
+        forceExitTimer.unref();
+        try {
+          stopArtifactRetentionScheduler?.();
+          await server.close();
+        } catch (error) {
+          logger.error('Error during stdin EOF shutdown:', error);
+        }
+        clearTimeout(forceExitTimer);
+        process.exit(0);
+      });
+    }
 
     logger.info('MCP server is running. Press Ctrl+C to stop.');
   } catch (error) {

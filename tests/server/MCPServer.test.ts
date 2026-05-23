@@ -171,6 +171,7 @@ vi.mock('@src/server/registry/index', () => ({
 }));
 
 import { MCPServer } from '@server/MCPServer';
+import type { BrowserSessionCoordinator } from '@server/runtime/BrowserSessionCoordinator';
 
 describe('MCPServer', () => {
   const baseConfig = {
@@ -603,6 +604,51 @@ describe('MCPServer', () => {
     expect(typeof payload._executionMetrics.elapsedMs).toBe('number');
 
     delete process.env.E2E_COLLECT_PERFORMANCE;
+  });
+
+  it('executeToolWithTracking restores browser session context for browser tools', async () => {
+    const server = new MCPServer(baseConfig) as any;
+    const restoreSessionContext = vi.fn(async () => undefined);
+    const runExclusive = vi.fn(
+      async (_sessionId: string | null, fn: () => Promise<unknown>) => await fn(),
+    );
+    const noteToolResult = vi.fn();
+    server.setDomainInstance('browserSessionCoordinator', {
+      restoreSessionContext,
+      runExclusive,
+      noteToolResult,
+    } as unknown as BrowserSessionCoordinator);
+    server.router.execute = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: '{"success":true,"selectedIndex":1}' }],
+    });
+
+    await server.executeToolWithTracking('tool_alpha', {
+      x: 7,
+      _meta: { sessionId: 'sess-browser' },
+    });
+
+    expect(runExclusive).toHaveBeenCalledTimes(1);
+    expect(restoreSessionContext).toHaveBeenCalledWith('sess-browser');
+    expect(noteToolResult).toHaveBeenCalledTimes(1);
+  });
+
+  it('executeToolWithTracking initializes browser session coordination before first browser call', async () => {
+    const server = new MCPServer(baseConfig) as any;
+    const coordinator = server.getDomainInstance(
+      'browserSessionCoordinator',
+    ) as BrowserSessionCoordinator;
+    const runExclusiveSpy = vi.spyOn(coordinator, 'runExclusive');
+    const restoreSpy = vi.spyOn(coordinator, 'restoreSessionContext');
+    server.router.execute = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: '{"success":true}' }],
+    });
+
+    await server.executeToolWithTracking('tool_alpha', {
+      _meta: { sessionId: 'sess-first-browser-call' },
+    });
+
+    expect(runExclusiveSpy).toHaveBeenCalledTimes(1);
+    expect(restoreSpy).toHaveBeenCalledWith('sess-first-browser-call');
   });
 
   it('registerCaches catches errors from createCacheAdapters and logs them', async () => {

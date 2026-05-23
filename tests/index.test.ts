@@ -113,6 +113,19 @@ describe('src/index.ts entrypoint', () => {
     expect(stdinEvents.has('end')).toBe(true);
   });
 
+  it('does not register stdin EOF shutdown in http transport mode', async () => {
+    vi.stubEnv('MCP_TRANSPORT', 'http');
+
+    await loadIndex();
+
+    expect(processEvents.has('SIGINT')).toBe(true);
+    expect(processEvents.has('SIGTERM')).toBe(true);
+    expect(stdinEvents.has('end')).toBe(false);
+    expect(process.stdin.resume).not.toHaveBeenCalled();
+
+    vi.unstubAllEnvs();
+  });
+
   it('handles SIGINT shutdown successfully', async () => {
     await loadIndex();
     const sigint = processEvents.get('SIGINT');

@@ -43,6 +43,9 @@ import {
 import { handleActivateDomain } from '@server/MCPServer.search.handlers.domain';
 import { handleRouteTool, handleDescribeTool } from '@server/MCPServer.search.handlers.route';
 import { handleCallTool } from '@server/MCPServer.search.handlers.call';
+import { getRuntimeState } from '@server/runtime/ServerRuntimeState';
+import { ensureAllDomainsLoaded } from '@server/registry/index';
+import { attachToolRequestMeta } from '@server/runtime/tool-request-meta';
 
 // ── single-source meta-tool definitions ──
 
@@ -51,6 +54,38 @@ interface MetaToolDef {
   description: string;
   inputSchema: Record<string, unknown>;
   handler: (ctx: MCPServerContext, args: Record<string, unknown>) => Promise<ToolResponse>;
+}
+
+async function handleCoverageReport(
+  ctx: MCPServerContext,
+  _args: Record<string, unknown>,
+): Promise<ToolResponse> {
+  await ensureAllDomainsLoaded();
+  const runtimeState = getRuntimeState(ctx);
+  const summary = runtimeState?.getCoverageSummary(ctx) ?? {
+    called: {},
+    calledCount: 0,
+    uncataloguedCalls: [],
+    uncataloguedCallCount: 0,
+    totalKnownTools: 0,
+    uncalled: [],
+    uncalledCount: 0,
+  };
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            success: true,
+            ...summary,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+  };
 }
 
 function buildMetaToolDefinitions(ctx: MCPServerContext): MetaToolDef[] {
@@ -238,6 +273,17 @@ function buildMetaToolDefinitions(ctx: MCPServerContext): MetaToolDef[] {
       },
       handler: handleCallTool,
     },
+    {
+      name: 'coverage_report',
+      description:
+        'Report which tools have been called in the current runtime and which known tools remain uncalled. ' +
+        'Loads all domains first so the uncalled list reflects the full tool catalog, not just currently active tools.',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+      handler: handleCoverageReport,
+    },
   ];
 }
 
@@ -255,9 +301,12 @@ export function registerSearchMetaTools(ctx: MCPServerContext): void {
         description: def.description,
         inputSchema: shape as Record<string, z.ZodAny>,
       },
-      async (args: Record<string, unknown>) => {
+      async (args: Record<string, unknown>, extra?: { _meta?: unknown; sessionId?: string }) => {
         try {
-          return await def.handler(ctx, args);
+          const augmentedArgs = attachToolRequestMeta(args, extra);
+          const response = await def.handler(ctx, augmentedArgs);
+          getRuntimeState(ctx)?.recordToolCall(def.name, augmentedArgs);
+          return response;
         } catch (error) {
           logger.error(`${def.name} failed`, error);
           return asErrorResponse(error);

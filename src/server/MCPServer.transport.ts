@@ -1,8 +1,6 @@
 import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
-import { randomUUID } from 'node:crypto';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   MCP_HTTP_REQUEST_TIMEOUT_MS,
   MCP_HTTP_HEADERS_TIMEOUT_MS,
@@ -18,6 +16,7 @@ import {
 import { logger } from '@utils/logger';
 import { ProcessRegistry } from '@utils/ProcessRegistry';
 import type { MCPServerContext } from '@server/MCPServer.context';
+import { MultiplexedStreamableHttpTransport } from '@server/transport/MultiplexedStreamableHttpTransport';
 
 export async function startStdioTransport(ctx: MCPServerContext): Promise<void> {
   const transport = new StdioServerTransport();
@@ -79,9 +78,7 @@ export async function startHttpTransport(ctx: MCPServerContext): Promise<void> {
   const port = parseInt(process.env.MCP_PORT ?? '3000', 10);
   const host = process.env.MCP_HOST ?? '127.0.0.1';
 
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-  });
+  const transport = new MultiplexedStreamableHttpTransport();
 
   await ctx.server.connect(transport);
 

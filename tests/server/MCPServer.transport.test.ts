@@ -50,7 +50,6 @@ const mocks = vi.hoisted(() => {
       httpServers.push(server);
       return server;
     }),
-    randomUUID: vi.fn(() => 'uuid-123'),
     checkOrigin: vi.fn(() => true),
     checkAuth: vi.fn(() => true),
     checkRateLimit: vi.fn(() => true),
@@ -63,10 +62,6 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('node:http', () => ({
   createServer: mocks.createServer,
-}));
-
-vi.mock('node:crypto', () => ({
-  randomUUID: mocks.randomUUID,
 }));
 
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
@@ -83,14 +78,27 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   },
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
-  StreamableHTTPServerTransport: class MockStreamableHTTPServerTransport {
-    public options: Record<string, unknown>;
+vi.mock('@server/transport/MultiplexedStreamableHttpTransport', () => ({
+  MultiplexedStreamableHttpTransport: class MockMultiplexedStreamableHttpTransport {
     public handleRequest = vi.fn();
+    public onclose?: () => void;
+    public onerror?: (error: Error) => void;
+    public onmessage?: (...args: any[]) => void;
 
-    constructor(options: Record<string, unknown>) {
-      this.options = options;
+    constructor() {
       mocks.httpTransports.push(this);
+    }
+
+    async start() {
+      return undefined;
+    }
+
+    async send() {
+      return undefined;
+    }
+
+    async close() {
+      return undefined;
     }
   },
 }));
@@ -281,8 +289,6 @@ describe('MCPServer.transport', () => {
     socket.closeHandlerForTest?.();
     expect(ctx.httpSockets.has(socket)).toBe(false);
 
-    const sessionId = transport.options.sessionIdGenerator as () => string;
-    expect(sessionId()).toBe('uuid-123');
     expect(mocks.logger.success).toHaveBeenCalledWith(
       'MCP Streamable HTTP server listening on http://0.0.0.0:4321/mcp',
     );

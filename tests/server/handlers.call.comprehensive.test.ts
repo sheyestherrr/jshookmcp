@@ -25,6 +25,7 @@ const state = vi.hoisted(() => ({
   getToolByName: vi.fn(),
   getSearchEngine: vi.fn(),
   activateToolNames: vi.fn(),
+  getToolInputSchema: vi.fn(),
 }));
 
 vi.mock('@utils/logger', () => ({
@@ -48,6 +49,10 @@ vi.mock('@server/MCPServer.search.helpers', () => ({
 
 vi.mock('@server/MCPServer.search.handlers.activate', () => ({
   activateToolNames: state.activateToolNames,
+}));
+
+vi.mock('@server/ToolRouter.probe', () => ({
+  getToolInputSchema: state.getToolInputSchema,
 }));
 
 import { handleCallTool } from '@server/MCPServer.search.handlers.call';
@@ -75,6 +80,7 @@ describe('MCPServer.search.handlers.call — comprehensive edge cases', () => {
     state.getSearchEngine.mockReturnValue({
       recordToolCallFeedback: vi.fn(),
     });
+    state.getToolInputSchema.mockReturnValue({ type: 'object', properties: {} });
     state.getToolByName.mockReturnValue(
       new Map([
         [

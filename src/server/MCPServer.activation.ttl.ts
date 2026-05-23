@@ -14,6 +14,7 @@
 import { logger } from '@utils/logger';
 import { getToolDomain } from '@server/ToolCatalog';
 import type { MCPServerContext } from '@server/MCPServer.context';
+import { getRuntimeState } from '@server/runtime/ServerRuntimeState';
 
 export interface DomainTtlEntry {
   timer: ReturnType<typeof setTimeout>;
@@ -96,6 +97,7 @@ export function clearDomainTtl(ctx: MCPServerContext, domain: string): void {
     clearTimeout(entry.timer);
     ctx.domainTtlEntries.delete(domain);
   }
+  getRuntimeState(ctx)?.clearPendingDomainActivation(domain);
 }
 
 /**
@@ -111,6 +113,7 @@ export async function deactivateDomainOnExpiry(
 
   const toolNames = entry.toolNames;
   ctx.domainTtlEntries.delete(domain);
+  getRuntimeState(ctx)?.clearPendingDomainActivation(domain);
 
   let removedCount = 0;
   for (const name of toolNames) {

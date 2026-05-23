@@ -233,6 +233,7 @@ function createCtx(overrides: DeepPartial<MCPServerContext> = {}): MockContext {
     reloadExtensions: vi.fn(async () => ({ success: true })),
     listExtensions: vi.fn(() => ({ success: true })),
     mcpLog: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
+    getDomainInstance: vi.fn(() => undefined),
     registeredToolsForTest: registered,
     ...overrides,
   } as unknown as MockContext;
@@ -280,6 +281,13 @@ interface CommonSuccessResponse {
   activatedTools?: string[];
   totalDomainTools?: number;
   ttlMinutes?: number | string;
+  called?: Record<string, unknown>;
+  calledCount?: number;
+  uncataloguedCalls?: string[];
+  uncataloguedCallCount?: number;
+  totalKnownTools?: number;
+  uncalled?: string[];
+  uncalledCount?: number;
 }
 
 function parseResponse<T>(response: McpResponse): T {
@@ -1154,7 +1162,56 @@ describe('MCPServer.search', () => {
     expect(ctx.metaToolsByName.size).toBe(0);
   });
 
-  it('registerSearchMetaTools registers all 7 meta-tools regardless of profile', () => {
+  it('registers coverage_report and returns runtime coverage summary', async () => {
+    const recordToolCall = vi.fn();
+    const runtimeState = {
+      recordToolCall,
+      getCoverageSummary: vi.fn(() => ({
+        called: {
+          browser_attach: {
+            count: 1,
+            lastCalledAt: '2026-05-23T00:00:00.000Z',
+            lastArgsKeys: ['browserURL'],
+          },
+        },
+        calledCount: 1,
+        uncataloguedCalls: [],
+        uncataloguedCallCount: 0,
+        totalKnownTools: 8,
+        uncalled: ['page_navigate'],
+        uncalledCount: 1,
+      })),
+    };
+    const ctx = createCtx({
+      getDomainInstance: vi.fn((key: string) =>
+        key === 'serverRuntimeState' ? runtimeState : undefined,
+      ),
+    });
+    registerSearchMetaTools(ctx);
+
+    const handler = ctx.registeredToolsForTest.get('coverage_report')!.handler;
+    const response = parseResponse<CommonSuccessResponse>(await handler({}));
+
+    expect(response).toEqual({
+      success: true,
+      called: {
+        browser_attach: {
+          count: 1,
+          lastCalledAt: '2026-05-23T00:00:00.000Z',
+          lastArgsKeys: ['browserURL'],
+        },
+      },
+      calledCount: 1,
+      uncataloguedCalls: [],
+      uncataloguedCallCount: 0,
+      totalKnownTools: 8,
+      uncalled: ['page_navigate'],
+      uncalledCount: 1,
+    });
+    expect(recordToolCall).toHaveBeenCalledWith('coverage_report', {});
+  });
+
+  it('registerSearchMetaTools registers all 8 meta-tools regardless of profile', () => {
     const ctx = createCtx();
     registerSearchMetaTools(ctx);
 
@@ -1166,6 +1223,7 @@ describe('MCPServer.search', () => {
       'deactivate_tools',
       'activate_domain',
       'call_tool',
+      'coverage_report',
     ];
 
     for (const name of expectedMetaTools) {

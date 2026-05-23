@@ -18,6 +18,9 @@ describe('MCPServer.resources', () => {
     const enabledDomains = (overrides.enabledDomains ?? ['browser']) as string[];
     const extensionToolsByName = (overrides.extensionToolsByName ?? []) as [string, unknown][];
 
+    const customGetDomainInstance =
+      typeof overrides.getDomainInstance === 'function' ? overrides.getDomainInstance : null;
+
     const ctx = {
       server: {
         registerResource: vi.fn(
@@ -27,6 +30,12 @@ describe('MCPServer.resources', () => {
         ),
       },
       getDomainInstance: vi.fn((key: string) => {
+        if (customGetDomainInstance) {
+          const custom = customGetDomainInstance(key);
+          if (custom !== undefined) {
+            return custom;
+          }
+        }
         if (key === 'evidenceGraph') {
           return overrides.evidenceGraph;
         }
@@ -67,6 +76,8 @@ describe('MCPServer.resources', () => {
       baseTier: overrides.baseTier ?? 'full',
       clientSupportsListChanged: true,
       extensionToolsByName: new Map<string, unknown>(extensionToolsByName),
+      selectedTools: [],
+      metaToolsByName: new Map<string, unknown>(),
       config: {
         search: { vectorEnabled: false },
       },
@@ -79,7 +90,7 @@ describe('MCPServer.resources', () => {
   it('registers all 10 resources', () => {
     const { ctx } = createContext();
     registerServerResources(ctx as never);
-    expect(ctx.server.registerResource).toHaveBeenCalledTimes(10);
+    expect(ctx.server.registerResource).toHaveBeenCalledTimes(11);
   });
 
   it('serves fallback payloads when no domain instances exist', async () => {
@@ -206,6 +217,41 @@ describe('MCPServer.resources', () => {
     expect(payload.hitRate).toBe(0.75);
   });
 
+  it('serves tool coverage summary', async () => {
+    const runtimeState = {
+      getCoverageSummary: vi.fn(() => ({
+        called: {
+          browser_attach: {
+            count: 2,
+            lastCalledAt: '2026-05-23T00:00:00.000Z',
+            lastArgsKeys: ['browserURL'],
+          },
+        },
+        calledCount: 1,
+        uncataloguedCalls: [],
+        uncataloguedCallCount: 0,
+        totalKnownTools: 3,
+        uncalled: ['memory_read', 'page_navigate'],
+        uncalledCount: 2,
+      })),
+    };
+    const { ctx, handlers } = createContext({
+      getDomainInstance: vi.fn((key: string) => {
+        if (key === 'serverRuntimeState') {
+          return runtimeState;
+        }
+        return undefined;
+      }),
+    });
+    registerServerResources(ctx as never);
+
+    const result = await handlers.get('tool_coverage')!(new URL('jshook://tools/coverage'));
+    const payload = JSON.parse(result.contents[0]!.text);
+    expect(payload.called.browser_attach.count).toBe(2);
+    expect(payload.uncalled).toEqual(['memory_read', 'page_navigate']);
+    expect(payload.totalKnownTools).toBe(3);
+  });
+
   it('serves browser tabs with fallback when domain is not initialized', async () => {
     const { ctx, handlers } = createContext();
     registerServerResources(ctx as never);
@@ -306,7 +352,7 @@ describe('MCPServer.resources', () => {
       mcpLog: { getFilePath: () => '/tmp/jshookmcp-test.log' },
     });
     registerServerResources(ctx as never);
-    expect(ctx.server.registerResource).toHaveBeenCalledTimes(11);
+    expect(ctx.server.registerResource).toHaveBeenCalledTimes(12);
   });
 
   it('serves log file path when file logging is enabled', async () => {

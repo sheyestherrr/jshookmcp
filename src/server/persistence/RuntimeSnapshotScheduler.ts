@@ -130,5 +130,9 @@ export class RuntimeSnapshotScheduler {
 }
 
 export function getStateDir(baseDir: string): string {
+  const overridden = process.env.JSHOOK_STATE_DIR;
+  if (typeof overridden === 'string' && overridden.trim().length > 0) {
+    return resolve(baseDir, overridden);
+  }
   return resolve(baseDir, '.jshookmcp', 'state');
 }

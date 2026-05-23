@@ -41,6 +41,12 @@ import {
   RuntimeSnapshotScheduler,
   getStateDir,
 } from '@server/persistence/RuntimeSnapshotScheduler';
+import {
+  ServerRuntimeState,
+  restorePendingDomainActivations,
+} from '@server/runtime/ServerRuntimeState';
+import { BrowserSessionCoordinator } from '@server/runtime/BrowserSessionCoordinator';
+import { parseBrowserSessionSnapshot } from '@server/runtime/BrowserSessionCoordinator';
 import type { ToolHandlerDeps } from '@server/registry/contracts';
 import type {
   ExtensionListResult,
@@ -506,9 +512,19 @@ export class MCPServer implements MCPServerContext {
     // Snapshot scheduler for StateBoard + EvidenceGraph persistence
     const stateDir = getStateDir(process.cwd());
     const snapshotScheduler = new RuntimeSnapshotScheduler();
+    const runtimeState = new ServerRuntimeState();
+    const browserSessionCoordinator = new BrowserSessionCoordinator(() => this.collector);
     this.setDomainInstance('snapshotScheduler', snapshotScheduler);
     this.setDomainInstance('snapshotStateDir', stateDir);
-    snapshotScheduler.start().catch((err) => logger.warn('snapshot scheduler start failed:', err));
+    this.setDomainInstance('serverRuntimeState', runtimeState);
+    this.setDomainInstance('browserSessionCoordinator', browserSessionCoordinator);
+    snapshotScheduler.register(`${stateDir}/runtime-state.json`, runtimeState);
+    snapshotScheduler
+      .start()
+      .then(async () => {
+        await restorePendingDomainActivations(this);
+      })
+      .catch((err) => logger.warn('snapshot scheduler start failed:', err));
 
     this.eventBus.on('tool:progress', async (payload) => {
       try {
@@ -632,6 +648,7 @@ export class MCPServer implements MCPServerContext {
     const executionCpuStart = collectExecutionMetrics ? process.cpuUsage() : null;
     const executionMemoryBefore = collectExecutionMetrics ? captureExecutionMetricMemory() : null;
     try {
+      this.setDomainInstance('activeToolArgs', args);
       timeoutTimer = setTimeout(() => {
         try {
           const safeArgs = JSON.stringify(args).slice(0, 500);
@@ -670,7 +687,17 @@ export class MCPServer implements MCPServerContext {
 
       let response;
       try {
-        response = await this.router.execute(name, args);
+        const browserCoordinator =
+          getToolDomain(name) === 'browser'
+            ? this.getDomainInstance<BrowserSessionCoordinator>('browserSessionCoordinator')
+            : null;
+        const sessionId = (args['_meta'] as { sessionId?: string } | undefined)?.sessionId ?? null;
+        response = browserCoordinator
+          ? await browserCoordinator.runExclusive(sessionId, async () => {
+              await browserCoordinator.restoreSessionContext(sessionId);
+              return await this.router.execute(name, args);
+            })
+          : await this.router.execute(name, args);
       } finally {
         if (timeoutTimer) clearTimeout(timeoutTimer);
       }
@@ -679,8 +706,17 @@ export class MCPServer implements MCPServerContext {
       // to prevent context bloat while preserving data for later retrieval.
       this.largeDataOffloader.offload(name, response);
 
+      if (getToolDomain(name) === 'browser') {
+        const browserCoordinator = this.getDomainInstance<BrowserSessionCoordinator>(
+          'browserSessionCoordinator',
+        );
+        const sessionId = (args['_meta'] as { sessionId?: string } | undefined)?.sessionId ?? null;
+        browserCoordinator?.noteToolResult(sessionId, name, parseBrowserSessionSnapshot(response));
+      }
+
       // Track consecutive tool calls for repeat loop detection
       this.contextGuard.recordCall(name);
+      this.getDomainInstance<ServerRuntimeState>('serverRuntimeState')?.recordToolCall(name, args);
       // Enrich context-sensitive tool responses with current tab metadata
       let enriched = this.contextGuard.enrichResponse(name, response);
       if (
@@ -763,6 +799,8 @@ export class MCPServer implements MCPServerContext {
         'evidenceGraph',
       )?.commit();
       throw error;
+    } finally {
+      this.setDomainInstance('activeToolArgs', undefined);
     }
   }
 
