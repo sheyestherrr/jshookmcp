@@ -9,6 +9,7 @@ import {
   argStringRequired,
   argString,
 } from '@server/domains/shared/parse-args';
+import { ensureMockttpCaCompatibilityPatched } from '@server/domains/proxy/mockttp-ca-compat';
 
 const ResponseBuilder = {
   success: (data: Record<string, unknown>) => R.ok().merge(data).json(),
@@ -121,6 +122,7 @@ export class ProxyHandlers {
       let caCertPath: string | null = null;
       let server: ReturnType<typeof mockttp.getLocal>;
       if (useHttps) {
+        await ensureMockttpCaCompatibilityPatched();
         const { key, cert, certPath } = await this.ensureCa(mockttp);
         caCertPath = certPath;
         server = mockttp.getLocal({ https: { key, cert }, cors: true });
