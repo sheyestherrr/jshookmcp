@@ -124,6 +124,39 @@ export function createBionicLibrary(engine: CpuEngine): BionicLibrary {
     }
     return ctx.x(0);
   });
+  lib.set('strncpy', (ctx) => {
+    // Copy up to n bytes; if src ends early, NUL-pad the remainder (C semantics).
+    const dst = Number(ctx.x(0));
+    const src = Number(ctx.x(1));
+    const n = Number(ctx.x(2));
+    let ended = false;
+    for (let i = 0; i < n; i++) {
+      const b = ended ? 0 : (ctx.read(src + i, 1)[0] ?? 0);
+      ctx.write(dst + i, Uint8Array.of(b));
+      if (b === 0) ended = true;
+    }
+    return ctx.x(0);
+  });
+  lib.set('strchr', (ctx) => {
+    // Return a pointer to the first occurrence of the byte, or NULL. The
+    // terminating NUL is matchable, mirroring the C contract.
+    const start = Number(ctx.x(0));
+    const needle = Number(ctx.x(1) & 0xffn);
+    for (let i = 0; ; i++) {
+      const b = ctx.read(start + i, 1)[0] ?? 0;
+      if (b === needle) return BigInt(start + i);
+      if (b === 0) return 0n;
+    }
+  });
+  lib.set('strdup', (ctx) => {
+    // Allocate len+1 and copy the string including its NUL terminator.
+    const src = Number(ctx.x(0));
+    let len = 0;
+    while (ctx.read(src + len, 1)[0] !== 0) len++;
+    const ptr = alloc(len + 1);
+    ctx.write(ptr, ctx.read(src, len + 1));
+    return BigInt(ptr);
+  });
   lib.set('malloc', (ctx) => BigInt(alloc(Number(ctx.x(0)))));
   lib.set('calloc', (ctx) => {
     const n = Number(ctx.x(0)) * Number(ctx.x(1));

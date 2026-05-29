@@ -122,10 +122,22 @@ export class CpuEngine {
   private importStubBump = IMPORT_STUB_BASE;
   /** Instruction observers (trace/breakpoint). Empty ⇒ hot loop pays nothing. */
   private readonly instructionHooks: InstructionHook[] = [];
+  /** Set by exit/exit_group (or a host stub) to halt the run loop at once. */
+  private stopRequested = false;
 
   /** Self-contained — no external engine to probe. */
   isAvailable(): boolean {
     return true;
+  }
+
+  /**
+   * Request the running program halt before the next instruction — models a
+   * guest process calling exit()/exit_group(), where control never returns to
+   * the caller. The run loop checks this and stops cleanly (rather than the
+   * caller hand-rolling an unmapped-PC throw).
+   */
+  requestStop(): void {
+    this.stopRequested = true;
   }
 
   /** Map a zero-filled region of guest memory. */
@@ -328,8 +340,10 @@ export class CpuEngine {
    */
   private run(begin: number, stopAt: number): void {
     this.pc = begin;
+    this.stopRequested = false;
     let steps = 0;
     while (this.pc !== stopAt) {
+      if (this.stopRequested) return; // exit()/exit_group() halts the program.
       if (++steps > MAX_STEPS) {
         throw new Error(`Execution exceeded ${MAX_STEPS} steps (no halt before ${stopAt})`);
       }
