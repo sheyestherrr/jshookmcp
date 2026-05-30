@@ -24,7 +24,7 @@ In-process, dependency-free self-built ARM64 interpreter for emulating Android `
 
 | Tool | Description |
 | --- | --- |
-| `nemu_capabilities` | Report native-emulator backend availability and supported features (self-built ARM64 interpreter, no external dependencies). Emulates the integer AArch64 ISA + ELF relocations + auto-wired bionic libc + JNI; NEON/SIMD/FP and AES/SHA crypto-extension instructions are not yet supported (declared in the response). |
+| `nemu_capabilities` | Report native-emulator backend availability and supported features (self-built ARM64 interpreter, no external dependencies). Emulates the integer AArch64 ISA + SIMD/FP load-store + AES/SHA/PMULL crypto-extension (bit-exact vs FIPS-197/180-4/180-1) + scalar IEEE-754 floating-point + NEON integer-lane SIMD (three-same arithmetic/logical/compare/min-max, misc, DUP, MOVI, shift-by-immediate, across-lanes, permute, EXT, TBL) + ELF relocations + auto-wired bionic libc + JNI; long/widening and saturating NEON variants are not yet supported (declared in the response). |
 | `nemu_create_session` | Create an isolated ARM64 emulator session and return its sessionId. Each session owns its own CPU registers, guest stack, and JNI object table, so concurrent analyses never interfere. Destroy it with nemu_destroy_session when done; idle sessions auto-expire. |
 | `nemu_destroy_session` | Destroy an emulator session and free its memory (mapped library, stack, JNI tables). |
 | `nemu_list_sessions` | List active emulator sessions with their creation and last-use timestamps. |
