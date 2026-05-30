@@ -882,6 +882,17 @@ export class CpuEngine {
       return true;
     }
 
+    // Barrier space (DMB/DSB/ISB): 1101010100 0 00 011 0011 CRm op2 11111, where
+    //   op2 selects DSB(4)/DMB(5)/ISB(6) and CRm the shareability domain. This
+    //   interpreter executes a single guest thread in program order, so memory
+    //   barriers have no observable effect — model them as no-ops (the alternative
+    //   is an honest fault that would stop real libc/SQLite code that fences
+    //   around lock-free sequences). The CRn=0011 group bit distinguishes these
+    //   from the HINT space (CRn=0010) above.
+    if ((insn & 0xfffff01f) >>> 0 === 0xd503301f) {
+      return true;
+    }
+
     // MRS Xt, <sysreg>: 1101 0101 0011 1 o0 op1 CRn CRm op2 Rt (read; the 0xd53
     //   prefix is the read direction). Modelled minimally: TPIDR_EL0
     //   (S3_3_C13_C0_2) returns the thread-pointer block base (lazily mapped,

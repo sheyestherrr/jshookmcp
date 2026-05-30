@@ -63,6 +63,32 @@ describe('CpuEngine — MRS TPIDR_EL0', () => {
   });
 });
 
+describe('CpuEngine — memory barriers (DMB/DSB/ISB)', () => {
+  // A single-threaded, in-order interpreter sees no effect from a barrier, so
+  // each must execute as a no-op: not fault, not touch registers, advance the PC.
+  // Real libc/SQLite fences around lock-free sequences (sqlite3_open hit DMB ISH
+  // in the probe), so an honest "unsupported opcode" here would stop real code.
+  const barriers: Array<[string, number]> = [
+    ['DMB ISH', 0xd5033bbf],
+    ['DMB SY', 0xd5033fbf],
+    ['DMB ISHST', 0xd50339bf],
+    ['DSB ISH', 0xd5033b9f],
+    ['DSB SY', 0xd5033f9f],
+    ['ISB SY', 0xd5033fdf],
+  ];
+
+  for (const [name, word] of barriers) {
+    it(`${name} executes as a no-op without faulting`, () => {
+      const engine = new CpuEngine();
+      // movz x0,#0x1234 ; <barrier> ; movz x1,#0x5678 — the barrier must not
+      // disturb the surrounding moves nor stop execution.
+      expect(() => run(engine, [movz(0, 0x1234), word, movz(1, 0x5678)])).not.toThrow();
+      expect(engine.readRegister('x0')).toBe(0x1234);
+      expect(engine.readRegister('x1')).toBe(0x5678);
+    });
+  }
+});
+
 describe('CpuEngine — exclusive load-store (LDXR/STXR)', () => {
   it('LDXR reads the word at [Xn] normally', () => {
     const engine = new CpuEngine();
