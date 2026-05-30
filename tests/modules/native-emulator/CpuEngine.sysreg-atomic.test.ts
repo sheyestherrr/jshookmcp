@@ -1,0 +1,102 @@
+/**
+ * L1 TDD — system-register read (MRS TPIDR_EL0) + exclusive load-store
+ * (LDXR/STXR), the two integer-domain instructions a real-`.so` probe flagged
+ * as high-frequency blockers in modern compiler output:
+ *   - `MRS Xt, TPIDR_EL0` (0xD53BD0xx): stack-protector / TLS prologues read the
+ *     thread pointer to fetch `__stack_chk_guard`. We return a lazily-mapped TLS
+ *     block carrying a fixed canary at +0x28.
+ *   - `LDXR/STXR` (0x885F7C0x / 0x88027C0x): the single-threaded emulator can
+ *     never have an exclusive pair broken, so a load reads normally and a store
+ *     always succeeds, reporting status 0 in Rs.
+ *
+ * Encodings are assembler-verified:
+ *   MRS x0,TPIDR_EL0      = 0xD53BD040   (S3_3_C13_C0_2, read)
+ *   LDR W1,[X0,#0x28]     = 0xB9402801   (32-bit unsigned offset, imm12=10)
+ *   LDXR W1,[X0]          = 0x885F7C01
+ *   STXR W2,W3,[X0]       = 0x88027C03   (Ws=W2 status, Wt=W3 value)
+ */
+import { describe, expect, it } from 'vitest';
+
+import { CpuEngine } from '@modules/native-emulator/CpuEngine';
+
+const le = (w: number): number[] => [
+  w & 0xff,
+  (w >>> 8) & 0xff,
+  (w >>> 16) & 0xff,
+  (w >>> 24) & 0xff,
+];
+const movz = (rd: number, imm: number, hw = 0): number =>
+  (0xd2800000 | (hw << 21) | ((imm & 0xffff) << 5) | rd) >>> 0;
+
+const CODE = 0x1000;
+
+function run(engine: CpuEngine, words: number[]): void {
+  const bytes: number[] = [];
+  for (const w of words) bytes.push(...le(w));
+  engine.mapMemory(CODE, bytes.length + 8);
+  engine.writeCode(CODE, Uint8Array.from(bytes));
+  engine.start(CODE, CODE + bytes.length);
+}
+
+describe('CpuEngine — MRS TPIDR_EL0', () => {
+  it('returns a non-zero thread-pointer block base', () => {
+    const engine = new CpuEngine();
+    // MRS x0, TPIDR_EL0
+    run(engine, [0xd53bd040]);
+    // TLS block is lazily mapped at 0x70000000 (a safe-integer address).
+    expect(engine.readRegister('x0')).toBe(0x7000_0000);
+  });
+
+  it('reads the planted stack canary at TPIDR_EL0+0x28', () => {
+    const engine = new CpuEngine();
+    // MRS x0, TPIDR_EL0 ; LDR W1, [X0, #0x28]
+    run(engine, [0xd53bd040, 0xb9402801]);
+    // Canary bytes [0x00,0x11,0x22,0x33,...] → low word LE = 0x33221100.
+    expect(engine.readRegister('x1')).toBe(0x3322_1100);
+  });
+
+  it('reads other system registers as 0 (minimal model)', () => {
+    const engine = new CpuEngine();
+    // MRS x5, MIDR_EL1 (S3_0_C0_C0_0) = 0xD5380005 — not TPIDR_EL0.
+    run(engine, [0xd5380005]);
+    expect(engine.readRegister('x5')).toBe(0);
+  });
+});
+
+describe('CpuEngine — exclusive load-store (LDXR/STXR)', () => {
+  it('LDXR reads the word at [Xn] normally', () => {
+    const engine = new CpuEngine();
+    const DATA = 0x4000;
+    engine.mapMemory(DATA, 16);
+    engine.writeCode(DATA, Uint8Array.from(le(0x1122_3344)));
+    // movz x0,#0x4000 ; LDXR W1,[X0]
+    run(engine, [movz(0, 0x4000), 0x885f7c01]);
+    expect(engine.readRegister('x1')).toBe(0x1122_3344);
+  });
+
+  it('STXR stores the value and reports success (status 0) in Rs', () => {
+    const engine = new CpuEngine();
+    const DATA = 0x4000;
+    engine.mapMemory(DATA, 16);
+    engine.writeCode(DATA, Uint8Array.from(le(0x1122_3344)));
+    // movz x0,#0x4000 ; movz x3,#0x5678 ; STXR W2,W3,[X0]
+    run(engine, [movz(0, 0x4000), movz(3, 0x5678), 0x88027c03]);
+    // Store succeeded: status register x2 = 0.
+    expect(engine.readRegister('x2')).toBe(0);
+    // The 32-bit value 0x00005678 was written little-endian at DATA.
+    expect([...engine.readMemory(DATA, 4)]).toEqual([0x78, 0x56, 0, 0]);
+  });
+
+  it('an LDXR/STXR pair round-trips a value through memory', () => {
+    const engine = new CpuEngine();
+    const DATA = 0x4000;
+    engine.mapMemory(DATA, 16);
+    engine.writeCode(DATA, Uint8Array.from(le(0x0000_00ff)));
+    // movz x0,#0x4000 ; LDXR W1,[X0] ; STXR W2,W1,[X0]  (store the value just loaded)
+    const stxrW1 = 0x88027c03 & ~0b11111; // clear Rt
+    run(engine, [movz(0, 0x4000), 0x885f7c01, (stxrW1 | 1) >>> 0]);
+    expect(engine.readRegister('x1')).toBe(0xff);
+    expect(engine.readRegister('x2')).toBe(0);
+    expect([...engine.readMemory(DATA, 4)]).toEqual([0xff, 0, 0, 0]);
+  });
+});

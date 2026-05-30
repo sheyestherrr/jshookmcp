@@ -40,6 +40,14 @@ const STACK_BASE = 0x7fff_0000; // Guest stack region base (grows down from the 
 const STACK_SIZE = 0x10000; // 64 KiB default emulated stack.
 /** Base of the lazily-grown region holding one host stub per resolved import. */
 const IMPORT_STUB_BASE = 0x6800_0000;
+/**
+ * Thread-pointer (TPIDR_EL0) region. A modern stack-protector prologue reads the
+ * stack canary via `mrs x, TPIDR_EL0` then loads `[x, #0x28]`; pointing TPIDR_EL0
+ * at a mapped block (with a fixed non-zero canary) lets those prologues run
+ * instead of faulting on an unmapped read.
+ */
+const TLS_BASE = 0x7000_0000;
+const TLS_SIZE = 0x1000;
 
 interface MappedRegion {
   base: number;
@@ -118,6 +126,8 @@ export class CpuEngine {
   private readonly syscalls = new Map<number, SyscallHandler>();
   /** Top of the lazily-mapped guest stack (0 = not yet allocated). */
   private stackTop = 0;
+  /** Base of the lazily-mapped thread-local (TPIDR_EL0) block (0 = none yet). */
+  private tlsBase = 0;
   /** Next free address in the import-stub region (bumped per resolved import). */
   private importStubBump = IMPORT_STUB_BASE;
   /** Instruction observers (trace/breakpoint). Empty ⇒ hot loop pays nothing. */
@@ -301,6 +311,22 @@ export class CpuEngine {
       this.stackTop = STACK_BASE + STACK_SIZE;
     }
     return this.stackTop;
+  }
+
+  /**
+   * Lazily map the TPIDR_EL0 thread-pointer block and return its base. A fixed
+   * non-zero stack canary is planted at the conventional offset (+0x28) so a
+   * stack-protector prologue that reads `[tls, #0x28]` sees a stable guard.
+   */
+  private ensureTls(): number {
+    if (this.tlsBase === 0) {
+      this.mapMemory(TLS_BASE, TLS_SIZE);
+      this.tlsBase = TLS_BASE;
+      // Plant a fixed 64-bit canary at the AArch64 stack-guard slot (tls+0x28).
+      const canary = new Uint8Array([0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]);
+      this.writeCode(TLS_BASE + 0x28, canary);
+    }
+    return this.tlsBase;
   }
 
   /** Invoke a registered host stub directly (exercise a stub in isolation). */
@@ -735,6 +761,23 @@ export class CpuEngine {
       return true;
     }
 
+    // MRS Xt, <sysreg>: 1101 0101 0011 1 o0 op1 CRn CRm op2 Rt (read; the 0xd53
+    //   prefix is the read direction). Modelled minimally: TPIDR_EL0
+    //   (S3_3_C13_C0_2) returns the thread-pointer block base (lazily mapped,
+    //   carrying a fixed stack canary at +0x28); every other system register
+    //   reads as 0. This lets stack-protector and TLS prologues run instead of
+    //   faulting, without modelling the full processor-element state.
+    if (insn >>> 20 === 0xd53) {
+      const rt = insn & 0b11111;
+      const op1 = (insn >>> 16) & 0b111;
+      const crn = (insn >>> 12) & 0b1111;
+      const crm = (insn >>> 8) & 0b1111;
+      const op2 = (insn >>> 5) & 0b111;
+      const isTpidrEl0 = op1 === 3 && crn === 13 && crm === 0 && op2 === 2;
+      this.gpr[rt] = isTpidrEl0 ? BigInt(this.ensureTls()) : 0n;
+      return true;
+    }
+
     // SVC #imm16: 11010100 000 imm16 000 01 → trap to a syscall handler.
     //   AArch64 ABI: syscall number in x8, args x0..x5, result returns in x0.
     if ((insn & 0xffe0001f) >>> 0 === 0xd4000001) {
@@ -1158,6 +1201,29 @@ export class CpuEngine {
    * and pre/post-index) and LDP/STP. Returns true when handled.
    */
   private execLoadStore(insn: number): boolean {
+    // Load/store exclusive (LDXR/LDAXR/STXR/STLXR, byte/half/word/dword):
+    //   size(31:30) | 001000 | o2 | L(22) | o1 | Rs(20:16) | o0 | Rt2 | Rn | Rt
+    // The emulator is single-threaded, so an exclusive pair can never be broken
+    // by another agent: a load reads normally, and a store always succeeds and
+    // reports status 0 in Rs. This is what lets a stdlib guarding shared state
+    // with LDAXR/STLXR (or a refcount) run to completion here.
+    if (((insn >>> 24) & 0b111111) === 0b001000) {
+      const size = insn >>> 30;
+      const bytes = 1 << size;
+      const isLoad = ((insn >>> 22) & 1) === 1;
+      const rs = (insn >>> 16) & 0b11111;
+      const rn = (insn >>> 5) & 0b11111;
+      const rt = insn & 0b11111;
+      const addr = Number(this.readGprSp(rn));
+      if (isLoad) {
+        this.writeGpr(rt, this.loadValue(addr, bytes));
+      } else {
+        this.storeValue(addr, bytes, this.readGpr(rt));
+        this.writeGpr(rs, 0n); // exclusive store status: 0 = success
+      }
+      return true;
+    }
+
     // LDR/STR family (integer): size(31:30) | 111 | V(26)=0 | b25:24 | opc(23:22) | …
     //   opc encodes load/store + signedness: 00 STR, 01 LDR (zero-extend),
     //   10 LDRS→64-bit (sign-extend), 11 LDRS→32-bit. bits 25:24 select the form:
