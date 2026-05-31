@@ -1101,11 +1101,11 @@ function renderSidebarModule(manifests, locale) {
   const overviewText = locale === 'zh' ? '总览' : 'Overview';
 
   const items = [
-    `  { text: '${overviewText}', link: '${overviewLink}' }`,
+    `  { text: '${overviewText}', link: '${overviewLink}' },`,
     ...manifests.map((manifest) => {
       const meta = getDomainMeta(manifest.domain);
       const label = locale === 'zh' ? meta.zhTitle : meta.enTitle;
-      return `  { text: '${label}', link: '${prefix}/${manifest.domain}' }`;
+      return `  { text: '${label}', link: '${prefix}/${manifest.domain}' },`;
     }),
   ];
 
@@ -1113,7 +1113,7 @@ function renderSidebarModule(manifests, locale) {
 // DO NOT EDIT DIRECTLY
 
 export const referenceSidebarItems = [
-${items.join(',\n')}
+${items.join('\n')}
 ];
 `;
 }
