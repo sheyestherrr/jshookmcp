@@ -8,7 +8,7 @@
  * to avoid koffi struct registration issues in test environments.
  */
 
-import koffi from 'koffi';
+import koffi, { type LibraryHandle } from 'koffi';
 import { logger } from '@utils/logger';
 import {
   ICMP_PROBE_TIMEOUT_MS,
@@ -151,12 +151,12 @@ function winStatusClass(s: number): string {
   return 'error';
 }
 
-let iphlpapi: koffi.LibraryHandle | null = null;
-let ws2_32: koffi.LibraryHandle | null = null;
+let iphlpapi: LibraryHandle | null = null;
+let ws2_32: LibraryHandle | null = null;
 let winIcmpFns: WinIcmpFns | null = null;
 let posixFns: PosixFns | null = null;
 
-function getIphlpapi(): koffi.LibraryHandle {
+function getIphlpapi(): LibraryHandle {
   if (!iphlpapi) {
     iphlpapi = koffi.load('iphlpapi.dll');
     logger.debug('Loaded iphlpapi.dll via koffi');
@@ -164,7 +164,7 @@ function getIphlpapi(): koffi.LibraryHandle {
   return iphlpapi;
 }
 
-function getWs2_32(): koffi.LibraryHandle {
+function getWs2_32(): LibraryHandle {
   if (!ws2_32) {
     ws2_32 = koffi.load('ws2_32.dll');
     logger.debug('Loaded ws2_32.dll via koffi');
@@ -407,9 +407,9 @@ const SOL_SOCKET = 1;
 const SO_RCVTIMEO = process.platform === 'darwin' ? 0x1006 : 20;
 const POSIX_LIB = process.platform === 'darwin' ? '/usr/lib/libSystem.B.dylib' : 'libc.so.6';
 
-let posixLib: koffi.LibraryHandle | null = null;
+let posixLib: LibraryHandle | null = null;
 
-function getPosixLib(): koffi.LibraryHandle {
+function getPosixLib(): LibraryHandle {
   if (!posixLib) {
     posixLib = koffi.load(POSIX_LIB);
     logger.debug(`Loaded ${POSIX_LIB} via koffi for ICMP`);

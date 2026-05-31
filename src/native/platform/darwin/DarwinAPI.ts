@@ -12,7 +12,7 @@
  * @module platform/darwin/DarwinAPI
  */
 
-import koffi from 'koffi';
+import koffi, { type LibraryHandle } from 'koffi';
 import { logger } from '@utils/logger';
 
 // ── Mach Kernel Constants ──
@@ -148,7 +148,7 @@ export type DarwinRegionInfo = {
 
 // ── Library Loading ──
 
-let libSystem: koffi.LibraryHandle | null = null;
+let libSystem: LibraryHandle | null = null;
 let koffiAvailableDarwin: boolean | null = null;
 
 /**
@@ -178,7 +178,7 @@ export function isKoffiAvailableOnDarwin(): boolean {
 /**
  * Get or load libSystem.B.dylib (lazy)
  */
-function getLibSystem(): koffi.LibraryHandle {
+function getLibSystem(): LibraryHandle {
   if (!libSystem) {
     libSystem = koffi.load('/usr/lib/libSystem.B.dylib');
     logger.debug('Loaded libSystem.B.dylib via koffi');
