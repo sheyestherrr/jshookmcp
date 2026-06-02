@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BinaryInstrumentHandlers } from '@server/domains/binary-instrument/handlers';
 import type { MCPServerContext } from '@server/MCPServer.context';
 import { probeCommand } from '@modules/external/ToolProbe';
+import { GhidraAnalyzer } from '@modules/binary-instrument/GhidraAnalyzer';
 import * as fsPromises from 'node:fs/promises';
 import * as childProcess from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -53,8 +54,8 @@ describe('BinaryInstrumentHandlers', () => {
     } as unknown as MCPServerContext;
   }
 
-  function createHandlers(): BinaryInstrumentHandlers {
-    return new BinaryInstrumentHandlers(createMockContext());
+  function createHandlers(ghidra?: GhidraAnalyzer): BinaryInstrumentHandlers {
+    return new BinaryInstrumentHandlers(createMockContext(), ghidra);
   }
 
   function mockZipEntries(entries: Array<{ fileName: string; content?: string | Buffer }>): void {
@@ -208,7 +209,9 @@ describe('BinaryInstrumentHandlers', () => {
       );
       await fsPromises.writeFile(binaryPath, Buffer.from('mock-binary-content'));
 
-      const handlers = createHandlers();
+      const handlers = createHandlers(
+        new StubGhidraAnalyzer({ available: false, reason: 'mock unavailable' }),
+      );
       const result = await handlers.handleGhidraAnalyze({ binaryPath });
 
       try {
@@ -217,6 +220,47 @@ describe('BinaryInstrumentHandlers', () => {
           capability: 'ghidra_headless',
           binaryPath,
         });
+      } finally {
+        await fsPromises.rm(binaryPath, { force: true });
+      }
+    });
+
+    it('handleGhidraAnalyze delegates to the local Ghidra analyzer when available', async () => {
+      const binaryPath = join(
+        tmpdir(),
+        `jshook-ghidra-ok-${Date.now()}-${Math.random().toString(16).slice(2)}.bin`,
+      );
+      await fsPromises.writeFile(binaryPath, Buffer.from('mock-binary-content'));
+
+      const ghidra = new StubGhidraAnalyzer({
+        available: true,
+        analysis: {
+          functions: [
+            {
+              name: 'main',
+              address: '0x1000',
+              signature: 'int main(void)',
+              decompiled: 'return 0;',
+            },
+          ],
+          imports: ['KERNEL32.dll'],
+          exports: ['main'],
+          strings: ['mock-binary-content'],
+        },
+      });
+      const handlers = createHandlers(ghidra);
+
+      try {
+        const result = await handlers.handleGhidraAnalyze({ binaryPath, timeout: 1234 });
+        expect(result).toMatchObject({
+          available: true,
+          binaryPath,
+          analysis: {
+            functions: [{ name: 'main', address: '0x1000' }],
+            imports: ['KERNEL32.dll'],
+          },
+        });
+        expect(ghidra.analyzeCalls).toEqual([{ binaryPath, options: { timeout: 1234 } }]);
       } finally {
         await fsPromises.rm(binaryPath, { force: true });
       }
@@ -624,3 +668,35 @@ describe('BinaryInstrumentHandlers', () => {
     });
   });
 });
+
+class StubGhidraAnalyzer extends GhidraAnalyzer {
+  analyzeCalls: Array<{ binaryPath: string; options: { timeout?: number } | undefined }> = [];
+
+  constructor(
+    private readonly stub: {
+      available: boolean;
+      reason?: string;
+      analysis?: Awaited<ReturnType<GhidraAnalyzer['analyze']>>;
+    },
+  ) {
+    super({ discoveryPaths: [] });
+  }
+
+  override async getAvailability() {
+    return this.stub.available
+      ? { available: true, path: 'mock-analyzeHeadless', version: 'mock' }
+      : { available: false, reason: this.stub.reason ?? 'mock unavailable' };
+  }
+
+  override async analyze(binaryPath: string, options?: { timeout?: number }) {
+    this.analyzeCalls.push({ binaryPath, options });
+    return (
+      this.stub.analysis ?? {
+        functions: [],
+        imports: [],
+        exports: [],
+        strings: [],
+      }
+    );
+  }
+}

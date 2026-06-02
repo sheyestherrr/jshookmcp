@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
-import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { constants as fsConstants } from 'node:fs';
+import { access, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, normalize, resolve as resolvePath } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { probeCommand, type ProbeResult } from '@modules/external/ToolProbe';
@@ -9,6 +10,12 @@ import { GHIDRA_TIMEOUT_MS } from '@src/constants';
 import { PrerequisiteError } from '@errors/PrerequisiteError';
 
 const GHIDRA_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+const GHIDRA_ENV_PATHS = ['GHIDRA_HEADLESS_PATH', 'GHIDRA_ANALYZE_HEADLESS'] as const;
+const GHIDRA_HOME_ENV_PATHS = ['GHIDRA_HOME', 'GHIDRA_INSTALL_DIR'] as const;
+const GHIDRA_HEADLESS_NAMES =
+  process.platform === 'win32'
+    ? ['analyzeHeadless.bat', 'analyzeHeadless.cmd']
+    : ['analyzeHeadless'];
 
 /** Cache entry for incremental analysis results. */
 interface AnalysisCache {
@@ -37,12 +44,24 @@ interface CommandResult {
   stderr: string;
 }
 
+export type GhidraScriptLanguage = 'python' | 'java';
+
+export interface GhidraAnalyzerOptions {
+  /** Extra directories to scan for analyzeHeadless before falling back to PATH. */
+  discoveryPaths?: string[];
+}
+
 export class GhidraAnalyzer {
   private ghidraProbe?: ProbeResult;
   private probePromise?: Promise<ProbeResult>;
   /** In-memory cache: binaryPath → AnalysisCache */
   private analysisCache = new Map<string, AnalysisCache>();
   private static readonly CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
+  private readonly discoveryPaths: string[];
+
+  constructor(options: GhidraAnalyzerOptions = {}) {
+    this.discoveryPaths = options.discoveryPaths ?? defaultGhidraDiscoveryRoots();
+  }
 
   async analyze(
     binaryPath: string,
@@ -80,7 +99,7 @@ export class GhidraAnalyzer {
         : GHIDRA_TIMEOUT_MS;
 
     const scriptDirectory = await mkdtemp(join(tmpdir(), 'jshook-ghidra-script-'));
-    const scriptPath = join(scriptDirectory, 'BinaryInstrumentDump.py');
+    const scriptPath = join(scriptDirectory, 'BinaryInstrumentDump.java');
 
     try {
       await writeFile(scriptPath, this.buildDefaultScript(), 'utf8');
@@ -135,14 +154,14 @@ export class GhidraAnalyzer {
   }
 
   /**
-   * Run a custom Ghidra Python script against a binary.
+   * Run a custom Ghidra script against a binary.
    * The script receives no arguments but can use `currentProgram` and `monitor`.
    * Returns raw stdout+stderr from Ghidra.
    */
   async runCustomScript(
     binaryPath: string,
     scriptContent: string,
-    options?: { timeout?: number },
+    options?: { timeout?: number; language?: GhidraScriptLanguage },
   ): Promise<string> {
     const availability = await this.getAvailability();
     if (!availability.available) {
@@ -156,7 +175,8 @@ export class GhidraAnalyzer {
 
     await access(binaryPath);
     const scriptDirectory = await mkdtemp(join(tmpdir(), 'jshook-ghidra-custom-'));
-    const scriptPath = join(scriptDirectory, 'custom_script.py');
+    const language = options?.language ?? inferGhidraScriptLanguage(scriptContent);
+    const scriptPath = join(scriptDirectory, customScriptFilename(scriptContent, language));
 
     try {
       await writeFile(scriptPath, scriptContent, 'utf8');
@@ -215,10 +235,11 @@ export class GhidraAnalyzer {
 
   parseDecompiledOutput(output: string): DecompiledFunction[] {
     const functions: DecompiledFunction[] = [];
+    const normalizedOutput = stripGhidraLogPrefixes(output);
     const blockPattern =
       /FUNCTION_START\s*[\r\n]+NAME:(.+?)\s*[\r\n]+ADDRESS:(.+?)\s*[\r\n]+SIGNATURE:(.+?)\s*[\r\n]+DECOMPILED_START\s*[\r\n]+([\s\S]*?)\s*[\r\n]+DECOMPILED_END\s*[\r\n]+FUNCTION_END/g;
 
-    let match = blockPattern.exec(output);
+    let match = blockPattern.exec(normalizedOutput);
     while (match) {
       const rawName = match[1] ?? '';
       const rawAddress = match[2] ?? '';
@@ -238,7 +259,7 @@ export class GhidraAnalyzer {
         });
       }
 
-      match = blockPattern.exec(output);
+      match = blockPattern.exec(normalizedOutput);
     }
 
     return functions;
@@ -255,7 +276,7 @@ export class GhidraAnalyzer {
     }
 
     if (!this.probePromise) {
-      this.probePromise = probeCommand('analyzeHeadless', ['-help']);
+      this.probePromise = this.probeAnalyzeHeadless();
     }
 
     const resolved = await this.probePromise;
@@ -264,37 +285,135 @@ export class GhidraAnalyzer {
     return resolved;
   }
 
+  private async probeAnalyzeHeadless(): Promise<ProbeResult> {
+    const explicit = await this.resolveFromEnvironment();
+    if (explicit) return explicit;
+
+    const discovered = await this.resolveFromDiscoveryPaths();
+    if (discovered) return discovered;
+
+    return probeCommand('analyzeHeadless', ['-help']);
+  }
+
+  private async resolveFromEnvironment(): Promise<ProbeResult | null> {
+    for (const key of GHIDRA_ENV_PATHS) {
+      const raw = process.env[key]?.trim();
+      if (!raw) continue;
+      const resolved = await this.probeCandidate(raw, key);
+      if (resolved) return resolved;
+    }
+
+    for (const key of GHIDRA_HOME_ENV_PATHS) {
+      const raw = process.env[key]?.trim();
+      if (!raw) continue;
+      const resolved = await this.probeHomeDirectory(raw, key);
+      if (resolved) return resolved;
+    }
+
+    return null;
+  }
+
+  private async resolveFromDiscoveryPaths(): Promise<ProbeResult | null> {
+    for (const root of this.discoveryPaths) {
+      const resolved = await this.probeHomeDirectory(root, 'auto-discovery');
+      if (resolved) return resolved;
+
+      for (const child of await listLikelyGhidraHomes(root)) {
+        const nested = await this.probeHomeDirectory(child, 'auto-discovery');
+        if (nested) return nested;
+      }
+    }
+    return null;
+  }
+
+  private async probeHomeDirectory(root: string, source: string): Promise<ProbeResult | null> {
+    const candidates = candidateHeadlessPaths(root);
+    for (const candidate of candidates) {
+      const resolved = await this.probeCandidate(candidate, source);
+      if (resolved) return resolved;
+    }
+    return null;
+  }
+
+  private async probeCandidate(candidate: string, source: string): Promise<ProbeResult | null> {
+    const normalized = normalize(candidate);
+    const entry = await stat(normalized).catch(() => null);
+    if (!entry?.isFile()) return null;
+
+    try {
+      await access(normalized, fsConstants.X_OK);
+    } catch {
+      try {
+        await access(normalized, fsConstants.R_OK);
+      } catch {
+        return null;
+      }
+    }
+
+    return {
+      available: true,
+      path: normalized,
+      version: `analyzeHeadless (${source})`,
+    };
+  }
+
   private buildDefaultScript(): string {
     return [
-      '# @category BinaryInstrument',
-      'from ghidra.app.decompiler import DecompInterface',
+      '// @category BinaryInstrument',
+      'import ghidra.app.decompiler.DecompInterface;',
+      'import ghidra.app.decompiler.DecompileResults;',
+      'import ghidra.app.script.GhidraScript;',
+      'import ghidra.program.model.listing.Function;',
+      'import ghidra.program.model.listing.FunctionIterator;',
       '',
-      'program = currentProgram',
-      'interface = DecompInterface()',
-      'interface.openProgram(program)',
-      'function_manager = program.getFunctionManager()',
-      'functions = function_manager.getFunctions(True)',
+      'public class BinaryInstrumentDump extends GhidraScript {',
+      '  @Override',
+      '  public void run() throws Exception {',
+      '    DecompInterface decompiler = new DecompInterface();',
+      '    decompiler.openProgram(currentProgram);',
       '',
-      'for function in functions:',
-      '    print("FUNCTION_START")',
-      '    print("NAME:" + str(function.getName()))',
-      '    print("ADDRESS:" + str(function.getEntryPoint()))',
-      '    try:',
-      '        signature = str(function.getSignature())',
-      '    except:',
-      '        signature = str(function.getName()) + "()"',
-      '    print("SIGNATURE:" + signature)',
-      '    print("DECOMPILED_START")',
-      '    try:',
-      '        decompiled = interface.decompileFunction(function, 30, monitor).getDecompiledFunction()',
-      '        if decompiled:',
-      '            print(str(decompiled.getC()))',
-      '        else:',
-      '            print("// no decompiled output")',
-      '    except:',
-      '        print("// decompile failed")',
-      '    print("DECOMPILED_END")',
-      '    print("FUNCTION_END")',
+      '    try {',
+      '      FunctionIterator functions = currentProgram.getFunctionManager().getFunctions(true);',
+      '      while (functions.hasNext()) {',
+      '        Function function = functions.next();',
+      '        emit("FUNCTION_START");',
+      '        emit("NAME:" + function.getName());',
+      '        emit("ADDRESS:" + function.getEntryPoint().toString());',
+      '        emit("SIGNATURE:" + getSignature(function));',
+      '        emit("DECOMPILED_START");',
+      '        emit(decompileFunction(decompiler, function));',
+      '        emit("DECOMPILED_END");',
+      '        emit("FUNCTION_END");',
+      '      }',
+      '    } finally {',
+      '      decompiler.dispose();',
+      '    }',
+      '  }',
+      '',
+      '  private void emit(String value) {',
+      '    System.out.println(value);',
+      '  }',
+      '',
+      '  private String getSignature(Function function) {',
+      '    try {',
+      '      return function.getSignature().toString();',
+      '    } catch (Exception ignored) {',
+      '      return function.getName() + "()";',
+      '    }',
+      '  }',
+      '',
+      '  private String decompileFunction(DecompInterface decompiler, Function function) {',
+      '    try {',
+      '      DecompileResults results = decompiler.decompileFunction(function, 30, monitor);',
+      '      if (results != null && results.decompileCompleted() && results.getDecompiledFunction() != null) {',
+      '        return results.getDecompiledFunction().getC();',
+      '      }',
+      '      return "// no decompiled output";',
+      '    } catch (Exception error) {',
+      '      return "// decompile failed: " + error.getMessage();',
+      '    }',
+      '  }',
+      '}',
     ].join('\n');
   }
 
@@ -386,7 +505,7 @@ export class GhidraAnalyzer {
 
   // ─── Command Execution ──────────────────────────────────────────
 
-  private execFileUtf8(file: string, args: string[], timeoutMs: number): Promise<CommandResult> {
+  protected execFileUtf8(file: string, args: string[], timeoutMs: number): Promise<CommandResult> {
     return new Promise((resolve, reject) => {
       execFile(
         file,
@@ -396,9 +515,19 @@ export class GhidraAnalyzer {
           windowsHide: true,
           maxBuffer: GHIDRA_MAX_BUFFER_BYTES,
           encoding: 'utf8',
+          shell: shouldUseShellForCommand(file),
         },
         (error, stdout, stderr) => {
           if (error) {
+            const output = [
+              typeof stdout === 'string' && stdout.trim() ? `stdout:\n${stdout.trim()}` : '',
+              typeof stderr === 'string' && stderr.trim() ? `stderr:\n${stderr.trim()}` : '',
+            ]
+              .filter((entry) => entry.length > 0)
+              .join('\n');
+            if (output && error instanceof Error) {
+              error.message = `${error.message}\n${output}`;
+            }
             reject(error);
             return;
           }
@@ -411,4 +540,84 @@ export class GhidraAnalyzer {
       );
     });
   }
+}
+
+function candidateHeadlessPaths(rootOrCommand: string): string[] {
+  const normalized = normalize(rootOrCommand);
+  const direct = isAbsolute(normalized) ? normalized : resolvePath(normalized);
+  const candidates = [direct];
+
+  for (const name of GHIDRA_HEADLESS_NAMES) {
+    candidates.push(join(direct, name));
+    candidates.push(join(direct, 'support', name));
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+async function listLikelyGhidraHomes(root: string): Promise<string[]> {
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory() && /ghidra/i.test(entry.name))
+      .slice(0, 20)
+      .map((entry) => join(root, entry.name));
+  } catch {
+    return [];
+  }
+}
+
+function defaultGhidraDiscoveryRoots(): string[] {
+  const roots = new Set<string>();
+  const add = (value: string | undefined) => {
+    if (value && value.trim().length > 0) roots.add(value.trim());
+  };
+
+  add(process.cwd());
+  add(process.env['USERPROFILE']);
+  add(process.env['HOME']);
+
+  if (process.platform === 'win32') {
+    add(process.env['ProgramFiles']);
+    add(process.env['ProgramFiles(x86)']);
+    add('D:\\coding\\security');
+    add('D:\\tools');
+    add('C:\\tools');
+  } else {
+    add('/opt');
+    add('/usr/local');
+    add('/Applications');
+  }
+
+  return Array.from(roots);
+}
+
+function shouldUseShellForCommand(command: string): boolean {
+  return process.platform === 'win32' && /\.(?:bat|cmd)$/i.test(command);
+}
+
+function stripGhidraLogPrefixes(output: string): string {
+  return output
+    .split(/\r?\n/)
+    .map((line) => {
+      const match = /^(?:INFO|WARN|ERROR)\s+[^>]+>\s*(.*)$/.exec(line);
+      if (!match) return line;
+      return (match[1] ?? '').replace(/\s+\(GhidraScript\)\s*$/, '');
+    })
+    .join('\n');
+}
+
+function inferGhidraScriptLanguage(scriptContent: string): GhidraScriptLanguage {
+  return /\bextends\s+GhidraScript\b/.test(scriptContent) ||
+    /\bimport\s+ghidra\./.test(scriptContent) ||
+    /\bpublic\s+class\s+\w+\b/.test(scriptContent)
+    ? 'java'
+    : 'python';
+}
+
+function customScriptFilename(scriptContent: string, language: GhidraScriptLanguage): string {
+  if (language === 'python') return 'custom_script.py';
+
+  const className = /\bpublic\s+class\s+([A-Za-z_$][\w$]*)\b/.exec(scriptContent)?.[1];
+  return `${className ?? 'CustomScript'}.java`;
 }
