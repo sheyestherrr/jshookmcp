@@ -1,11 +1,12 @@
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { rmSyncWithRetries } from './fs-retry.mjs';
 
 const src = join(process.cwd(), 'src', 'native', 'scripts');
 const dst = join(process.cwd(), 'dist', 'native', 'scripts');
 
 if (existsSync(src)) {
-  rmSync(dst, { recursive: true, force: true });
+  rmSyncWithRetries(dst, { recursive: true, force: true });
   mkdirSync(dirname(dst), { recursive: true });
   cpSync(src, dst, { recursive: true, force: true });
 }

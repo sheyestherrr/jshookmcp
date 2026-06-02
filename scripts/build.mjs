@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { rmSync, existsSync, mkdirSync, cpSync, readFileSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, cpSync, readFileSync, chmodSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { build } from 'tsdown';
+import { rmSyncWithRetries } from './fs-retry.mjs';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(dir, '..');
@@ -11,7 +12,7 @@ const withDts = process.argv.includes('--dts');
 
 const t0 = Date.now();
 
-rmSync(resolve(root, 'dist'), { recursive: true, force: true });
+rmSyncWithRetries(resolve(root, 'dist'), { recursive: true, force: true });
 
 execFileSync(process.execPath, [resolve(dir, 'generate-domains-index.mjs')], { stdio: 'inherit' });
 

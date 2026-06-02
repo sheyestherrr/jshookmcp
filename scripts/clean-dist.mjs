@@ -1,3 +1,3 @@
-import { rmSync } from 'node:fs';
+import { rmSyncWithRetries } from './fs-retry.mjs';
 
-rmSync('dist', { recursive: true, force: true });
+rmSyncWithRetries('dist', { recursive: true, force: true });

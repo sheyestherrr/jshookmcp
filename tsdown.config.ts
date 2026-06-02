@@ -39,5 +39,4 @@ export default defineConfig(async () => ({
       'fingerprint-injector',
     ],
   },
-  onSuccess: 'node scripts/copy-native-scripts.mjs && node scripts/fix-bin-permissions.mjs',
 }));
