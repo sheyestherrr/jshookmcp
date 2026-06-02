@@ -1,7 +1,8 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { rmSync } from 'node:fs';
 import { LargeDataOffloader } from '@server/ToolResponseOffloader';
 import { DetailedDataManager } from '@utils/DetailedDataManager';
+import { logger, type LogLevel } from '@utils/logger';
 import { getOffloadDir } from '@utils/sanitizeForCache';
 
 function textResponse(obj: unknown) {
@@ -12,8 +13,14 @@ function textResponse(obj: unknown) {
 
 describe('LargeDataOffloader — issue #62 structural detection', () => {
   const offloadDir = getOffloadDir();
+  const originalLogLevel = (process.env.LOG_LEVEL as LogLevel | undefined) ?? 'info';
+
+  beforeAll(() => {
+    logger.setLevel('error');
+  });
 
   afterAll(() => {
+    logger.setLevel(originalLogLevel);
     // Best-effort cleanup of any files written by these tests.
     rmSync(offloadDir, { recursive: true, force: true });
   });
