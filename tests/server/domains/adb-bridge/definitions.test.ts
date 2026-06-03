@@ -23,8 +23,8 @@ describe('adb-bridge tool definitions', () => {
       expect(adbBridgeTools.length).toBeGreaterThan(0);
     });
 
-    it('tool count matches expected (7 tools)', async () => {
-      expect(adbBridgeTools.length).toBe(7);
+    it('tool count matches expected (12 tools)', async () => {
+      expect(adbBridgeTools.length).toBe(12);
     });
 
     it('has unique tool names', async () => {
@@ -64,6 +64,11 @@ describe('adb-bridge tool definitions', () => {
   describe('expected tool names', () => {
     const expectedNames = [
       'adb_apk_analyze',
+      'adb_package_summary',
+      'adb_logcat_query',
+      'adb_app_cold_start_trace',
+      'adb_file_pull',
+      'adb_file_push',
       'adb_pull_native_libs',
       'adb_webview_list',
       'adb_webview_attach',

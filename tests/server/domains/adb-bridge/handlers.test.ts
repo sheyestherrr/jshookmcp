@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADBBridgeHandlers } from '@server/domains/adb-bridge/handlers.impl';
 import { probeCommand } from '@modules/external/ToolProbe';
 import { execFile } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
@@ -19,6 +21,13 @@ function mockExecFile(responses: Array<{ stdout?: string; stderr?: string; error
       if (!resp) {
         cb(new Error('unexpected execFile call'));
         return;
+      }
+      if (_args.includes('pull')) {
+        const dest = _args[_args.length - 1];
+        if (typeof dest === 'string' && dest.endsWith('.apk')) {
+          mkdirSync(dirname(dest), { recursive: true });
+          writeFileSync(dest, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]));
+        }
       }
       if (resp.error) cb(resp.error);
       else cb(null, resp.stdout ?? '', resp.stderr ?? '');
@@ -75,7 +84,14 @@ describe('ADBBridgeHandlers', () => {
   });
 
   it('pulls APK from device', async () => {
-    mockExecFile([{ stdout: 'package:/data/app/base.apk' }, { stdout: 'pulled successfully' }]);
+    mockExecFile([
+      {
+        stdout:
+          'package:/data/app/~~hash==/com.example.app-AbC==/base.apk\n' +
+          'package:/data/app/~~hash==/com.example.app-AbC==/split_config.arm64_v8a.apk\n',
+      },
+      { stdout: 'pulled successfully' },
+    ]);
 
     const result = await handlers.handleApkPull({
       serial: 'emulator-5554',
@@ -86,6 +102,8 @@ describe('ADBBridgeHandlers', () => {
     expect(parsed.success).toBe(true);
     expect(parsed.packageName).toBe('com.example.app');
     expect(parsed.localPath).toContain('com.example.app.apk');
+    expect(parsed.remotePath).toContain('~~hash==');
+    expect(parsed.files[0].zipLike).toBe(true);
   });
 
   it('analyzes apk metadata from dumpsys output', async () => {
@@ -100,6 +118,7 @@ describe('ADBBridgeHandlers', () => {
           '  android.permission.INTERNET granted=true',
         ].join('\n'),
       },
+      { stdout: 'com.example.app/.MainActivity' },
     ]);
 
     const result = await handlers.handleAnalyzeApk({

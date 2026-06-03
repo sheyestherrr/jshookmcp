@@ -20,7 +20,7 @@
 - binary-instrument + memory
 - binary-instrument + process
 
-## 工具清单（28）
+## 工具清单（34）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -33,14 +33,20 @@
 | `frida_run_script` | 在已附加的 Frida 会话中执行一段 JavaScript 代码。 |
 | `frida_detach` | 从 Frida 会话分离并清理资源。 |
 | `frida_list_sessions` | 列出所有活跃的 Frida 会话。 |
+| `frida_dex_dump` | 以包名/进程名或 PID 运行 frida-dexdump，作为高层 Android DEX dump 助手。 |
 | `frida_generate_script` | 从模板（trace、intercept、replace、log）生成 Frida 拦截脚本。 |
 | `get_available_plugins` | 列出所有可用的二进制分析插件（frida、ghidra、ida、jadx）。 |
 | `ghidra_decompile` | 使用 Ghidra headless 分析反编译指定函数。 |
 | `ida_decompile` | 通过插件桥接使用 IDA Pro 反编译指定函数。 |
 | `jadx_decompile` | 优先使用 JADX CLI 反编译 APK 类或方法，并尽可能自动解析可能的类名匹配；CLI 不可用时回退到插件桥接。 |
+| `jadx_decompile_apk` | 高层 JADX APK 反编译：将整个 APK 反编译到稳定的输出目录，并返回供 jadx_search_code 使用的 sourcesDir。 |
 | `jadx_search_code` | 对已有的 jadx 反编译输出目录执行只读 ripgrep 搜索（带 Node 纯回退引擎）。内置 ReDoS 双重防护。 |
 | `apktool_decode` | 使用 apktool 解包 APK，便于检查资源、Manifest 和 smali 输出。 |
 | `apk_manifest_dump` | 从 APK 中提取 AndroidManifest.xml；优先返回可读 XML，二进制 AXML 会尝试通过跨平台的 JADX CLI 解码，失败时再返回原始 Base64 载荷。 |
+| `apk_manifest_query` | 返回紧凑的结构化 AndroidManifest 摘要：包名、启动 Activity、Application 类、SDK、权限、组件、Provider 以及 SDK/厂商线索。 |
+| `apk_static_triage` | 一次性 APK 静态分诊：ZIP 元数据、清单摘要、native 库、资源线索、可能的加固/保护方案，以及推荐的后续步骤。 |
+| `dex_scan_file` | 扫描二进制/内存 dump 文件中的 DEX 或 CompactDex 魔数，并可选择性地提取命中结果。 |
+| `binary_strings_extract` | 从二进制文件中提取可打印的 ASCII/UTF-16LE 字符串，支持正则过滤。 |
 | `apk_native_libs_list` | 列出 APK 内打包的原生共享库（.so）及其 ABI 目录。 |
 | `unidbg_launch` | 在 Unidbg 模拟器中启动 ARM/ARM64 .so 库，首次调用约 3-5 秒预热。 |
 | `unidbg_call` | 在运行中的 Unidbg 模拟器会话中调用 JNI 函数。 |

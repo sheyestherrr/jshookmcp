@@ -1,5 +1,12 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { tool } from '@server/registry/tool-builder';
+import {
+  APK_STATIC_TRIAGE_DEFAULT_ENTRIES,
+  BINARY_STRINGS_MAX_RESULTS_DEFAULT,
+  BINARY_STRINGS_MIN_LENGTH_DEFAULT,
+  DEX_SCAN_DEFAULT_MAX_HITS,
+  FRIDA_DEX_DUMP_TIMEOUT_MS,
+} from '@src/constants';
 import { apkPackerTools } from './apk-packer/definitions';
 import { binarySecretsTools } from './secrets/definitions';
 
@@ -68,6 +75,20 @@ export const binaryInstrumentTools: Tool[] = [
   tool('frida_list_sessions', (t) =>
     t.desc('List all active Frida attach sessions with target info.').query(),
   ),
+  tool('frida_dex_dump', (t) =>
+    t
+      .desc(
+        'Run frida-dexdump as a high-level Android DEX dump helper by package/process name or PID.',
+      )
+      .string('target', 'Package/process name for -n, for example com.example.app.')
+      .number('pid', 'Optional process id for -p. Overrides target when provided.')
+      .string('outputDir', 'Required output directory for dumped DEX files.')
+      .boolean('usb', 'Use USB device mode (-U).', { default: true })
+      .number('timeoutMs', 'Optional timeout in milliseconds.', {
+        default: FRIDA_DEX_DUMP_TIMEOUT_MS,
+      })
+      .required('outputDir'),
+  ),
   tool('frida_generate_script', (t) =>
     t
       .desc('Generate a Frida interceptor or hook script from built-in templates.')
@@ -101,6 +122,17 @@ export const binaryInstrumentTools: Tool[] = [
       .string('methodName', 'Method name to decompile')
       .required('apkPath', 'className'),
   ),
+  tool('jadx_decompile_apk', (t) =>
+    t
+      .desc(
+        'High-level JADX APK decompile: decompile the whole APK to a stable output directory and return sourcesDir for jadx_search_code.',
+      )
+      .string('apkPath', 'Path to the APK, DEX, or CDEX file')
+      .string('outputDir', 'Optional output directory. Defaults to a temp directory.')
+      .boolean('noResources', 'Skip resources with --no-res.', { default: false })
+      .boolean('force', 'Clear outputDir before decompilation if it exists.', { default: false })
+      .required('apkPath'),
+  ),
   tool('apktool_decode', (t) =>
     t
       .desc('Decode an APK using apktool to inspect resources, manifest, and smali output.')
@@ -116,6 +148,60 @@ export const binaryInstrumentTools: Tool[] = [
       )
       .string('apkPath', 'Path to the APK file')
       .required('apkPath'),
+  ),
+  tool('apk_manifest_query', (t) =>
+    t
+      .desc(
+        'Return a compact structured AndroidManifest summary: package, launcher activity, app class, SDKs, permissions, components, providers, and SDK/vendor hints.',
+      )
+      .string('apkPath', 'Path to the APK file')
+      .boolean('includeRawManifest', 'Include decoded manifest XML in the response.', {
+        default: false,
+      })
+      .required('apkPath')
+      .query(),
+  ),
+  tool('apk_static_triage', (t) =>
+    t
+      .desc(
+        'One-shot APK triage: ZIP metadata, manifest summary, native libs, asset hints, likely packers/protectors, and recommended next steps.',
+      )
+      .string('apkPath', 'Path to the APK file')
+      .number('maxEntries', 'Maximum ZIP entries to summarize.', {
+        default: APK_STATIC_TRIAGE_DEFAULT_ENTRIES,
+      })
+      .required('apkPath')
+      .query(),
+  ),
+  tool('dex_scan_file', (t) =>
+    t
+      .desc(
+        'Scan a binary/memory-dump file for DEX or CompactDex magic and optionally extract hits.',
+      )
+      .string('filePath', 'Path to a binary, memory dump, DEX, CDEX, VDEX, or APK-extracted blob.')
+      .string('outputDir', 'Optional output directory for extracted DEX/CDEX payloads.')
+      .number('maxHits', 'Maximum DEX/CDEX headers to report.', {
+        default: DEX_SCAN_DEFAULT_MAX_HITS,
+      })
+      .boolean('extract', 'Write discovered payloads to outputDir when file sizes are plausible.', {
+        default: false,
+      })
+      .required('filePath')
+      .query(),
+  ),
+  tool('binary_strings_extract', (t) =>
+    t
+      .desc('Extract printable ASCII/UTF-16LE strings from a binary file with regex filtering.')
+      .string('filePath', 'Path to the binary file.')
+      .number('minLength', 'Minimum string length.', {
+        default: BINARY_STRINGS_MIN_LENGTH_DEFAULT,
+      })
+      .number('maxResults', 'Maximum strings to return.', {
+        default: BINARY_STRINGS_MAX_RESULTS_DEFAULT,
+      })
+      .string('pattern', 'Optional JavaScript regex filter.')
+      .required('filePath')
+      .query(),
   ),
   tool('apk_native_libs_list', (t) =>
     t
@@ -168,14 +254,10 @@ export const binaryInstrumentTools: Tool[] = [
   tool('jadx_search_code', (t) =>
     t
       .desc(
-        'Read-only ripgrep-backed search over an existing jadx decompile ' +
-          'directory. ReDoS-guarded; Node fallback. Run jadx_decompile first to produce sources.',
+        'Ripgrep-backed search over jadx output. Pass decompileDir for read-only search, or apkPath to auto-decompile to a temporary directory first.',
       )
-      .string(
-        'decompileDir',
-        'Absolute path to an existing jadx decompile output directory. The tool does ' +
-          'not decompile — run jadx_decompile first.',
-      )
+      .string('decompileDir', 'Absolute path to an existing jadx decompile output directory.')
+      .string('apkPath', 'Optional APK path. Used only when decompileDir is omitted.')
       .string('query', 'Search query (regex unless `literal:true`)')
       .boolean('literal', 'Treat `query` as a literal string, not a regex', { default: false })
       .boolean('caseInsensitive', 'Case-insensitive matching', { default: false })
@@ -191,7 +273,7 @@ export const binaryInstrumentTools: Tool[] = [
         { type: 'string', description: 'Glob pattern (negative globs may start with !)' },
         'File globs applied during enumeration. Defaults to `**/*.java`, `**/*.kt`.',
       )
-      .required('decompileDir', 'query')
+      .required('query')
       .query(),
   ),
   ...apkPackerTools,

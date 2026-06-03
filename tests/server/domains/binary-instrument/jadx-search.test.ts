@@ -78,18 +78,18 @@ describe('binary-instrument · handleJadxSearchCode (merged from jadx-search)', 
 
   it('throws on missing decompileDir', async () => {
     await expect(makeHandlers().handleJadxSearchCode({ query: 'AES' })).rejects.toThrow(
-      /decompileDir/,
+      /decompileDir or apkPath/,
     );
   });
 
-  it('rejects apkPath with a helpful, redirecting error', async () => {
-    await expect(
-      makeHandlers().handleJadxSearchCode({
-        decompileDir: FIXTURE_DIR,
-        query: 'AES',
-        apkPath: '/tmp/whatever.apk',
-      }),
-    ).rejects.toThrow(/apkPath is not supported.*jadx_decompile/s);
+  it('accepts apkPath alongside decompileDir as contextual metadata', async () => {
+    const result = await call(makeHandlers(), {
+      decompileDir: FIXTURE_DIR,
+      query: 'AES',
+      apkPath: '/tmp/whatever.apk',
+    });
+    expect(result.success).toBe(true);
+    expect(result.totalMatches).toBeGreaterThan(0);
   });
 
   it('rejects non-array globs', async () => {

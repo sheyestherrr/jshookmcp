@@ -67,6 +67,9 @@ export class BinaryInstrumentHandlers {
   handleFridaListSessions(args: Record<string, unknown>) {
     return this.frida.handleFridaListSessions(args);
   }
+  handleFridaDexDump(args: Record<string, unknown>) {
+    return this.analysis.handleFridaDexDump(args);
+  }
   handleFridaGenerateScript(args: Record<string, unknown>) {
     return this.frida.handleFridaGenerateScript(args);
   }
@@ -88,6 +91,9 @@ export class BinaryInstrumentHandlers {
   handleJadxDecompile(args: Record<string, unknown>) {
     return this.analysis.handleJadxDecompile(args);
   }
+  handleJadxDecompileApk(args: Record<string, unknown>) {
+    return this.analysis.handleJadxDecompileApk(args);
+  }
   handleJadxSearchCode(args: Record<string, unknown>) {
     return this.analysis.handleJadxSearchCode(args);
   }
@@ -96,6 +102,18 @@ export class BinaryInstrumentHandlers {
   }
   handleApkManifestDump(args: Record<string, unknown>) {
     return this.analysis.handleApkManifestDump(args);
+  }
+  handleApkManifestQuery(args: Record<string, unknown>) {
+    return this.analysis.handleApkManifestQuery(args);
+  }
+  handleApkStaticTriage(args: Record<string, unknown>) {
+    return this.analysis.handleApkStaticTriage(args);
+  }
+  handleDexScanFile(args: Record<string, unknown>) {
+    return this.analysis.handleDexScanFile(args);
+  }
+  handleBinaryStringsExtract(args: Record<string, unknown>) {
+    return this.analysis.handleBinaryStringsExtract(args);
   }
   handleApkNativeLibsList(args: Record<string, unknown>) {
     return this.analysis.handleApkNativeLibsList(args);

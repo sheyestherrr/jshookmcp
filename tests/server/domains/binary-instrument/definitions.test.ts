@@ -25,7 +25,13 @@ describe('binary-instrument tool definitions', () => {
   it('includes apk reverse-engineering helper tools', async () => {
     expect(getTool('apktool_decode').name).toBe('apktool_decode');
     expect(getTool('apk_manifest_dump').name).toBe('apk_manifest_dump');
+    expect(getTool('apk_manifest_query').name).toBe('apk_manifest_query');
+    expect(getTool('apk_static_triage').name).toBe('apk_static_triage');
+    expect(getTool('dex_scan_file').name).toBe('dex_scan_file');
+    expect(getTool('binary_strings_extract').name).toBe('binary_strings_extract');
     expect(getTool('apk_native_libs_list').name).toBe('apk_native_libs_list');
+    expect(getTool('jadx_decompile_apk').name).toBe('jadx_decompile_apk');
+    expect(getTool('frida_dex_dump').name).toBe('frida_dex_dump');
   });
 
   it('apktool_decode requires apkPath and exposes force boolean', async () => {
@@ -46,5 +52,11 @@ describe('binary-instrument tool definitions', () => {
     const tool = getTool('apk_native_libs_list');
     expect(tool.inputSchema.required ?? []).toContain('apkPath');
     expect(getToolProperty('apk_native_libs_list', 'apkPath').type).toBe('string');
+  });
+
+  it('high-level APK tools require apkPath', async () => {
+    expect(getTool('apk_manifest_query').inputSchema.required ?? []).toContain('apkPath');
+    expect(getTool('apk_static_triage').inputSchema.required ?? []).toContain('apkPath');
+    expect(getTool('jadx_decompile_apk').inputSchema.required ?? []).toContain('apkPath');
   });
 });

@@ -8,9 +8,9 @@ import { TEST_HTTP_URLS, withPath } from '@tests/shared/test-urls';
 
 vi.mock('child_process', () => {
   return {
-    exec: vi.fn((_cmd: any, cb: any) => {
+    execFile: vi.fn((_cmd: any, _args: any, _opts: any, cb: any) => {
       // simulate success
-      cb(null, { stdout: 'success', stderr: '' });
+      cb(null, 'success', '');
     }),
   };
 });
@@ -208,12 +208,14 @@ describe('ProxyHandlers (Integration)', () => {
 
   it('returns explicit capability details when adb is unavailable', async () => {
     if (!httpsAvailable) return;
-    vi.mocked(child_process.exec as any).mockImplementationOnce((_cmd: any, cb: any) => {
-      if (typeof cb === 'function') {
-        cb(new Error('adb command failed'), { stdout: '', stderr: 'error' });
-      }
-      return {} as any;
-    });
+    vi.mocked(child_process.execFile as any).mockImplementationOnce(
+      (_cmd: any, _args: any, _opts: any, cb: any) => {
+        if (typeof cb === 'function') {
+          cb(new Error('adb command failed'), '', 'error');
+        }
+        return {} as any;
+      },
+    );
 
     await handlers.handleProxyStart({ port: testPort + 4, useHttps: true });
 
@@ -231,16 +233,16 @@ describe('ProxyHandlers (Integration)', () => {
 
   it('preserves runtime execution failures after adb preflight passes', async () => {
     if (!httpsAvailable) return;
-    vi.mocked(child_process.exec as any)
-      .mockImplementationOnce((_cmd: any, cb: any) => {
+    vi.mocked(child_process.execFile as any)
+      .mockImplementationOnce((_cmd: any, _args: any, _opts: any, cb: any) => {
         if (typeof cb === 'function') {
-          cb(null, { stdout: 'Android Debug Bridge version 1.0.41', stderr: '' });
+          cb(null, 'Android Debug Bridge version 1.0.41', '');
         }
         return {} as any;
       })
-      .mockImplementationOnce((_cmd: any, cb: any) => {
+      .mockImplementationOnce((_cmd: any, _args: any, _opts: any, cb: any) => {
         if (typeof cb === 'function') {
-          cb(new Error('adb get-state failed'), { stdout: '', stderr: 'error' });
+          cb(new Error('adb get-state failed'), '', 'error');
         }
         return {} as any;
       });

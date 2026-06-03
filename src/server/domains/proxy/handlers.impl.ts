@@ -9,14 +9,18 @@ import {
   argStringRequired,
   argString,
 } from '@server/domains/shared/parse-args';
+import {
+  PROXY_ADB_MAX_BUFFER_BYTES,
+  PROXY_ADB_TIMEOUT_MS,
+  PROXY_CAPTURE_BUFFER_MAX,
+  PROXY_CAPTURE_RETURN_LIMIT,
+} from '@src/constants';
 import { ensureMockttpCaCompatibilityPatched } from '@server/domains/proxy/mockttp-ca-compat';
 
 const ResponseBuilder = {
   success: (data: Record<string, unknown>) => R.ok().merge(data).json(),
   error: (msg: string) => R.fail(msg).mcpError().json(),
 };
-
-const CAPTURE_BUFFER_MAX = 5000;
 
 interface CaptureEntry {
   type: 'request' | 'response';
@@ -65,7 +69,7 @@ export class ProxyHandlers {
   /** Push capture entry with bounded buffer (FIFO). */
   private appendCapture(entry: CaptureEntry): void {
     this.captureBuffer.push(entry);
-    if (this.captureBuffer.length > CAPTURE_BUFFER_MAX) {
+    if (this.captureBuffer.length > PROXY_CAPTURE_BUFFER_MAX) {
       this.captureBuffer.shift();
     }
   }
@@ -271,7 +275,7 @@ export class ProxyHandlers {
     }
     return ResponseBuilder.success({
       count: results.length,
-      logs: results.slice(-100), // return last 100 max
+      logs: results.slice(-PROXY_CAPTURE_RETURN_LIMIT),
     });
   }
 
@@ -294,16 +298,28 @@ export class ProxyHandlers {
       );
     }
 
-    const { exec } = await import('node:child_process');
+    const { execFile } = await import('node:child_process');
     const { promisify } = await import('node:util');
-    const execAsync = promisify(exec);
+    const execFileAsync = promisify(execFile);
 
     const deviceSerial = argString(args, 'deviceSerial');
-    const deviceFlag = deviceSerial ? `-s ${deviceSerial}` : '';
+    const deviceArgs = deviceSerial ? ['-s', deviceSerial] : [];
+    const runAdb = async (extraArgs: string[]) =>
+      execFileAsync('adb', [...deviceArgs, ...extraArgs], {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: PROXY_ADB_TIMEOUT_MS,
+        maxBuffer: PROXY_ADB_MAX_BUFFER_BYTES,
+      });
 
     try {
       try {
-        await execAsync('adb version');
+        await execFileAsync('adb', ['version'], {
+          encoding: 'utf8',
+          windowsHide: true,
+          timeout: PROXY_ADB_TIMEOUT_MS,
+          maxBuffer: PROXY_ADB_MAX_BUFFER_BYTES,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return R.fail(`ADB binary not available: ${message}`)
@@ -317,23 +333,24 @@ export class ProxyHandlers {
       }
 
       // 1. Verify adb is available
-      await execAsync(`adb ${deviceFlag} get-state`);
+      await runAdb(['get-state']);
 
       // 2. Push CA Certificate
-      await execAsync(`adb ${deviceFlag} push "${certPath}" /data/local/tmp/ca.pem`);
+      await runAdb(['push', certPath, '/data/local/tmp/ca.pem']);
 
       // 3. Reverse tether port so device can reach localhost proxy
-      await execAsync(`adb ${deviceFlag} reverse tcp:${port} tcp:${port}`);
+      await runAdb(['reverse', `tcp:${port}`, `tcp:${port}`]);
 
       // 4. Set global HTTP proxy on the device
-      await execAsync(`adb ${deviceFlag} shell settings put global http_proxy 127.0.0.1:${port}`);
+      await runAdb(['shell', 'settings', 'put', 'global', 'http_proxy', `127.0.0.1:${port}`]);
 
       const instructions =
         `ADB Configuration Applied Automatically:\n- Verified device connection.\n- Pushed CA to ` +
         `/data/local/tmp/ca.pem\n- Reversed forwarded tcp:${port} -> tcp:${port}\n- Set global http_proxy ` +
         `to 127.0.0.1:` +
-        `${port}\n\nNote: For HTTPS decryption, you still need to manually install the CA cert from ` +
-        `/data/local/tmp/ca.pem in Android Settings (due to security restrictions) unless device is rooted.`;
+        `${port}\n\nNote: For HTTPS decryption, manually install the CA cert from ` +
+        `/data/local/tmp/ca.pem in Android Settings. Android does not allow system CA ` +
+        `installation through normal ADB permissions.`;
 
       return ResponseBuilder.success({
         message: 'ADB device successfully configured.',

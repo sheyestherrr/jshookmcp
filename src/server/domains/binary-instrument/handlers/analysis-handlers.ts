@@ -3,9 +3,9 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, mkdir, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import {
   open as openZipArchive,
   type Entry as ZipEntry,
@@ -16,7 +16,29 @@ import { JadxSearchEngine } from '@modules/jadx-search';
 import type { JadxSearchOptions } from '@modules/jadx-search';
 import { probeCommand } from '@modules/external/ToolProbe';
 import { ToolError } from '@errors/ToolError';
-import { UNIDBG_TIMEOUT_MS } from '@src/constants';
+import {
+  APK_STATIC_TRIAGE_ASSET_HINT_LIMIT,
+  APK_STATIC_TRIAGE_DEFAULT_ENTRIES,
+  APK_STATIC_TRIAGE_MAX_ENTRIES,
+  APK_STATIC_TRIAGE_MIN_ENTRIES,
+  APK_STATIC_TRIAGE_NATIVE_LIB_LIMIT,
+  BINARY_STRINGS_MAX_RESULTS_DEFAULT,
+  BINARY_STRINGS_MAX_RESULTS_LIMIT,
+  BINARY_STRINGS_MIN_LENGTH_CEILING,
+  BINARY_STRINGS_MIN_LENGTH_DEFAULT,
+  BINARY_STRINGS_MIN_LENGTH_FLOOR,
+  BINARY_STRINGS_PRINTABLE_ASCII_MAX,
+  BINARY_STRINGS_PRINTABLE_ASCII_MIN,
+  CDEX_MAGIC_ASCII,
+  DEX_MAGIC_ASCII,
+  DEX_SCAN_DEFAULT_MAX_HITS,
+  DEX_SCAN_MAX_EXTRACT_BYTES,
+  DEX_SCAN_MAX_HITS,
+  FRIDA_DEX_DUMP_FILE_LIMIT,
+  FRIDA_DEX_DUMP_MAX_BUFFER_BYTES,
+  FRIDA_DEX_DUMP_TIMEOUT_MS,
+  UNIDBG_TIMEOUT_MS,
+} from '@src/constants';
 import type { BinaryInstrumentState } from './shared';
 import {
   readRequiredString,
@@ -34,6 +56,152 @@ import {
   execFileUtf8,
   invokeLegacyPlugin,
 } from './shared';
+
+const PROTECTOR_HINTS = [
+  {
+    name: 'SecNeo/Bangcle',
+    patterns: [/com\/secneo\/apkwrapper/i, /libDexHelper\.so/i, /libSecShell/i],
+  },
+  { name: 'Qihoo 360', patterns: [/com\/qihoo\/util/i, /libprotectClass\.so/i, /libjiagu/i] },
+  {
+    name: 'Tencent Legu',
+    patterns: [/com\/tencent\/StubShell/i, /libshell/i, /libBugly_Native\.so/i],
+  },
+  { name: 'Baidu Protect', patterns: [/com\/baidu\/protect/i, /libbaiduprotect/i] },
+  { name: 'AliProtect', patterns: [/aliprotect/i, /libsgmain/i, /libsgsecuritybody/i] },
+];
+
+const SDK_HINTS = [
+  { name: 'BeiZis Ads', patterns: [/beizi/i, /bzads/i] },
+  { name: 'Kuaishou/Kwai Ads', patterns: [/kuaishou/i, /kwai/i, /ksad/i] },
+  { name: 'Pangle/Toutiao Ads', patterns: [/pangle/i, /toutiao/i, /bytedance/i, /csj/i] },
+  { name: 'Tencent GDT Ads', patterns: [/gdt/i, /qq\/e\/ads/i] },
+  { name: 'Huawei Services/Ads', patterns: [/huawei/i, /hms/i, /agconnect/i] },
+  { name: 'OPPO/VIVO/Honor Push', patterns: [/oppo/i, /vivo/i, /honor/i, /push/i] },
+  { name: 'Bugly', patterns: [/bugly/i] },
+  { name: 'Agora', patterns: [/agora/i] },
+  { name: 'Baidu Speech', patterns: [/baidu.*speech/i, /BDSpeech/i] },
+];
+
+function uniqueStrings(values: string[], limit = 200): string[] {
+  return [...new Set(values.filter(Boolean))].slice(0, limit);
+}
+
+function readXmlAttr(tag: string, attr: string): string | undefined {
+  const escaped = attr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return (
+    tag.match(new RegExp(`\\b${escaped}\\s*=\\s*"([^"]*)"`, 'i'))?.[1] ??
+    tag.match(new RegExp(`\\bandroid:${escaped}\\s*=\\s*"([^"]*)"`, 'i'))?.[1]
+  );
+}
+
+function listTags(xml: string, tagName: string): string[] {
+  const tags: string[] = [];
+  const re = new RegExp(`<${tagName}\\b[^>]*(?:/>|>[\\s\\S]*?<\\/${tagName}>)`, 'gi');
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(xml)) !== null) {
+    if (match[0]) tags.push(match[0]);
+  }
+  return tags;
+}
+
+function summarizeManifestXml(xml: string): Record<string, unknown> {
+  const manifestOpen = xml.match(/<manifest\b[^>]*>/i)?.[0] ?? '';
+  const applicationOpen = xml.match(/<application\b[^>]*>/i)?.[0] ?? '';
+  const activities = listTags(xml, 'activity');
+  const activityAliases = listTags(xml, 'activity-alias');
+  const services = listTags(xml, 'service');
+  const receivers = listTags(xml, 'receiver');
+  const providers = listTags(xml, 'provider');
+  const permissions = uniqueStrings(
+    [...xml.matchAll(/<uses-permission\b[^>]*\bandroid:name="([^"]+)"/gi)].map(
+      (match) => match[1] ?? '',
+    ),
+    500,
+  );
+  const usesFeatures = uniqueStrings(
+    [...xml.matchAll(/<uses-feature\b[^>]*\bandroid:name="([^"]+)"/gi)].map(
+      (match) => match[1] ?? '',
+    ),
+    200,
+  );
+  const launcherTag =
+    [...activities, ...activityAliases].find(
+      (tag) =>
+        /android\.intent\.action\.MAIN/i.test(tag) &&
+        /android\.intent\.category\.LAUNCHER/i.test(tag),
+    ) ?? '';
+
+  const components = {
+    activities: uniqueStrings(
+      activities.map((tag) => readXmlAttr(tag, 'name') ?? ''),
+      500,
+    ),
+    activityAliases: uniqueStrings(
+      activityAliases.map((tag) => readXmlAttr(tag, 'name') ?? ''),
+      200,
+    ),
+    services: uniqueStrings(
+      services.map((tag) => readXmlAttr(tag, 'name') ?? ''),
+      500,
+    ),
+    receivers: uniqueStrings(
+      receivers.map((tag) => readXmlAttr(tag, 'name') ?? ''),
+      500,
+    ),
+    providers: uniqueStrings(
+      providers.map((tag) => readXmlAttr(tag, 'name') ?? ''),
+      500,
+    ),
+  };
+
+  return {
+    packageName: readXmlAttr(manifestOpen, 'package'),
+    versionCode: readXmlAttr(manifestOpen, 'versionCode'),
+    versionName: readXmlAttr(manifestOpen, 'versionName'),
+    minSdk: xml.match(/<uses-sdk\b[^>]*\bandroid:minSdkVersion="([^"]+)"/i)?.[1],
+    targetSdk: xml.match(/<uses-sdk\b[^>]*\bandroid:targetSdkVersion="([^"]+)"/i)?.[1],
+    applicationClass: readXmlAttr(applicationOpen, 'name'),
+    applicationLabel: readXmlAttr(applicationOpen, 'label'),
+    debuggable: readXmlAttr(applicationOpen, 'debuggable'),
+    launcherActivity: launcherTag ? readXmlAttr(launcherTag, 'name') : undefined,
+    permissions,
+    usesFeatures,
+    components,
+    counts: {
+      permissions: permissions.length,
+      activities: components.activities.length,
+      services: components.services.length,
+      receivers: components.receivers.length,
+      providers: components.providers.length,
+    },
+  };
+}
+
+function matchHints(entries: string[], xml: string): Array<{ name: string; evidence: string[] }> {
+  const haystack = [...entries.slice(0, 5000), xml].join('\n');
+  return SDK_HINTS.map((hint) => ({
+    name: hint.name,
+    evidence: hint.patterns
+      .filter((pattern) => pattern.test(haystack))
+      .map((pattern) => pattern.source)
+      .slice(0, 5),
+  })).filter((hint) => hint.evidence.length > 0);
+}
+
+function matchProtectors(
+  entries: string[],
+  xml: string,
+): Array<{ name: string; evidence: string[] }> {
+  const haystack = [...entries.slice(0, 5000), xml].join('\n');
+  return PROTECTOR_HINTS.map((hint) => ({
+    name: hint.name,
+    evidence: hint.patterns
+      .filter((pattern) => pattern.test(haystack))
+      .map((pattern) => pattern.source)
+      .slice(0, 5),
+  })).filter((hint) => hint.evidence.length > 0);
+}
 
 export class AnalysisHandlers {
   private state: BinaryInstrumentState;
@@ -94,26 +262,103 @@ export class AnalysisHandlers {
     return invokeLegacyPlugin(this.state.context, 'plugin_jadx_bridge', 'jadx_decompile', args);
   }
 
+  async handleJadxDecompileApk(args: Record<string, unknown>): Promise<unknown> {
+    const apkPath = readRequiredString(args, 'apkPath');
+    const outputDir = readOptionalString(args, 'outputDir');
+    const noResources = readOptionalBoolean(args, 'noResources') ?? false;
+    const force = readOptionalBoolean(args, 'force') ?? false;
+
+    const jadxProbe = await probeCommand('jadx', ['--version']);
+    if (!jadxProbe.available) {
+      return jsonResponse({
+        available: false,
+        capability: 'jadx_cli',
+        fix: 'Install JADX and ensure jadx is on PATH.',
+        apkPath,
+        reason: jadxProbe.reason ?? 'jadx is not available',
+      });
+    }
+
+    const decompileDir =
+      outputDir ?? (await mkdtemp(join(tmpdir(), `jshook-jadx-${basename(apkPath)}-`)));
+    if (outputDir && force) {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+    await mkdir(decompileDir, { recursive: true });
+
+    const jadxArgs = ['--no-debug-info'];
+    if (noResources) jadxArgs.push('--no-res');
+    jadxArgs.push('-d', decompileDir, apkPath);
+
+    try {
+      await this.runJadx(jadxProbe.path ?? 'jadx', jadxArgs, 300_000);
+      const sourcesDir = join(decompileDir, 'sources');
+      const sourcesAvailable = await stat(sourcesDir)
+        .then((s) => s.isDirectory())
+        .catch(() => false);
+      const sampleFiles = sourcesAvailable
+        ? await this.findFilesByExtension(sourcesDir, ['.java', '.kt'], 20)
+        : [];
+      return jsonResponse({
+        available: true,
+        apkPath,
+        outputDir: decompileDir,
+        sourcesDir,
+        resourcesDir: join(decompileDir, 'resources'),
+        noResources,
+        sampleFiles,
+        next: 'Use jadx_search_code with decompileDir set to sourcesDir.',
+      });
+    } catch (error) {
+      return jsonResponse({
+        available: true,
+        apkPath,
+        outputDir: decompileDir,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   /**
    * Read-only ripgrep-backed search over an *existing* jadx decompile directory.
    * Does NOT decompile — callers run jadx_decompile first, then pass decompileDir.
    * (Merged from the former standalone jadx-search domain.)
    */
   async handleJadxSearchCode(args: Record<string, unknown>): Promise<unknown> {
-    const decompileDir = readRequiredString(args, 'decompileDir');
+    let decompileDir = readOptionalString(args, 'decompileDir');
+    const apkPath = readOptionalString(args, 'apkPath');
     const query = readRequiredString(args, 'query');
 
-    // Reject apkPath even though the schema omits it — this tool intentionally
-    // does not trigger a new decompilation.
-    if (typeof args['apkPath'] === 'string' && args['apkPath'].length > 0) {
+    if (!decompileDir && !apkPath) {
       throw new ToolError(
         'VALIDATION',
-        'apkPath is not supported by jadx_search_code (read-only). ' +
-          'Run jadx_decompile first, then pass decompileDir.',
+        'Either decompileDir or apkPath must be provided for jadx_search_code.',
       );
     }
+    let autoDecompiled = false;
+    if (!decompileDir && apkPath) {
+      const jadxProbe = await probeCommand('jadx', ['--version']);
+      if (!jadxProbe.available) {
+        return jsonResponse({
+          success: false,
+          available: false,
+          capability: 'jadx_cli',
+          fix: 'Install JADX and ensure jadx is on PATH.',
+          apkPath,
+          reason: jadxProbe.reason ?? 'jadx is not available',
+        });
+      }
+      const outDir = await mkdtemp(join(tmpdir(), `jshook-jadx-search-${basename(apkPath)}-`));
+      await this.runJadx(
+        jadxProbe.path ?? 'jadx',
+        ['--no-res', '--no-debug-info', '-d', outDir, apkPath],
+        300_000,
+      );
+      decompileDir = join(outDir, 'sources');
+      autoDecompiled = true;
+    }
 
-    const opts: JadxSearchOptions = { decompileDir, query };
+    const opts: JadxSearchOptions = { decompileDir: decompileDir!, query };
     const literal = readOptionalBoolean(args, 'literal');
     if (literal !== undefined) opts.literal = literal;
     const caseInsensitive = readOptionalBoolean(args, 'caseInsensitive');
@@ -146,6 +391,8 @@ export class AnalysisHandlers {
       engine: result.engine,
       durationMs: result.durationMs,
       decompileDir: result.decompileDir,
+      ...(autoDecompiled ? { autoDecompiled: true } : {}),
+      ...(apkPath ? { apkPath } : {}),
       ...(result.truncated ? { truncated: true } : {}),
     });
   }
@@ -204,41 +451,25 @@ export class AnalysisHandlers {
 
   async handleApkManifestDump(args: Record<string, unknown>): Promise<unknown> {
     const apkPath = readRequiredString(args, 'apkPath');
-    const manifestResult = await this.readZipEntryBuffer(apkPath, 'AndroidManifest.xml');
-    if (!manifestResult.success) {
+    const decodedManifest = await this.decodeManifest(apkPath);
+    if (!decodedManifest.success) {
       return jsonResponse({
         available: false,
         apkPath,
         entry: 'AndroidManifest.xml',
-        error: manifestResult.error,
+        error: decodedManifest.error,
       });
     }
 
-    const manifestText = this.decodeTextEntry(manifestResult.buffer);
-    if (manifestText !== null) {
+    if (decodedManifest.format === 'xml') {
       return jsonResponse({
         available: true,
         apkPath,
         entry: 'AndroidManifest.xml',
         format: 'xml',
-        decodedBy: 'zip-entry',
-        manifest: manifestText,
+        decodedBy: decodedManifest.decodedBy,
+        manifest: decodedManifest.manifest,
       });
-    }
-
-    const jadxProbe = await probeCommand('jadx', ['--version']);
-    if (jadxProbe.available) {
-      const decodedManifest = await this.decodeManifestWithJadx(jadxProbe.path ?? 'jadx', apkPath);
-      if (decodedManifest.success) {
-        return jsonResponse({
-          available: true,
-          apkPath,
-          entry: 'AndroidManifest.xml',
-          format: 'xml',
-          decodedBy: 'jadx_cli',
-          manifest: decodedManifest.manifest,
-        });
-      }
     }
 
     return jsonResponse({
@@ -247,8 +478,262 @@ export class AnalysisHandlers {
       entry: 'AndroidManifest.xml',
       format: 'binary-axml',
       decodedBy: 'zip-entry',
-      size: manifestResult.buffer.length,
-      manifestBase64: manifestResult.buffer.toString('base64'),
+      size: decodedManifest.buffer.length,
+      manifestBase64: decodedManifest.buffer.toString('base64'),
+    });
+  }
+
+  async handleApkManifestQuery(args: Record<string, unknown>): Promise<unknown> {
+    const apkPath = readRequiredString(args, 'apkPath');
+    const includeRawManifest = readOptionalBoolean(args, 'includeRawManifest') ?? false;
+    const decodedManifest = await this.decodeManifest(apkPath);
+    if (!decodedManifest.success) {
+      return jsonResponse({
+        available: false,
+        apkPath,
+        error: decodedManifest.error,
+      });
+    }
+    if (decodedManifest.format !== 'xml') {
+      return jsonResponse({
+        available: true,
+        apkPath,
+        format: decodedManifest.format,
+        decodedBy: decodedManifest.decodedBy,
+        error: 'Manifest is binary AXML and JADX decode fallback was unavailable or failed.',
+        size: decodedManifest.buffer.length,
+      });
+    }
+
+    const entriesResult = await this.listZipEntries(apkPath);
+    const entries = entriesResult.success ? entriesResult.entries : [];
+    const summary = summarizeManifestXml(decodedManifest.manifest);
+    return jsonResponse({
+      available: true,
+      apkPath,
+      format: 'xml',
+      decodedBy: decodedManifest.decodedBy,
+      summary,
+      sdkHints: matchHints(entries, decodedManifest.manifest),
+      protectorHints: matchProtectors(entries, decodedManifest.manifest),
+      ...(includeRawManifest ? { manifest: decodedManifest.manifest } : {}),
+    });
+  }
+
+  async handleApkStaticTriage(args: Record<string, unknown>): Promise<unknown> {
+    const apkPath = readRequiredString(args, 'apkPath');
+    const maxEntries = Math.max(
+      APK_STATIC_TRIAGE_MIN_ENTRIES,
+      Math.min(
+        readOptionalNumber(args, 'maxEntries') ?? APK_STATIC_TRIAGE_DEFAULT_ENTRIES,
+        APK_STATIC_TRIAGE_MAX_ENTRIES,
+      ),
+    );
+    const apkStat = await stat(apkPath).catch(() => undefined);
+    if (!apkStat?.isFile()) {
+      return jsonResponse({ available: false, apkPath, error: 'APK path is not a regular file' });
+    }
+
+    const entriesResult = await this.listZipEntries(apkPath);
+    if (!entriesResult.success) {
+      return jsonResponse({ available: false, apkPath, error: entriesResult.error });
+    }
+    const entries = entriesResult.entries;
+    const decodedManifest = await this.decodeManifest(apkPath);
+    const manifestXml =
+      decodedManifest.success && decodedManifest.format === 'xml' ? decodedManifest.manifest : '';
+    const nativeLibs = entries
+      .filter((entry) => /^lib\/.+\/[^/]+\.so$/i.test(entry))
+      .map((entry) => {
+        const parts = entry.split('/');
+        return { path: entry, abi: parts[1] ?? '', name: parts[parts.length - 1] ?? '' };
+      });
+    const dexFiles = entries.filter((entry) => /(^|\/)classes.*\.(dex|cdex)$/i.test(entry));
+    const assetHints = entries
+      .filter(
+        (entry) =>
+          /(^|\/)(assets|unknown)\//i.test(entry) &&
+          /\.(jar|dex|dat|bin|json|txt|dve|y)$/i.test(entry),
+      )
+      .slice(0, APK_STATIC_TRIAGE_ASSET_HINT_LIMIT);
+    const protectors = matchProtectors(entries, manifestXml);
+
+    return jsonResponse({
+      available: true,
+      apkPath,
+      file: {
+        size: apkStat.size,
+      },
+      zip: {
+        entryCount: entries.length,
+        entries: entries.slice(0, maxEntries),
+        truncated: entries.length > maxEntries,
+      },
+      manifest:
+        manifestXml.length > 0
+          ? {
+              decodedBy: decodedManifest.success ? decodedManifest.decodedBy : undefined,
+              summary: summarizeManifestXml(manifestXml),
+            }
+          : {
+              decodedBy: decodedManifest.success ? decodedManifest.decodedBy : undefined,
+              error: decodedManifest.success
+                ? 'Manifest is not decoded XML'
+                : decodedManifest.error,
+            },
+      nativeLibs: {
+        count: nativeLibs.length,
+        abis: uniqueStrings(nativeLibs.map((lib) => lib.abi)),
+        libraries: nativeLibs.slice(0, APK_STATIC_TRIAGE_NATIVE_LIB_LIMIT),
+      },
+      dexFiles,
+      assetHints,
+      protectorHints: protectors,
+      sdkHints: matchHints(entries, manifestXml),
+      recommendedNextSteps: [
+        protectors.length > 0
+          ? 'Packed/protected APK detected: start with adb_app_cold_start_trace/logcat and local APK artifact triage before escalating to device-specific runtime dumping.'
+          : 'No strong protector hint found: run jadx_decompile_apk then jadx_search_code for startup/splash logic.',
+        nativeLibs.length > 0
+          ? 'Inspect native libraries relevant to protectors or startup SDKs with apk_native_libs_list and ghidra/unidbg tools.'
+          : 'Native library surface appears small or absent.',
+      ],
+    });
+  }
+
+  async handleDexScanFile(args: Record<string, unknown>): Promise<unknown> {
+    const filePath = readRequiredString(args, 'filePath');
+    const outputDir = readOptionalString(args, 'outputDir');
+    const maxHits = Math.max(
+      1,
+      Math.min(readOptionalNumber(args, 'maxHits') ?? DEX_SCAN_DEFAULT_MAX_HITS, DEX_SCAN_MAX_HITS),
+    );
+    const extract = readOptionalBoolean(args, 'extract') ?? false;
+    const data = await readFile(filePath);
+    if (extract && outputDir) {
+      await mkdir(outputDir, { recursive: true });
+    }
+
+    const hits: Array<Record<string, unknown>> = [];
+    const magics = [
+      { kind: 'dex', magic: Buffer.from(DEX_MAGIC_ASCII, 'ascii') },
+      { kind: 'cdex', magic: Buffer.from(CDEX_MAGIC_ASCII, 'ascii') },
+    ];
+    for (let offset = 0; offset < data.length && hits.length < maxHits; offset++) {
+      const found = magics.find(
+        (entry) =>
+          offset + entry.magic.length <= data.length &&
+          data.subarray(offset, offset + entry.magic.length).equals(entry.magic),
+      );
+      if (!found) continue;
+      const version = data
+        .subarray(
+          offset + found.magic.length,
+          Math.min(offset + found.magic.length + 4, data.length),
+        )
+        .toString('latin1')
+        .replaceAll('\u0000', '');
+      const fileSize = offset + 36 <= data.length ? data.readUInt32LE(offset + 32) : undefined;
+      const plausibleSize =
+        fileSize !== undefined &&
+        fileSize > 0x70 &&
+        fileSize <= data.length - offset &&
+        fileSize < DEX_SCAN_MAX_EXTRACT_BYTES
+          ? fileSize
+          : undefined;
+      let extractedPath: string | undefined;
+      if (extract && outputDir && plausibleSize) {
+        extractedPath = join(outputDir, `${found.kind}_${offset.toString(16)}.${found.kind}`);
+        await writeFile(extractedPath, data.subarray(offset, offset + plausibleSize));
+      }
+      hits.push({
+        kind: found.kind,
+        offset,
+        offsetHex: `0x${offset.toString(16)}`,
+        version,
+        fileSize,
+        plausibleSize,
+        ...(extractedPath ? { extractedPath } : {}),
+      });
+      offset += Math.max(0, found.magic.length - 1);
+    }
+
+    return jsonResponse({
+      success: true,
+      filePath,
+      size: data.length,
+      count: hits.length,
+      hits,
+      truncated: hits.length >= maxHits,
+    });
+  }
+
+  async handleBinaryStringsExtract(args: Record<string, unknown>): Promise<unknown> {
+    const filePath = readRequiredString(args, 'filePath');
+    const minLength = Math.max(
+      BINARY_STRINGS_MIN_LENGTH_FLOOR,
+      Math.min(
+        readOptionalNumber(args, 'minLength') ?? BINARY_STRINGS_MIN_LENGTH_DEFAULT,
+        BINARY_STRINGS_MIN_LENGTH_CEILING,
+      ),
+    );
+    const maxResults = Math.max(
+      1,
+      Math.min(
+        readOptionalNumber(args, 'maxResults') ?? BINARY_STRINGS_MAX_RESULTS_DEFAULT,
+        BINARY_STRINGS_MAX_RESULTS_LIMIT,
+      ),
+    );
+    const pattern = readOptionalString(args, 'pattern');
+    const regex = pattern ? new RegExp(pattern, 'i') : undefined;
+    const data = await readFile(filePath);
+    const strings: Array<{ offset: number; encoding: 'ascii' | 'utf16le'; value: string }> = [];
+    const addString = (offset: number, encoding: 'ascii' | 'utf16le', value: string) => {
+      if (value.length < minLength) return;
+      if (regex && !regex.test(value)) return;
+      strings.push({ offset, encoding, value });
+    };
+
+    let start = -1;
+    for (let i = 0; i <= data.length; i++) {
+      const byte = i < data.length ? data[i]! : 0;
+      const printable =
+        byte >= BINARY_STRINGS_PRINTABLE_ASCII_MIN && byte <= BINARY_STRINGS_PRINTABLE_ASCII_MAX;
+      if (printable && start < 0) start = i;
+      if ((!printable || i === data.length) && start >= 0) {
+        addString(start, 'ascii', data.subarray(start, i).toString('utf8'));
+        if (strings.length >= maxResults) break;
+        start = -1;
+      }
+    }
+
+    for (let i = 0; i + minLength * 2 <= data.length && strings.length < maxResults; i += 2) {
+      if (data[i + 1] !== 0) continue;
+      const startOffset = i;
+      let end = i;
+      while (
+        end + 1 < data.length &&
+        data[end + 1] === 0 &&
+        data[end]! >= BINARY_STRINGS_PRINTABLE_ASCII_MIN &&
+        data[end]! <= BINARY_STRINGS_PRINTABLE_ASCII_MAX
+      ) {
+        end += 2;
+      }
+      if (end > startOffset) {
+        addString(startOffset, 'utf16le', data.subarray(startOffset, end).toString('utf16le'));
+        i = end;
+      }
+    }
+
+    return jsonResponse({
+      success: true,
+      filePath,
+      size: data.length,
+      minLength,
+      pattern,
+      count: strings.length,
+      strings: strings.slice(0, maxResults),
+      truncated: strings.length >= maxResults,
     });
   }
 
@@ -425,6 +910,82 @@ export class AnalysisHandlers {
     return jsonResponse({ plugins, count: plugins.length });
   }
 
+  async handleFridaDexDump(args: Record<string, unknown>): Promise<unknown> {
+    const outputDir = readRequiredString(args, 'outputDir');
+    const target = readOptionalString(args, 'target');
+    const pid = readOptionalNumber(args, 'pid');
+    const usb = readOptionalBoolean(args, 'usb') ?? true;
+    const timeoutMs = readOptionalNumber(args, 'timeoutMs') ?? FRIDA_DEX_DUMP_TIMEOUT_MS;
+    if (!pid && !target) {
+      throw new ToolError('VALIDATION', 'Either pid or target must be provided for frida_dex_dump');
+    }
+    const probe = await probeCommand('frida-dexdump', ['--help']);
+    if (!probe.available) {
+      return jsonResponse({
+        available: false,
+        capability: 'frida-dexdump',
+        fix: 'Install with `pip install frida-dexdump` and ensure it is on PATH.',
+        reason: probe.reason ?? 'frida-dexdump is not available',
+      });
+    }
+    await mkdir(outputDir, { recursive: true });
+    const dexArgs: string[] = [];
+    if (usb) dexArgs.push('-U');
+    if (pid) dexArgs.push('-p', String(pid));
+    else if (target) dexArgs.push('-n', target);
+    dexArgs.push('-o', outputDir);
+
+    const result = await new Promise<{
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+      signal?: string;
+    }>((resolve) => {
+      execFile(
+        probe.path ?? 'frida-dexdump',
+        dexArgs,
+        {
+          encoding: 'utf8',
+          windowsHide: true,
+          timeout: timeoutMs,
+          maxBuffer: FRIDA_DEX_DUMP_MAX_BUFFER_BYTES,
+        },
+        (error, stdout, stderr) => {
+          resolve({
+            stdout: typeof stdout === 'string' ? stdout : '',
+            stderr: typeof stderr === 'string' ? stderr : '',
+            exitCode:
+              typeof (error as { code?: unknown } | null)?.code === 'number'
+                ? ((error as { code: number }).code ?? 1)
+                : 0,
+            signal:
+              typeof (error as { signal?: unknown } | null)?.signal === 'string'
+                ? ((error as { signal: string }).signal ?? undefined)
+                : undefined,
+          });
+        },
+      );
+    });
+    const dumpedFiles = await this.findFilesByExtension(
+      outputDir,
+      ['.dex', '.cdex'],
+      FRIDA_DEX_DUMP_FILE_LIMIT,
+    );
+    return jsonResponse({
+      available: true,
+      success: result.exitCode === 0,
+      target,
+      pid,
+      outputDir,
+      dumpedFiles,
+      count: dumpedFiles.length,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+      ...(result.signal ? { signal: result.signal } : {}),
+    });
+  }
+
   private getGhidraAnalyzer(): GhidraAnalyzer {
     if (!this.state.ghidra) this.state.ghidra = new GhidraAnalyzer();
     return this.state.ghidra;
@@ -550,6 +1111,49 @@ export class AnalysisHandlers {
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  private async decodeManifest(
+    apkPath: string,
+  ): Promise<
+    | { success: true; format: 'xml'; decodedBy: string; manifest: string }
+    | { success: true; format: 'binary-axml'; decodedBy: 'zip-entry'; buffer: Buffer }
+    | { success: false; error: string }
+  > {
+    const manifestResult = await this.readZipEntryBuffer(apkPath, 'AndroidManifest.xml');
+    if (!manifestResult.success) {
+      return { success: false, error: manifestResult.error };
+    }
+
+    const manifestText = this.decodeTextEntry(manifestResult.buffer);
+    if (manifestText !== null) {
+      return {
+        success: true,
+        format: 'xml',
+        decodedBy: 'zip-entry',
+        manifest: manifestText,
+      };
+    }
+
+    const jadxProbe = await probeCommand('jadx', ['--version']);
+    if (jadxProbe.available) {
+      const decodedManifest = await this.decodeManifestWithJadx(jadxProbe.path ?? 'jadx', apkPath);
+      if (decodedManifest.success) {
+        return {
+          success: true,
+          format: 'xml',
+          decodedBy: 'jadx_cli',
+          manifest: decodedManifest.manifest,
+        };
+      }
+    }
+
+    return {
+      success: true,
+      format: 'binary-axml',
+      decodedBy: 'zip-entry',
+      buffer: manifestResult.buffer,
+    };
   }
 
   private async jadxNativeDecompile(
@@ -714,9 +1318,9 @@ export class AnalysisHandlers {
     }
   }
 
-  private async runJadx(jadx: string, args: string[]): Promise<void> {
+  private async runJadx(jadx: string, args: string[], timeoutMs = 120_000): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      execFile(jadx, args, { encoding: 'utf8', windowsHide: true, timeout: 120_000 }, (error) => {
+      execFile(jadx, args, { encoding: 'utf8', windowsHide: true, timeout: timeoutMs }, (error) => {
         // JADX exits with code 1 on partial decompilation errors but still produces usable output.
         if (error && (error as { code?: number }).code !== 1) {
           reject(error);
@@ -829,6 +1433,32 @@ export class AnalysisHandlers {
     return candidates.toSorted(
       (left, right) => right.score - left.score || left.className.localeCompare(right.className),
     );
+  }
+
+  private async findFilesByExtension(
+    root: string,
+    extensions: string[],
+    limit: number,
+  ): Promise<string[]> {
+    const out: string[] = [];
+    const lowerExts = extensions.map((ext) => ext.toLowerCase());
+    const walk = async (directory: string): Promise<void> => {
+      if (out.length >= limit) return;
+      const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        if (out.length >= limit) return;
+        const fullPath = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          await walk(fullPath);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        if (!lowerExts.some((ext) => entry.name.toLowerCase().endsWith(ext))) continue;
+        out.push(relative(root, fullPath).replace(/\\/g, '/'));
+      }
+    };
+    await walk(root);
+    return out;
   }
 
   private scoreClassCandidate(requestedPackage: string[], candidatePackage: string[]): number {

@@ -705,11 +705,103 @@ export const ADB_DEFAULT_TIMEOUT_MS = int('ADB_DEFAULT_TIMEOUT_MS', 30_000);
 /** Timeout for `adb shell` commands (may run longer than generic adb calls). */
 export const ADB_SHELL_TIMEOUT_MS = int('ADB_SHELL_TIMEOUT_MS', 60_000);
 
+/** Max stdout/stderr captured from a generic adb command. */
+export const ADB_MAX_BUFFER_BYTES = int('ADB_MAX_BUFFER_BYTES', 16 * 1024 * 1024);
+
+/** Max stdout/stderr captured from dumpsys/logcat style adb commands. */
+export const ADB_LARGE_OUTPUT_MAX_BUFFER_BYTES = int(
+  'ADB_LARGE_OUTPUT_MAX_BUFFER_BYTES',
+  32 * 1024 * 1024,
+);
+
+/** Timeout for adb pull/push of APKs or native libraries. */
+export const ADB_FILE_TRANSFER_TIMEOUT_MS = int('ADB_FILE_TRANSFER_TIMEOUT_MS', 180_000);
+
+/** Maximum component names emitted per package summary section. */
+export const ADB_PACKAGE_COMPONENT_LIMIT = int('ADB_PACKAGE_COMPONENT_LIMIT', 500);
+
+/** ZIP/APK header magic values accepted by adb_apk_pull validation, encoded as hex. */
+export const APK_ZIP_MAGIC_HEX_HEADERS = csv('APK_ZIP_MAGIC_HEX_HEADERS', [
+  '504b0304',
+  '504b0506',
+  '504b0708',
+]);
+
+/** Default and maximum logcat records read by adb_logcat_query. */
+export const ADB_LOGCAT_TAIL_DEFAULT = int('ADB_LOGCAT_TAIL_DEFAULT', 500);
+export const ADB_LOGCAT_TAIL_MAX = int('ADB_LOGCAT_TAIL_MAX', 20_000);
+
+/** Default and maximum matching logcat lines returned to the caller. */
+export const ADB_LOGCAT_MAX_LINES_DEFAULT = int('ADB_LOGCAT_MAX_LINES_DEFAULT', 100);
+export const ADB_LOGCAT_MAX_LINES_MAX = int('ADB_LOGCAT_MAX_LINES_MAX', 5_000);
+
+/** Default and maximum wait after am start -W before reading startup logs. */
+export const ADB_COLD_START_WAIT_MS_DEFAULT = int('ADB_COLD_START_WAIT_MS_DEFAULT', 5_000);
+export const ADB_COLD_START_WAIT_MS_MAX = int('ADB_COLD_START_WAIT_MS_MAX', 30_000);
+
+/** Default and maximum logcat records inspected by adb_app_cold_start_trace. */
+export const ADB_COLD_START_LOGCAT_TAIL_DEFAULT = int('ADB_COLD_START_LOGCAT_TAIL_DEFAULT', 800);
+export const ADB_COLD_START_LOGCAT_TAIL_MIN = int('ADB_COLD_START_LOGCAT_TAIL_MIN', 100);
+export const ADB_COLD_START_LOGCAT_TAIL_MAX = int('ADB_COLD_START_LOGCAT_TAIL_MAX', 20_000);
+
+/** Maximum startup timeline entries returned by adb_app_cold_start_trace. */
+export const ADB_COLD_START_TIMELINE_LIMIT = int('ADB_COLD_START_TIMELINE_LIMIT', 300);
+
 /** Timeout for an HTTP GET against an on-device WebView debugger endpoint. */
 export const ADB_WEBVIEW_HTTP_TIMEOUT_MS = int('ADB_WEBVIEW_HTTP_TIMEOUT_MS', 5_000);
 
 /** Timeout for establishing a WebSocket to an on-device WebView. */
 export const ADB_WEBVIEW_WS_TIMEOUT_MS = int('ADB_WEBVIEW_WS_TIMEOUT_MS', 10_000);
+
+/** Default host port for ADB WebView CDP forwarding. */
+export const ADB_WEBVIEW_HOST_PORT_DEFAULT = int('ADB_WEBVIEW_HOST_PORT_DEFAULT', 9222);
+
+/* ================================================================== */
+/*  Proxy                                                              */
+/* ================================================================== */
+
+/** Max captured request/response records kept in memory by the proxy domain. */
+export const PROXY_CAPTURE_BUFFER_MAX = int('PROXY_CAPTURE_BUFFER_MAX', 5_000);
+
+/** Max captured request/response records returned by proxy_get_requests. */
+export const PROXY_CAPTURE_RETURN_LIMIT = int('PROXY_CAPTURE_RETURN_LIMIT', 100);
+
+/** Timeout for adb commands issued by proxy_setup_adb_device. */
+export const PROXY_ADB_TIMEOUT_MS = int('PROXY_ADB_TIMEOUT_MS', 60_000);
+
+/** Max stdout/stderr captured from adb commands issued by proxy_setup_adb_device. */
+export const PROXY_ADB_MAX_BUFFER_BYTES = int('PROXY_ADB_MAX_BUFFER_BYTES', 8 * 1024 * 1024);
+
+/* ================================================================== */
+/*  APK / DEX artifact analysis                                        */
+/* ================================================================== */
+
+export const APK_STATIC_TRIAGE_MIN_ENTRIES = int('APK_STATIC_TRIAGE_MIN_ENTRIES', 100);
+export const APK_STATIC_TRIAGE_DEFAULT_ENTRIES = int('APK_STATIC_TRIAGE_DEFAULT_ENTRIES', 2_000);
+export const APK_STATIC_TRIAGE_MAX_ENTRIES = int('APK_STATIC_TRIAGE_MAX_ENTRIES', 20_000);
+export const APK_STATIC_TRIAGE_ASSET_HINT_LIMIT = int('APK_STATIC_TRIAGE_ASSET_HINT_LIMIT', 200);
+export const APK_STATIC_TRIAGE_NATIVE_LIB_LIMIT = int('APK_STATIC_TRIAGE_NATIVE_LIB_LIMIT', 300);
+
+export const DEX_SCAN_DEFAULT_MAX_HITS = int('DEX_SCAN_DEFAULT_MAX_HITS', 50);
+export const DEX_SCAN_MAX_HITS = int('DEX_SCAN_MAX_HITS', 500);
+export const DEX_SCAN_MAX_EXTRACT_BYTES = int('DEX_SCAN_MAX_EXTRACT_BYTES', 512 * 1024 * 1024);
+export const DEX_MAGIC_ASCII = str('DEX_MAGIC_ASCII', 'dex\n');
+export const CDEX_MAGIC_ASCII = str('CDEX_MAGIC_ASCII', 'cdex');
+
+export const BINARY_STRINGS_MIN_LENGTH_DEFAULT = int('BINARY_STRINGS_MIN_LENGTH_DEFAULT', 4);
+export const BINARY_STRINGS_MIN_LENGTH_FLOOR = int('BINARY_STRINGS_MIN_LENGTH_FLOOR', 2);
+export const BINARY_STRINGS_MIN_LENGTH_CEILING = int('BINARY_STRINGS_MIN_LENGTH_CEILING', 256);
+export const BINARY_STRINGS_MAX_RESULTS_DEFAULT = int('BINARY_STRINGS_MAX_RESULTS_DEFAULT', 1_000);
+export const BINARY_STRINGS_MAX_RESULTS_LIMIT = int('BINARY_STRINGS_MAX_RESULTS_LIMIT', 50_000);
+export const BINARY_STRINGS_PRINTABLE_ASCII_MIN = int('BINARY_STRINGS_PRINTABLE_ASCII_MIN', 0x20);
+export const BINARY_STRINGS_PRINTABLE_ASCII_MAX = int('BINARY_STRINGS_PRINTABLE_ASCII_MAX', 0x7e);
+
+export const FRIDA_DEX_DUMP_TIMEOUT_MS = int('FRIDA_DEX_DUMP_TIMEOUT_MS', 180_000);
+export const FRIDA_DEX_DUMP_MAX_BUFFER_BYTES = int(
+  'FRIDA_DEX_DUMP_MAX_BUFFER_BYTES',
+  16 * 1024 * 1024,
+);
+export const FRIDA_DEX_DUMP_FILE_LIMIT = int('FRIDA_DEX_DUMP_FILE_LIMIT', 500);
 
 /* ================================================================== */
 /*  Mojo IPC                                                           */
