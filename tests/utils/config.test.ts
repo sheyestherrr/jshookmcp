@@ -67,9 +67,7 @@ describe('config utilities', () => {
     const { getConfig } = await import('@utils/config');
     getConfig();
 
-    expect(consoleInfo).toHaveBeenCalledWith(
-      expect.stringContaining('.env file loaded (debug mode)'),
-    );
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('(debug mode)'));
     consoleInfo.mockRestore();
   });
 

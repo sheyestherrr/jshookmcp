@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +16,27 @@ import type {
 
 export const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 
-const envPath = fileURLToPath(new URL('../../.env', import.meta.url));
+// Resolve .env relative to the package root — works in both dev (tsx src/utils/config.ts)
+// and production (bundled dist/*.mjs). Env vars always take precedence.
+function resolvePackageEnv(): string {
+  const candidates = [
+    fileURLToPath(new URL('../../.env', import.meta.url)), // dev: src/utils/ → root
+    fileURLToPath(new URL('../.env', import.meta.url)), // prod: dist/ → root
+    fileURLToPath(new URL('.env', import.meta.url)), // same dir fallback
+    join(process.cwd(), '.env'), // cwd
+  ];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const normalized = normalize(candidate);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    if (existsSync(normalized)) return normalized;
+  }
+  // Default to the dev-mode path even if it doesn't exist (dotenv will handle ENOENT)
+  return candidates[0] ?? fileURLToPath(new URL('../../.env', import.meta.url));
+}
+
+const envPath = resolvePackageEnv();
 let envLoaded = false;
 
 const CONFIG_DEFAULTS = {
@@ -55,12 +76,14 @@ function loadEnvIfNeeded(): void {
   const result = dotenvConfig({ path: envPath, quiet: true });
   const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
 
-  if (result.error && errorCode !== 'ENOENT') {
-    console.error('[Config] Warning: Failed to load .env file from configured path');
-    console.error(`[Config] Error: ${result.error.message}`);
+  if (result.error) {
+    if (errorCode !== 'ENOENT') {
+      console.error(`[Config] Warning: Failed to load .env from "${envPath}"`);
+      console.error(`[Config] Error: ${result.error.message}`);
+    }
     console.error('[Config] Will use environment variables or defaults');
-  } else if (!result.error && process.env.DEBUG === 'true') {
-    console.info('[Config] .env file loaded (debug mode)');
+  } else if (process.env.DEBUG === 'true') {
+    console.info(`[Config] .env file loaded from "${envPath}" (debug mode)`);
   }
 }
 
