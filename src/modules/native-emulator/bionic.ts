@@ -193,6 +193,15 @@ export function createBionicLibrary(
     const index = body.indexOf(needle);
     return index >= 0 ? BigInt(start + index) : 0n;
   });
+  lib.set('strrchr', (ctx) => {
+    // char *strrchr(const char *s, int c) — return pointer to LAST occurrence
+    const start = Number(ctx.x(0));
+    const needle = Number(ctx.x(1) & 0xffn);
+    const body = readGuestCStringBytes(ctx, start);
+    if (needle === 0) return BigInt(start + body.length);
+    const index = body.lastIndexOf(needle);
+    return index >= 0 ? BigInt(start + index) : 0n;
+  });
   lib.set('strdup', (ctx) => {
     // Allocate len+1 and copy the string including its NUL terminator.
     const body = readGuestCStringBytes(ctx, Number(ctx.x(0)));
@@ -312,6 +321,66 @@ export function createBionicLibrary(
   lib.set('getuid', () => 10000n);
   lib.set('sleep', () => 0n);
   lib.set('usleep', () => 0n);
+
+  // ── Time functions ────────────────────────────────────────────────────────
+  lib.set('time', (ctx) => {
+    // time_t time(time_t *tloc) — return seconds since epoch, optionally store
+    const tloc = Number(ctx.x(0));
+    const now = Math.floor(Date.now() / 1000);
+    if (tloc !== 0) {
+      const bytes = new Uint8Array(8);
+      let v = BigInt(now);
+      for (let i = 0; i < 8; i++) {
+        bytes[i] = Number(v & 0xffn);
+        v >>= 8n;
+      }
+      ctx.write(tloc, bytes);
+    }
+    return BigInt(now);
+  });
+  lib.set('gettimeofday', (ctx) => {
+    // int gettimeofday(struct timeval *tv, struct timezone *tz)
+    const tv = Number(ctx.x(0));
+    if (tv !== 0) {
+      const now = Date.now();
+      const sec = Math.floor(now / 1000);
+      const usec = (now % 1000) * 1000;
+      const bytes = new Uint8Array(16);
+      let v = BigInt(sec);
+      for (let i = 0; i < 8; i++) {
+        bytes[i] = Number(v & 0xffn);
+        v >>= 8n;
+      }
+      v = BigInt(usec);
+      for (let i = 8; i < 16; i++) {
+        bytes[i] = Number(v & 0xffn);
+        v >>= 8n;
+      }
+      ctx.write(tv, bytes);
+    }
+    return 0n;
+  });
+
+  // ── Environment ───────────────────────────────────────────────────────────
+  lib.set('getenv', () => {
+    // char *getenv(const char *name) — return NULL (no environment variables)
+    return 0n;
+  });
+
+  // ── Memory search ─────────────────────────────────────────────────────────
+  lib.set('memchr', (ctx) => {
+    // void *memchr(const void *s, int c, size_t n)
+    const s = Number(ctx.x(0));
+    const c = Number(ctx.x(1)) & 0xff;
+    const n = Number(ctx.x(2));
+    const bytes = ctx.read(s, n);
+    for (let i = 0; i < bytes.length; i++) {
+      if (bytes[i] === c) return BigInt(s + i);
+    }
+    return 0n; // not found
+  });
+
+  // ── Dynamic linking ───────────────────────────────────────────────────────
   lib.set('dlopen', (ctx) => {
     const namePtr = Number(ctx.x(0));
     const name = namePtr === 0 ? '<self>' : readCString(ctx, namePtr);
@@ -383,6 +452,136 @@ export function createBionicLibrary(
     // int getchar(void) — return EOF (-1) to signal no input
     return BigInt(-1);
   });
+
+  // ── Math functions (IEEE 754 via Math.*) ────────────────────────────────────
+  // SQLite uses these for date/time calculations. Return values as double (via
+  // BigInt reinterpret_cast of the IEEE-754 bits would be correct, but for now
+  // we return the integer part — enough for SQLite's time arithmetic).
+  lib.set('exp', (ctx) => BigInt(Math.floor(Math.exp(Number(ctx.x(0))))));
+  lib.set('pow', (ctx) => BigInt(Math.floor(Math.pow(Number(ctx.x(0)), Number(ctx.x(1))))));
+  lib.set('fmod', (ctx) => BigInt(Math.floor(Number(ctx.x(0)) % Number(ctx.x(1)))));
+  lib.set('sqrt', (ctx) => BigInt(Math.floor(Math.sqrt(Number(ctx.x(0))))));
+  lib.set('log', (ctx) => BigInt(Math.floor(Math.log(Number(ctx.x(0))))));
+  lib.set('log10', (ctx) => BigInt(Math.floor(Math.log10(Number(ctx.x(0))))));
+  lib.set('log2', (ctx) => BigInt(Math.floor(Math.log2(Number(ctx.x(0))))));
+  lib.set('sin', (ctx) => BigInt(Math.floor(Math.sin(Number(ctx.x(0))))));
+  lib.set('cos', (ctx) => BigInt(Math.floor(Math.cos(Number(ctx.x(0))))));
+  lib.set('tan', (ctx) => BigInt(Math.floor(Math.tan(Number(ctx.x(0))))));
+  lib.set('asin', (ctx) => BigInt(Math.floor(Math.asin(Number(ctx.x(0))))));
+  lib.set('acos', (ctx) => BigInt(Math.floor(Math.acos(Number(ctx.x(0))))));
+  lib.set('atan', (ctx) => BigInt(Math.floor(Math.atan(Number(ctx.x(0))))));
+  lib.set('atan2', (ctx) => BigInt(Math.floor(Math.atan2(Number(ctx.x(0)), Number(ctx.x(1))))));
+  lib.set('sinh', (ctx) => BigInt(Math.floor(Math.sinh(Number(ctx.x(0))))));
+  lib.set('cosh', (ctx) => BigInt(Math.floor(Math.cosh(Number(ctx.x(0))))));
+  lib.set('tanh', (ctx) => BigInt(Math.floor(Math.tanh(Number(ctx.x(0))))));
+  lib.set('asinh', (ctx) => BigInt(Math.floor(Math.asinh(Number(ctx.x(0))))));
+  lib.set('acosh', (ctx) => BigInt(Math.floor(Math.acosh(Number(ctx.x(0))))));
+  lib.set('atanh', (ctx) => BigInt(Math.floor(Math.atanh(Number(ctx.x(0))))));
+  lib.set('trunc', (ctx) => BigInt(Math.trunc(Number(ctx.x(0)))));
+
+  // ── pthread stubs (single-threaded degradation) ────────────────────────────
+  // SQLite uses mutexes for thread safety. In single-threaded emulation, all
+  // mutex operations succeed immediately (no contention possible).
+  lib.set('pthread_mutexattr_init', () => 0n);
+  lib.set('pthread_mutexattr_settype', () => 0n);
+  lib.set('pthread_mutexattr_destroy', () => 0n);
+  lib.set('pthread_mutex_init', () => 0n);
+  lib.set('pthread_mutex_destroy', () => 0n);
+  lib.set('pthread_mutex_lock', () => 0n);
+  lib.set('pthread_mutex_trylock', () => 0n); // always succeeds (no other thread)
+  lib.set('pthread_mutex_unlock', () => 0n);
+  lib.set('pthread_create', () => BigInt(-1)); // fail: no threads in emulator
+  lib.set('pthread_join', () => BigInt(-1));
+
+  // ── String functions ──────────────────────────────────────────────────────
+  lib.set('strcspn', (ctx) => {
+    // size_t strcspn(const char *s, const char *reject)
+    const sBytes = readGuestCStringBytes(ctx, Number(ctx.x(0)));
+    const rejectBytes = readGuestCStringBytes(ctx, Number(ctx.x(1)));
+    const rejectSet = new Set(rejectBytes);
+    for (let i = 0; i < sBytes.length; i++) {
+      if (rejectSet.has(sBytes[i]!)) return BigInt(i);
+    }
+    return BigInt(sBytes.length);
+  });
+  lib.set('strspn', (ctx) => {
+    // size_t strspn(const char *s, const char *accept)
+    const sBytes = readGuestCStringBytes(ctx, Number(ctx.x(0)));
+    const acceptBytes = readGuestCStringBytes(ctx, Number(ctx.x(1)));
+    const acceptSet = new Set(acceptBytes);
+    for (let i = 0; i < sBytes.length; i++) {
+      if (!acceptSet.has(sBytes[i]!)) return BigInt(i);
+    }
+    return BigInt(sBytes.length);
+  });
+
+  // ── File I/O stubs (minimal/fail-fast) ───────────────────────────────────
+  // SQLite needs these but we don't provide a full VFS here. Most operations
+  // fail with -1 (EPERM), which SQLite tolerates (falls back to in-memory mode).
+  // NOTE: These wrap syscalls so they can be resolved via GOT/PLT (dynamic linking).
+  lib.set('open', () => BigInt(-1)); // fail: no backing filesystem
+  lib.set('close', () => 0n); // succeed (no-op)
+  lib.set('read', () => 0n); // return 0 bytes read
+  lib.set('write', (ctx) => BigInt(Number(ctx.x(2)))); // pretend all bytes written
+  lib.set('fstat', (ctx) => {
+    // int fstat(int fd, struct stat *statbuf) — zero the buffer, return success
+    const statbuf = Number(ctx.x(1));
+    if (statbuf !== 0) ctx.write(statbuf, new Uint8Array(128)); // sizeof(struct stat64)
+    return 0n;
+  });
+  lib.set('mmap', (ctx) => {
+    // void *mmap(void *addr, size_t length, ...) — allocate anonymous memory
+    const length = Number(ctx.x(1));
+    const rounded = Math.max(16, Math.ceil(length / 16) * 16);
+    const ptr = alloc(rounded);
+    return BigInt(ptr);
+  });
+  lib.set('access', () => BigInt(-1)); // fail: file not found
+  lib.set('stat', () => BigInt(-1));
+  lib.set('lstat', () => BigInt(-1));
+  lib.set('fcntl', () => BigInt(-1));
+  lib.set('pread', () => BigInt(-1));
+  lib.set('pwrite', () => BigInt(-1));
+  lib.set('ftruncate', () => BigInt(-1));
+  lib.set('fsync', () => 0n); // succeed (no-op: nothing to flush)
+  lib.set('fchmod', () => BigInt(-1));
+  lib.set('fchown', () => BigInt(-1));
+  lib.set('unlink', () => BigInt(-1));
+  lib.set('mkdir', () => BigInt(-1));
+  lib.set('rmdir', () => BigInt(-1));
+  lib.set('readlink', () => BigInt(-1));
+  lib.set('utimes', () => BigInt(-1));
+  lib.set('getcwd', (ctx) => {
+    // char *getcwd(char *buf, size_t size) — return "/" as fake cwd
+    const buf = Number(ctx.x(0));
+    const size = Number(ctx.x(1));
+    if (buf !== 0 && size > 0) {
+      writeGuestCString(ctx, buf, '/', size);
+      return BigInt(buf);
+    }
+    return 0n; // fail if buf is NULL
+  });
+
+  // ── Time/error/misc ──────────────────────────────────────────────────────
+  lib.set('nanosleep', () => 0n); // succeed immediately (no actual sleep)
+  lib.set('localtime', () => {
+    // struct tm *localtime(const time_t *timep) — return NULL (not implemented)
+    return 0n;
+  });
+
+  // Allocate errno cell once, return same address every time
+  let errnoCell: number | undefined;
+  lib.set('__errno', () => {
+    // int *__errno_location(void) — return a persistent errno slot
+    if (errnoCell === undefined) {
+      errnoCell = alloc(4);
+    }
+    return BigInt(errnoCell);
+  });
+
+  lib.set('dlclose', () => 0n); // succeed (no-op: handles never freed)
+  lib.set('geteuid', () => 10000n); // same as getuid
+  lib.set('mremap', () => BigInt(-1)); // fail: not implemented
 
   return lib;
 }
