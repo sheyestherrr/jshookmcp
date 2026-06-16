@@ -49,7 +49,7 @@ export class StructureAnalyzer {
   private ensureComponents(): void {
     if (!this.utils) {
       // Force lazy initialization by accessing provider
-      const _ = this.provider;
+      void this.provider;
     }
   }
 
@@ -314,7 +314,9 @@ export class StructureAnalyzer {
    * Demangle MSVC name (backward compatibility wrapper).
    *
    * @deprecated Internal method exposed for testing.
+   * @internal
    */
+  // @ts-expect-error - Private method only used in tests via `(analyzer as any).demangleMsvcName`
   private demangleMsvcName(name: string): string {
     // Inline implementation for backward compatibility
     // ".?AVClassName@@" → "ClassName"
@@ -334,7 +336,9 @@ export class StructureAnalyzer {
    * Check if pointer is valid and readable (backward compatibility wrapper).
    *
    * @deprecated Internal method exposed for testing.
+   * @internal
    */
+  // @ts-expect-error - Private method only used in tests via `(analyzer as any).isValidReadablePointer`
   private isValidReadablePointer(handle: ProcessHandle, address: bigint): boolean {
     this.ensureComponents();
     return this.utils!.isValidReadablePointer(handle, address);
@@ -344,7 +348,9 @@ export class StructureAnalyzer {
    * Check if pointer is valid and executable (backward compatibility wrapper).
    *
    * @deprecated Internal method exposed for testing.
+   * @internal
    */
+  // @ts-expect-error - Private method only used in tests via `(analyzer as any).isValidExecutablePointer`
   private isValidExecutablePointer(handle: ProcessHandle, address: bigint): boolean {
     this.ensureComponents();
     return this.utils!.isValidExecutablePointer(handle, address);
@@ -354,7 +360,9 @@ export class StructureAnalyzer {
    * Convert field type to C type (backward compatibility wrapper).
    *
    * @deprecated Internal method exposed for testing.
+   * @internal
    */
+  // @ts-expect-error - Private method only used in tests via `(analyzer as any).fieldTypeToCType`
   private fieldTypeToCType(type: FieldType, size: number): string {
     this.ensureComponents();
     return this.utils!.fieldTypeToCType(type, size);
@@ -364,7 +372,9 @@ export class StructureAnalyzer {
    * Classify value at offset (backward compatibility wrapper).
    *
    * @deprecated Internal method exposed for testing.
+   * @internal
    */
+  // @ts-expect-error - Private method only used in tests via `(analyzer as any).classifyValue`
   private classifyValue(
     buf: Buffer,
     handle: ProcessHandle,

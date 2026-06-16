@@ -16,7 +16,7 @@ export class ResponseBodyCache {
     requestId: string,
     body: string,
     base64Encoded: boolean,
-    mimeType: string,
+    _mimeType: string,
     sizeBytes: number,
   ): void {
     if (sizeBytes > 1_048_576) {

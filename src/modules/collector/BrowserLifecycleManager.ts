@@ -170,7 +170,7 @@ export class BrowserLifecycleManager {
   }
 
   private async disposeCurrentBrowser(
-    markExplicitlyClosed: boolean,
+    _markExplicitlyClosed: boolean,
     clearAllData: () => Promise<void>,
   ): Promise<void> {
     await clearAllData();

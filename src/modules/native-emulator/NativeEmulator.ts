@@ -52,8 +52,8 @@ export interface NativeEmulatorOptions {
 
 export interface NativeLibraryLoadResult {
   entry: number;
-  unresolvedImports: NativeRuntimeImportDiagnostic[];
-  constructorFaults: string[];
+  unresolvedImports: readonly NativeRuntimeImportDiagnostic[];
+  constructorFaults: readonly string[];
 }
 
 /**

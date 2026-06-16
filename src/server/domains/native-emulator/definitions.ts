@@ -58,8 +58,8 @@ export const nativeEmulatorTools: Tool[] = [
       .string('sessionId', 'Session identifier')
       .array(
         'dependencyPaths',
+        { type: 'string' },
         'Filesystem paths to dependency .so files (loaded in order)',
-        'string',
       )
       .string('primaryPath', 'Filesystem path to the primary .so library')
       .required('sessionId', 'dependencyPaths', 'primaryPath'),

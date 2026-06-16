@@ -37,6 +37,8 @@ import { applyShift, extendReg } from './utils/ShiftExtend';
 import { RegisterFile } from './cpu/RegisterFile';
 import { MemoryManager } from './cpu/MemoryManager';
 import type { ExecutionContext } from './cpu/ExecutionContext';
+
+const MASK64 = (1n << 64n) - 1n;
 import {
   addWithFlags as helperAddWithFlags,
   subWithFlags as helperSubWithFlags,
@@ -295,8 +297,10 @@ export class CpuEngine implements ExecutionContext {
     const BIAS_STEP = 0x4000000; // 64 MB per library (generous for real .so)
     // Load each dependency at its own bias, merging exports into the global table.
     for (let i = 0; i < dependencies.length; i++) {
+      const dep = dependencies[i];
+      if (!dep) continue;
       const depBias = BIAS_START + i * BIAS_STEP;
-      this.loadElf(dependencies[i], bionic, depBias, true);
+      this.loadElf(dep, bionic, depBias, true);
     }
     // Load the primary at bias 0 (traditional single-library behaviour): it
     // inherits the merged dependency exports and runs its own constructors.
@@ -840,13 +844,22 @@ export class CpuEngine implements ExecutionContext {
     if (op0 === 0b1000 || op0 === 0b1001) {
       if (execDataProcessingImmediate(this, insn)) return;
     } else if (op0 === 0b1010 || op0 === 0b1011) {
+      // Normalize syscall handler return type for decoder compatibility
+      const normalizedSyscalls = new Map<number, (hctx: HostContext) => number | undefined>();
+      for (const [num, handler] of this.syscalls) {
+        normalizedSyscalls.set(num, (hctx) => {
+          const result = handler(hctx);
+          if (result === undefined || result === null) return undefined;
+          return typeof result === 'bigint' ? Number(result) : result;
+        });
+      }
       if (
         execBranchSystem(
           this,
           insn,
           () => this.ensureTls(),
           () => this.hostContext(),
-          this.syscalls,
+          normalizedSyscalls,
         )
       )
         return;

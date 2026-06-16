@@ -59,6 +59,11 @@ describe('MCPServer.context', () => {
       router: {} as unknown as ToolExecutionRouter,
       handlerDeps: {} as unknown as ToolHandlerDeps,
       toolAutocompleteHandlers: new Map(),
+      contextGuard: {} as unknown as import('@server/ToolCallContextGuard').ToolCallContextGuard,
+      circuitBreaker:
+        {} as unknown as import('@server/security/ToolCircuitBreaker').ToolCircuitBreaker,
+      largeDataOffloader:
+        {} as unknown as import('@server/ToolResponseOffloader').LargeDataOffloader,
     } satisfies ToolRegistryState;
 
     const activationState = {

@@ -243,17 +243,15 @@ describe('constants barrel export', () => {
     });
 
     test('list() parses list from env or fallback', ({ expect }) => {
-      const result = constants.list('NONEXISTENT_LIST', ['x', 'y']);
+      const result = constants.list('NONEXISTENT_LIST', [1, 2]);
       expect(result).toBeInstanceOf(Array);
-      expect(result).toEqual(['x', 'y']);
+      expect(result).toEqual([1, 2]);
     });
 
     test('autoInt() returns number or "auto"', ({ expect }) => {
-      const result = constants.autoInt('NONEXISTENT_AUTO', 'auto');
-      expect(['number', 'string']).toContain(typeof result);
-      if (typeof result === 'string') {
-        expect(result).toBe('auto');
-      }
+      const result = constants.autoInt('NONEXISTENT_AUTO', 42, () => 100);
+      expect(['number']).toContain(typeof result);
+      expect(result).toBe(42);
     });
 
     test('cpuCount() returns positive integer', ({ expect }) => {

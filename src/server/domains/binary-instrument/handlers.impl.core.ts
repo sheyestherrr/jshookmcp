@@ -68,11 +68,11 @@ export class BinaryInstrumentHandlers {
     this.jadx = new JadxHandlers(this.state);
     this.unidbg = new UnidbgHandlers(this.state);
     this.ghidra = new GhidraHandlers(this.state);
-    this.binaryScan = new BinaryScanHandlers(this.state);
+    this.binaryScan = new BinaryScanHandlers();
     this.hooksGeneration = new HooksGenerationHandlers(this.state);
-    this.fridaDexDump = new FridaDexDumpHandlers(this.state);
-    this.apktool = new ApktoolHandlers(this.state);
-    this.nativeLibs = new NativeLibsHandlers(this.state);
+    this.fridaDexDump = new FridaDexDumpHandlers();
+    this.apktool = new ApktoolHandlers();
+    this.nativeLibs = new NativeLibsHandlers();
     this.runtimeDump = new RuntimeDumpHandlers(this.state);
     this.pluginBridge = new PluginBridgeHandlers(this.state);
     this.ida = new IdaHandlers(this.state);

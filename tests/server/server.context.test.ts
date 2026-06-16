@@ -114,6 +114,11 @@ describe('MCPServer.context — interface coverage', () => {
       router: ctx.router,
       handlerDeps: ctx.handlerDeps,
       toolAutocompleteHandlers: ctx.toolAutocompleteHandlers,
+      contextGuard: {} as unknown as import('@server/ToolCallContextGuard').ToolCallContextGuard,
+      circuitBreaker:
+        {} as unknown as import('@server/security/ToolCircuitBreaker').ToolCircuitBreaker,
+      largeDataOffloader:
+        {} as unknown as import('@server/ToolResponseOffloader').LargeDataOffloader,
     };
     expect(registryState.selectedTools).toEqual([]);
     expect(registryState.enabledDomains).toBeInstanceOf(Set);
