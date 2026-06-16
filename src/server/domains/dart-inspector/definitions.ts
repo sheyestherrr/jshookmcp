@@ -219,4 +219,78 @@ export const dartInspectorTools: Tool[] = [
       .required('filePath')
       .query(),
   ),
+  tool('dart_load_snapshot', (t) =>
+    t
+      .desc(
+        'Load and parse a Dart AOT snapshot from libapp.so, extracting metadata ' +
+          'and statistics (Code objects, ObjectPool entries, clusters).',
+      )
+      .string('apkPath', 'Absolute path to APK (extracts arm64-v8a/libapp.so)')
+      .string('libappPath', 'Absolute path to libapp.so directly')
+      .required('apkPath|libappPath')
+      .query(),
+  ),
+  tool('dart_list_functions', (t) =>
+    t
+      .desc(
+        'List all Dart Code objects (compiled functions) from a loaded snapshot, ' +
+          'with entry point address, size, and name (if available).',
+      )
+      .string('apkPath', 'Absolute path to APK')
+      .string('libappPath', 'Absolute path to libapp.so')
+      .number('maxFunctions', 'Cap on returned functions (default: unlimited)', { minimum: 1 })
+      .required('apkPath|libappPath')
+      .query(),
+  ),
+  tool('dart_call_function', (t) =>
+    t
+      .desc(
+        'Execute a Dart function in the ARM64 emulator by address or name, ' +
+          'with simplified runtime (mock built-ins, tagged pointers).',
+      )
+      .string('apkPath', 'Absolute path to APK')
+      .string('libappPath', 'Absolute path to libapp.so')
+      .string('functionAddress', 'Hex address of function entry point (e.g., "0x12345678")')
+      .string('functionName', 'Function name (if known, e.g., "main")')
+      .array(
+        'args',
+        { type: 'string', description: 'Argument value as hex string (e.g., "0x0" for Smi(0))' },
+        'Function arguments (Dart tagged pointers)',
+      )
+      .number('maxSteps', 'Maximum instruction steps before timeout', {
+        default: 100000,
+        minimum: 1,
+      })
+      .boolean('traceExecution', 'Emit instruction trace in response', { default: false })
+      .required('apkPath|libappPath')
+      .query(),
+  ),
+  tool('dart_inspect_object_pool', (t) =>
+    t
+      .desc('Dump an ObjectPool at a specific address, showing all entries with types and values.')
+      .string('apkPath', 'Absolute path to APK')
+      .string('libappPath', 'Absolute path to libapp.so')
+      .string('poolAddress', 'Hex address of ObjectPool (e.g., "0x12345678")')
+      .required('apkPath|libappPath', 'poolAddress')
+      .query(),
+  ),
+  tool('dart_trace_execution', (t) =>
+    t
+      .desc(
+        'Trace Dart function execution step-by-step, emitting each instruction ' +
+          'with register state (PC, x0-x30, PP, THR).',
+      )
+      .string('apkPath', 'Absolute path to APK')
+      .string('libappPath', 'Absolute path to libapp.so')
+      .string('functionAddress', 'Hex address of function entry point')
+      .string('functionName', 'Function name (alternative to address)')
+      .number('maxSteps', 'Maximum steps to trace', { default: 1000, minimum: 1, maximum: 100000 })
+      .array(
+        'args',
+        { type: 'string', description: 'Argument as hex string' },
+        'Function arguments',
+      )
+      .required('apkPath|libappPath')
+      .query(),
+  ),
 ];

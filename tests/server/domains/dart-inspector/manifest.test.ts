@@ -27,7 +27,7 @@ describe('dart-inspector manifest', () => {
     expect(manifest.profiles).not.toContain('search');
   });
 
-  it('registers the dart_strings_extract, dart_smi_scan, dart_symbolize, flutter_packages_detect, dart_snapshot_header_parse, dart_version_fingerprint, dart_object_pool_dump tools', () => {
+  it('registers the dart_strings_extract, dart_smi_scan, dart_symbolize, flutter_packages_detect, dart_snapshot_header_parse, dart_version_fingerprint, dart_object_pool_dump, dart_load_snapshot, dart_list_functions, dart_call_function, dart_inspect_object_pool, dart_trace_execution tools', () => {
     const toolNames = manifest.registrations.map((r) => r.tool.name);
     expect(toolNames).toContain('dart_strings_extract');
     expect(toolNames).toContain('dart_smi_scan');
@@ -36,7 +36,12 @@ describe('dart-inspector manifest', () => {
     expect(toolNames).toContain('dart_snapshot_header_parse');
     expect(toolNames).toContain('dart_version_fingerprint');
     expect(toolNames).toContain('dart_object_pool_dump');
-    expect(toolNames).toHaveLength(7);
+    expect(toolNames).toContain('dart_load_snapshot');
+    expect(toolNames).toContain('dart_list_functions');
+    expect(toolNames).toContain('dart_call_function');
+    expect(toolNames).toContain('dart_inspect_object_pool');
+    expect(toolNames).toContain('dart_trace_execution');
+    expect(toolNames).toHaveLength(12);
   });
 
   it('every registration is bound to the dart-inspector domain', () => {

@@ -300,6 +300,229 @@ export class DartInspectorHandlers {
       return { dump };
     });
   }
+
+  handleDartLoadSnapshot(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      // Import dynamically to avoid circular dependencies
+      const { DartAotLoader } = await import('@modules/native-emulator/dart/DartAotLoader');
+
+      const apkPath = argString(args, 'apkPath');
+      const libappPath = argString(args, 'libappPath');
+
+      if (!apkPath && !libappPath) {
+        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
+      }
+
+      const loader = new DartAotLoader();
+      const snapshot = await loader.loadSnapshot(apkPath ?? libappPath!);
+
+      return {
+        snapshot: {
+          header: {
+            magic: `0x${snapshot.header.magic.toString(16)}`,
+            kind: snapshot.header.kind,
+            features: snapshot.header.features.toString(16),
+            baseObjects: snapshot.header.baseObjects,
+            numObjects: snapshot.header.numObjects,
+            numClusters: snapshot.header.numClusters,
+            fieldTableLen: snapshot.header.fieldTableLen,
+            codeStartOffset: snapshot.header.codeStartOffset.toString(16),
+            dataStartOffset: snapshot.header.dataStartOffset.toString(16),
+          },
+          statistics: {
+            totalClusters: snapshot.clusters.length,
+            codeObjectCount: snapshot.codeObjects.length,
+            objectPoolCount: snapshot.objectPools.length,
+          },
+        },
+      };
+    });
+  }
+
+  handleDartListFunctions(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const { DartAotLoader } = await import('@modules/native-emulator/dart/DartAotLoader');
+
+      const apkPath = argString(args, 'apkPath');
+      const libappPath = argString(args, 'libappPath');
+      const maxFunctions = argNumber(args, 'maxFunctions');
+
+      if (!apkPath && !libappPath) {
+        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
+      }
+
+      const loader = new DartAotLoader();
+      const snapshot = await loader.loadSnapshot(apkPath ?? libappPath!);
+
+      let functions = snapshot.codeObjects.map((code) => ({
+        entryPoint: `0x${code.entryPoint.toString(16)}`,
+        size: code.size,
+        name: code.name,
+        objectPool: `0x${code.objectPool.toString(16)}`,
+        pcDescriptors: `0x${code.pcDescriptors.toString(16)}`,
+      }));
+
+      const truncated = maxFunctions && functions.length > maxFunctions;
+      if (truncated) {
+        functions = functions.slice(0, maxFunctions);
+      }
+
+      return {
+        functions,
+        totalCount: snapshot.codeObjects.length,
+        truncated,
+      };
+    });
+  }
+
+  handleDartCallFunction(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const { DartAotExecutor } = await import('@modules/native-emulator/dart/DartAotExecutor');
+
+      const apkPath = argString(args, 'apkPath');
+      const libappPath = argString(args, 'libappPath');
+      const functionAddress = argString(args, 'functionAddress');
+      const functionName = argString(args, 'functionName');
+      const argsRaw = args['args'];
+      const maxSteps = argNumber(args, 'maxSteps') ?? 100000;
+      const traceExecution = argBool(args, 'traceExecution') ?? false;
+
+      if (!apkPath && !libappPath) {
+        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
+      }
+
+      if (!functionAddress && !functionName) {
+        throw new ToolError(
+          'VALIDATION',
+          'Either functionAddress or functionName must be provided',
+        );
+      }
+
+      // Parse arguments
+      const functionArgs: bigint[] = [];
+      if (Array.isArray(argsRaw)) {
+        for (const arg of argsRaw) {
+          if (typeof arg !== 'string') {
+            throw new ToolError('VALIDATION', 'All args must be hex strings');
+          }
+          functionArgs.push(BigInt(arg));
+        }
+      }
+
+      const executor = new DartAotExecutor();
+      await executor.load(apkPath ?? libappPath!);
+
+      const result = await executor.call({
+        address: functionAddress ? BigInt(functionAddress) : undefined,
+        name: functionName,
+        args: functionArgs,
+        maxSteps,
+        trace: traceExecution,
+      });
+
+      return {
+        result: {
+          returnValue: `0x${result.returnValue.toString(16)}`,
+          steps: result.steps,
+          trace: result.trace,
+          error: result.error,
+        },
+      };
+    });
+  }
+
+  handleDartInspectObjectPool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const { DartAotLoader } = await import('@modules/native-emulator/dart/DartAotLoader');
+
+      const apkPath = argString(args, 'apkPath');
+      const libappPath = argString(args, 'libappPath');
+      const poolAddress = argStringRequired(args, 'poolAddress');
+
+      if (!apkPath && !libappPath) {
+        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
+      }
+
+      const loader = new DartAotLoader();
+      const snapshot = await loader.loadSnapshot(apkPath ?? libappPath!);
+
+      const addr = BigInt(poolAddress);
+      const pool = snapshot.objectPools.find((p) => p.address === addr);
+
+      if (!pool) {
+        throw new ToolError('NOT_FOUND', `ObjectPool not found at address ${poolAddress}`);
+      }
+
+      return {
+        pool: {
+          address: poolAddress,
+          length: pool.pool.getLength(),
+          entries: pool.pool.getAllEntries().map((entry, index) => ({
+            offset: `0x${(index * 8).toString(16)}`,
+            type: entry.type,
+            value: `0x${entry.value.toString(16)}`,
+            name: entry.name,
+          })),
+        },
+      };
+    });
+  }
+
+  handleDartTraceExecution(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const { DartAotExecutor } = await import('@modules/native-emulator/dart/DartAotExecutor');
+
+      const apkPath = argString(args, 'apkPath');
+      const libappPath = argString(args, 'libappPath');
+      const functionAddress = argString(args, 'functionAddress');
+      const functionName = argString(args, 'functionName');
+      const maxSteps = argNumber(args, 'maxSteps') ?? 1000;
+      const argsRaw = args['args'];
+
+      if (!apkPath && !libappPath) {
+        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
+      }
+
+      if (!functionAddress && !functionName) {
+        throw new ToolError(
+          'VALIDATION',
+          'Either functionAddress or functionName must be provided',
+        );
+      }
+
+      const functionArgs: bigint[] = [];
+      if (Array.isArray(argsRaw)) {
+        for (const arg of argsRaw) {
+          if (typeof arg !== 'string') {
+            throw new ToolError('VALIDATION', 'All args must be hex strings');
+          }
+          functionArgs.push(BigInt(arg));
+        }
+      }
+
+      const executor = new DartAotExecutor();
+      await executor.load(apkPath ?? libappPath!);
+
+      const result = await executor.call({
+        address: functionAddress ? BigInt(functionAddress) : undefined,
+        name: functionName,
+        args: functionArgs,
+        maxSteps,
+        trace: true,
+      });
+
+      return {
+        trace: {
+          steps: result.steps,
+          instructions: result.trace,
+          finalState: {
+            returnValue: `0x${result.returnValue.toString(16)}`,
+          },
+          error: result.error,
+        },
+      };
+    });
+  }
 }
 
 /**
