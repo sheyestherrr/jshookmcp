@@ -515,6 +515,38 @@ const META = {
     ],
     enCombos: ['proxy + network', 'proxy + adb-bridge'],
   },
+  'exploit-dev': {
+    zhTitle: '漏洞开发',
+    zhSummary: '二进制漏洞利用开发域，提供 ROP/JOP gadget 搜索、shellcode 编码、保护机制检测与偏移计算。',
+    zhScenarios: ['ROP 链构建', 'Shellcode 编码与混淆', '二进制保护检测', '缓冲区溢出偏移计算'],
+    zhCombos: ['exploit-dev + binary-instrument', 'exploit-dev + memory'],
+    enTitle: 'Exploit Development',
+    enSummary:
+      'Binary exploit development domain providing ROP/JOP gadget search, shellcode encoding, mitigation detection, and offset calculation.',
+    enScenarios: [
+      'ROP chain building',
+      'Shellcode encoding and obfuscation',
+      'Binary protection detection',
+      'Buffer overflow offset calculation',
+    ],
+    enCombos: ['exploit-dev + binary-instrument', 'exploit-dev + memory'],
+  },
+  webgpu: {
+    zhTitle: 'WebGPU',
+    zhSummary: 'WebGPU 逆向分析域，支持 GPU 适配器信息、shader 编译反汇编、计时侧信道分析与内存布局检查。',
+    zhScenarios: ['GPU 硬件指纹识别', 'WGSL shader 分析', 'GPU 侧信道攻击检测', 'GPU 命令队列捕获'],
+    zhCombos: ['webgpu + browser', 'webgpu + instrumentation'],
+    enTitle: 'WebGPU',
+    enSummary:
+      'WebGPU reverse analysis domain supporting GPU adapter info, shader compile/disassembly, timing side-channel analysis, and memory layout inspection.',
+    enScenarios: [
+      'GPU hardware fingerprinting',
+      'WGSL shader analysis',
+      'GPU side-channel attack detection',
+      'GPU command queue capture',
+    ],
+    enCombos: ['webgpu + browser', 'webgpu + instrumentation'],
+  },
 };
 
 async function main() {

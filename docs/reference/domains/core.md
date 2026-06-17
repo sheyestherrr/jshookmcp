@@ -20,7 +20,7 @@
 - browser + network + core
 - core + sourcemap + transform
 
-## 工具清单（22）
+## 工具清单（23）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -46,3 +46,4 @@
 | `analysis_decode_string_array` | 解码字面量字符串数组访问模式，将间接引用替换回内联字符串。 |
 | `js_symbolic_execute` | JavaScript 符号执行：探索所有可行执行路径，收集路径约束并求解。适用于控制流平坦化后的复杂分支代码分析。 |
 | `js_symbolic_execute_jsvmp` | JSVMP 字节码符号执行：逐步对指令进行符号执行，推断原始逻辑、约束和置信度。需先使用 js_analyze_vm 获取指令序列。 |
+| `ai_suggest_exploits` | 使用 LLM 为给定漏洞建议利用原语和攻击链。返回理论利用步骤、参考资料和所需条件。重要提示：不生成可执行的 payload 或恶意代码。 |

@@ -14,6 +14,7 @@ export const referenceSidebarItems = [
   { text: 'Dart 检查', link: '/reference/domains/dart-inspector' },
   { text: '调试器', link: '/reference/domains/debugger' },
   { text: '编码', link: '/reference/domains/encoding' },
+  { text: '漏洞开发', link: '/reference/domains/exploit-dev' },
   { text: '扩展注册', link: '/reference/domains/extension-registry' },
   { text: '图查询', link: '/reference/domains/graphql' },
   { text: '仪器化', link: '/reference/domains/instrumentation' },
@@ -33,5 +34,6 @@ export const referenceSidebarItems = [
   { text: '变换', link: '/reference/domains/transform' },
   { text: 'V8 检查器', link: '/reference/domains/v8-inspector' },
   { text: 'WASM', link: '/reference/domains/wasm' },
+  { text: 'WebGPU', link: '/reference/domains/webgpu' },
   { text: '工作流', link: '/reference/domains/workflow' },
 ];

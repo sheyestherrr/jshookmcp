@@ -14,6 +14,7 @@ export const referenceSidebarItems = [
   { text: 'Dart Inspector', link: '/en/reference/domains/dart-inspector' },
   { text: 'Debugger', link: '/en/reference/domains/debugger' },
   { text: 'Encoding', link: '/en/reference/domains/encoding' },
+  { text: 'Exploit Development', link: '/en/reference/domains/exploit-dev' },
   { text: 'Extension Registry', link: '/en/reference/domains/extension-registry' },
   { text: 'GraphQL', link: '/en/reference/domains/graphql' },
   { text: 'Instrumentation', link: '/en/reference/domains/instrumentation' },
@@ -33,5 +34,6 @@ export const referenceSidebarItems = [
   { text: 'Transform', link: '/en/reference/domains/transform' },
   { text: 'V8 Inspector', link: '/en/reference/domains/v8-inspector' },
   { text: 'WASM', link: '/en/reference/domains/wasm' },
+  { text: 'WebGPU', link: '/en/reference/domains/webgpu' },
   { text: 'Workflow', link: '/en/reference/domains/workflow' },
 ];

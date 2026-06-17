@@ -19,14 +19,18 @@
 - process + debugger
 - process + platform
 
-## 工具清单（17）
+## 工具清单（21）
 
 | 工具 | 说明 |
 | --- | --- |
-| `electron_attach` | 通过 CDP 连接正在运行的 Electron 应用并执行检查或脚本。 |
+| `process_find` | 按名称模式搜索进程，返回匹配进程的 PID、名称、路径和窗口信息。 |
+| `process_list` | 列出所有正在运行的进程，等同于空模式的 process_find。 |
+| `process_get` | 获取指定 PID 进程的详细信息，包括命令行、父进程 PID 和调试端口状态。 |
+| `process_kill` | 终止指定 PID 的进程，需要适当的权限。 |
 | `process_windows` | 获取指定进程关联的全部窗口句柄。 |
 | `process_check_debug_port` | 检查目标进程是否已开启可用于 CDP 附加的调试端口。 |
 | `process_launch_debug` | 以启用远程调试端口的方式启动可执行文件。 |
+| `electron_attach` | 通过 CDP 连接正在运行的 Electron 应用并执行检查或脚本。 |
 | `memory_read` | 读取目标进程指定地址的内存内容。需要提权。失败时返回结构化 diagnostics。 |
 | `memory_write` | 向目标进程指定地址写入内存数据。需要提权。失败时返回结构化 diagnostics。 |
 | `memory_scan` | 按模式或数值扫描进程内存。需要提权。失败时返回结构化 diagnostics。 |

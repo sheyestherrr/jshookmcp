@@ -23,6 +23,7 @@ The following tool domains are available:
 | `dart-inspector` | Dart Inspector | full | Extract and classify strings, recover Smi integer constants, and resolve obfuscated identifiers from Flutter AOT libapp.so using a developer-supplied obfuscation map. |
 | `debugger` | Debugger | workflow, full | CDP-based debugging domain covering breakpoints, stepping, call stacks, watches, debugger sessions, and anti-anti-debug. |
 | `encoding` | Encoding | workflow, full | Binary format detection, encoding conversion, entropy analysis, and raw protobuf decoding. |
+| `exploit-dev` | Exploit Development | full | Binary exploit development domain providing ROP/JOP gadget search, shellcode encoding, mitigation detection, and offset calculation. |
 | `extension-registry` | Extension Registry | full | Extension registry domain for managing and discovering community extensions. |
 | `graphql` | GraphQL | workflow, full | GraphQL discovery, extraction, replay, and introspection tooling. |
 | `instrumentation` | Instrumentation | full | Unified instrumentation-session domain that groups hooks, intercepts, traces, evidence graphs, and artifacts into a queryable session. |
@@ -42,6 +43,7 @@ The following tool domains are available:
 | `transform` | Transform | full | AST/string transform domain plus crypto extraction, harnessing, and comparison tooling. |
 | `v8-inspector` | V8 Inspector | workflow, full | V8 inspector domain providing heap snapshot analysis, CPU profiling, and memory inspection. |
 | `wasm` | WASM | full | WebAssembly dump, disassembly, decompilation, optimization, and offline execution domain. |
+| `webgpu` | WebGPU | workflow, full | WebGPU reverse analysis domain supporting GPU adapter info, shader compile/disassembly, timing side-channel analysis, and memory layout inspection. |
 | `workflow` | Workflow | workflow, full | Composite workflow, script-library, and macro-orchestration domain; the main built-in orchestration layer. |
 
 ## Key high-level entry points

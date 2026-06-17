@@ -23,6 +23,7 @@
 | `dart-inspector` | Dart 检查 | full | 从 Flutter AOT libapp.so 中抽取并分类字符串、还原 Smi 整数常量，并使用开发者提供的混淆映射反查原始符号。 |
 | `debugger` | 调试器 | workflow, full | 基于 CDP 的断点、单步、调用栈、watch、调试会话管理与反反调试域。 |
 | `encoding` | 编码 | workflow, full | 二进制格式检测、编码转换、熵分析与 protobuf 原始解码。 |
+| `exploit-dev` | 漏洞开发 | full | 二进制漏洞利用开发域，提供 ROP/JOP gadget 搜索、shellcode 编码、保护机制检测与偏移计算。 |
 | `extension-registry` | 扩展注册 | full | 扩展注册域，管理和发现社区扩展。 |
 | `graphql` | 图查询 | workflow, full | GraphQL 发现、提取、重放与 introspection 能力。 |
 | `instrumentation` | 仪器化 | full | 统一仪器化会话域，将 Hook、拦截、Trace、证据图与产物记录收束到可查询的 session 中。 |
@@ -42,6 +43,7 @@
 | `transform` | 变换 | full | AST/字符串变换与加密实现抽取、测试、对比域。 |
 | `v8-inspector` | V8 检查器 | workflow, full | V8 检查器域，提供堆快照分析、CPU 分析和内存检查。 |
 | `wasm` | WASM | full | WebAssembly dump、反汇编、反编译、优化与离线执行域。 |
+| `webgpu` | WebGPU | workflow, full | WebGPU 逆向分析域，支持 GPU 适配器信息、shader 编译反汇编、计时侧信道分析与内存布局检查。 |
 | `workflow` | 工作流 | workflow, full | 复合工作流、脚本库与宏编排域，是 built-in 高层编排入口。 |
 
 ## 重点高层入口
