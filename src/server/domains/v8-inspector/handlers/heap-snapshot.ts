@@ -165,12 +165,37 @@ export async function handleHeapSnapshotCapture(
     // Fall through to minimal fallback
   }
 
-  // Minimal fallback: record a stub snapshot
+  // Minimal fallback: attempt to get performance.memory via page.evaluate
+  let fallbackSizeBytes = 0;
+  try {
+    const page = await options.getPage();
+    if (page && typeof page.evaluate === 'function') {
+      const memInfo = await page.evaluate(() => {
+        const m = (performance as any).memory;
+        return m
+          ? {
+              usedJSHeapSize: m.usedJSHeapSize ?? 0,
+              totalJSHeapSize: m.totalJSHeapSize ?? 0,
+              jsHeapSizeLimit: m.jsHeapSizeLimit ?? 0,
+            }
+          : null;
+      });
+      if (memInfo && typeof memInfo.usedJSHeapSize === 'number') {
+        fallbackSizeBytes = memInfo.usedJSHeapSize;
+      }
+    }
+  } catch {
+    // Ignore fallback errors
+  }
+
   const stored = storeSnapshot({
     id: snapshotId,
-    chunks: ['{}'],
+    chunks:
+      fallbackSizeBytes > 0
+        ? [`{"simulated":true,"approximateHeapSize":${fallbackSizeBytes}}`]
+        : ['{}'],
     capturedAt,
-    sizeBytes: 0,
+    sizeBytes: fallbackSizeBytes,
   });
   options.setSnapshot(snapshotId);
   return {

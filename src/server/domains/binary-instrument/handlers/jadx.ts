@@ -302,7 +302,7 @@ export class JadxHandlers {
         apkPath,
         format: decodedManifest.format,
         decodedBy: decodedManifest.decodedBy,
-        error: 'Manifest is binary AXML and JADX decode fallback was unavailable or failed.',
+        error: 'Manifest is binary AXML and all decoders (JADX CLI, AXML parser) failed.',
         size: decodedManifest.buffer.length,
       });
     }

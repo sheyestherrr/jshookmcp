@@ -205,7 +205,7 @@ export function validateExpression(expression: string): ValidationResult {
 export function sanitizeErrorMessage(error: string): string {
   return error
     .replace(/[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\)*[^\\/:*?"<>|\r\n]*/g, '[PATH]') // Windows paths
-    .replace(/\/(?:home|Users)\/[^\/\s]+/g, '[USER_DIR]') // Unix user dirs
-    .replace(/\/(?:[^\/\s]+\/)+[^\/\s]+/g, '[PATH]') // Unix paths
+    .replace(/\/(?:home|Users)\/[^/\s]+/g, '[USER_DIR]') // Unix user dirs
+    .replace(/\/(?:[^/\s]+\/)+[^/\s]+/g, '[PATH]') // Unix paths
     .replace(/\b(?:Administrator|admin|root|user)\b/gi, '[USER]'); // Common usernames
 }

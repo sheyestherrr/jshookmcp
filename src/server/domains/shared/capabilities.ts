@@ -50,3 +50,50 @@ export function capabilityFailure(
     ...extra,
   };
 }
+
+/**
+ * Unified stub/fallback response format for degraded functionality.
+ *
+ * Use this when a tool must return placeholder/simulated/limited data
+ * due to missing dependencies or unsupported environments.
+ *
+ * @example
+ * // Simulated data
+ * return createStub({
+ *   tool: 'mojo_monitor',
+ *   stubType: 'simulated',
+ *   reason: 'Frida hooks not implemented',
+ *   fix: 'Install Frida and restart',
+ *   data: { messages: simulatedMessages }
+ * });
+ *
+ * @example
+ * // Limited functionality
+ * return createStub({
+ *   tool: 'canvas_dump_scene',
+ *   stubType: 'partial',
+ *   reason: 'No canvas engine detected',
+ *   data: { domMetadata: {...} }
+ * });
+ */
+export function createStub(options: {
+  tool: string;
+  stubType: 'simulated' | 'partial' | 'placeholder' | 'unavailable';
+  reason: string;
+  fix?: string;
+  data?: Record<string, unknown>;
+  warning?: string;
+}): Record<string, unknown> {
+  const { tool, stubType, reason, fix, data, warning } = options;
+
+  return {
+    success: stubType !== 'unavailable',
+    tool,
+    _stub: stubType,
+    stubType, // Keep for backward compatibility
+    reason,
+    ...(fix ? { fix } : {}),
+    ...(warning ? { warning } : {}),
+    ...data,
+  };
+}

@@ -4,6 +4,7 @@ import {
   type ZipFile as YauzlZipFile,
 } from 'yauzl';
 import { getReverseEngineeringConfig } from '@utils/reverseEngineeringConfig';
+import { parseAxml } from '@modules/axml-parser';
 
 export type ApkManifestDecodeResult =
   | { success: true; format: 'xml'; decodedBy: string; manifest: string }
@@ -138,6 +139,7 @@ export async function decodeApkManifest(
     };
   }
 
+  // Try JADX CLI if available
   const decodedManifest = await options.decodeBinaryManifest?.();
   if (decodedManifest?.trimStart().startsWith('<')) {
     return {
@@ -145,6 +147,17 @@ export async function decodeApkManifest(
       format: 'xml',
       decodedBy: 'jadx_cli',
       manifest: decodedManifest,
+    };
+  }
+
+  // Fallback to built-in AXML parser
+  const axmlParsed = parseAxml(manifestResult.buffer);
+  if (axmlParsed?.trimStart().startsWith('<')) {
+    return {
+      success: true,
+      format: 'xml',
+      decodedBy: 'axml_parser',
+      manifest: axmlParsed,
     };
   }
 

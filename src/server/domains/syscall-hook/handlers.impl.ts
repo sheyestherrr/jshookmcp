@@ -340,9 +340,15 @@ export class SyscallHookHandlers {
             'ioctl',
           ];
       const simulatedTimestampStepMs = durationSec * 50;
+      let cumulativeTime = 0;
       for (let i = 0; i < 20; i++) {
+        // Add jitter to timestamp after first event: ±30% variance
+        if (i > 0) {
+          const jitter = (Math.random() - 0.5) * 0.6 * simulatedTimestampStepMs;
+          cumulativeTime += simulatedTimestampStepMs + jitter;
+        }
         simulatedEvents.push({
-          timestamp: i * simulatedTimestampStepMs,
+          timestamp: cumulativeTime,
           pid: pid || 1234,
           syscall: syscallPool[i % syscallPool.length] ?? 'read',
           args: [`fd=${(i % 5) + 3}`, `count=${(i + 1) * 64}`],
@@ -353,12 +359,15 @@ export class SyscallHookHandlers {
       return {
         ok: true,
         backend: 'ebpf',
-        simulated: true,
+        _simulated: true, // Explicit watermark
+        simulated: true, // Keep for backward compatibility
         pid,
         durationSec,
         events: simulatedEvents,
         count: simulatedEvents.length,
         syscallsTraced: syscallPool,
+        warning:
+          'This is simulated data with synthetic timestamps and patterns. Use simulate: false for real syscall tracing.',
       };
     }
 

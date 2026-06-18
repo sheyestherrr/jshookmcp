@@ -130,7 +130,7 @@ describe('HeapSnapshotParser - analyzeHeap', () => {
   describe('class histogram', () => {
     it('should generate class histogram with correct structure', async () => {
       const parser = new HeapSnapshotParser(generateMinimalSnapshot());
-      const result = await await parser.analyzeHeap('test-1');
+      const result = await parser.analyzeHeap('test-1');
 
       expect(result.classHistogram).toBeInstanceOf(Array);
       expect(result.classHistogram.length).toBeGreaterThan(0);
@@ -144,7 +144,7 @@ describe('HeapSnapshotParser - analyzeHeap', () => {
 
     it('should correctly count objects by class name', async () => {
       const parser = new HeapSnapshotParser(generateMinimalSnapshot());
-      const result = await await parser.analyzeHeap('test-2');
+      const result = await parser.analyzeHeap('test-2');
 
       const arrayEntry = result.classHistogram.find((e) => e.className === 'Array');
       expect(arrayEntry).toBeDefined();

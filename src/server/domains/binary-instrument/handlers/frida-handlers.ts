@@ -8,8 +8,6 @@ import type { BinaryInstrumentState } from './shared';
 import {
   readRequiredString,
   readOptionalString,
-  parsePid,
-  makeMockId,
   jsonResponse,
   textResponse,
   getLegacyPluginStatus,
@@ -35,16 +33,13 @@ export class FridaHandlers {
     const availability = await frida.getAvailability();
 
     if (!availability.available) {
-      const sessionId = `mock-frida-${makeMockId(target)}`;
       return jsonResponse({
         success: false,
         available: false,
         capability: 'frida_cli',
         fix: 'Install frida-tools and ensure the frida CLI is on PATH.',
         target,
-        sessionId,
         reason: availability.reason ?? 'Frida CLI is not available',
-        sessions: [{ id: sessionId, target, pid: parsePid(target), status: 'unavailable' }],
       });
     }
 

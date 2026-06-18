@@ -276,7 +276,7 @@ describe('binary-instrument handler helper coverage', () => {
 });
 
 describe('binary-instrument Frida fallback branches', () => {
-  it('returns a local mock session when Frida CLI is unavailable', async () => {
+  it('returns capability failure when Frida CLI is unavailable', async () => {
     const handlers = createHandlersWithState({
       fridaSession: new StubFridaSession({ available: false }) as never,
     });
@@ -286,8 +286,8 @@ describe('binary-instrument Frida fallback branches', () => {
       success: false,
       available: false,
       capability: 'frida_cli',
-      sessionId: 'mock-frida-1234',
     });
+    expect(result.sessionId).toBeUndefined();
   });
 
   it('reports unavailable module enumeration without synthetic modules', async () => {
