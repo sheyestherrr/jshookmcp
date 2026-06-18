@@ -32,15 +32,19 @@ function generateMinimalSnapshot(): string {
     },
     nodes: [
       // Node 0: (root) - type=9 (synthetic), name=0, id=1, self_size=0, edge_count=2, trace_node_id=0
-      9, 0, 1, 0, 2, 0,
+      9,
+      0, 1, 0, 2, 0,
       // Node 1: Array - type=1 (array), name=1, id=2, self_size=1024, edge_count=1, trace_node_id=0
       1, 1, 2, 1024, 1, 0,
       // Node 2: String - type=2 (string), name=2, id=3, self_size=256, edge_count=0, trace_node_id=0
-      2, 2, 3, 256, 0, 0,
+      2,
+      2, 3, 256, 0, 0,
       // Node 3: Object - type=3 (object), name=3, id=4, self_size=512, edge_count=1, trace_node_id=0
-      3, 3, 4, 512, 1, 0,
+      3,
+      3, 4, 512, 1, 0,
       // Node 4: Function - type=5 (closure), name=4, id=5, self_size=128, edge_count=0, trace_node_id=0
-      5, 4, 5, 128, 0, 0,
+      5,
+      4, 5, 128, 0, 0,
     ],
     edges: [
       // Edge 0: root -> Array
@@ -192,8 +196,8 @@ describe('HeapSnapshotParser - analyzeHeap', () => {
 
       // Verify descending order
       for (let i = 1; i < result.classHistogram.length; i++) {
-        expect(result.classHistogram[i - 1].retainedSize).toBeGreaterThanOrEqual(
-          result.classHistogram[i].retainedSize,
+        expect(result.classHistogram[i - 1]!.retainedSize).toBeGreaterThanOrEqual(
+          result.classHistogram[i]!.retainedSize,
         );
       }
     });
@@ -233,7 +237,7 @@ describe('HeapSnapshotParser - analyzeHeap', () => {
 
       expect(result.classHistogram.length).toBeGreaterThan(0);
       // Should use either empty string or type fallback
-      expect(result.classHistogram[0].className).toBeDefined();
+      expect(result.classHistogram[0]!.className).toBeDefined();
     });
   });
 
@@ -429,4 +433,3 @@ describe('HeapSnapshotParser - analyzeHeap', () => {
     });
   });
 });
-

@@ -68,7 +68,6 @@ export class AxmlParser {
   private buffer: Buffer;
   private offset = 0;
   private stringPool: StringPool = { strings: [], styleOffsets: [] };
-  private resourceMap: number[] = [];
   private namespaceMap = new Map<number, string>();
 
   constructor(buffer: Buffer) {
@@ -102,7 +101,7 @@ export class AxmlParser {
       const nextChunk = this.peekUInt32();
       if (nextChunk === CHUNK_TYPE.RESOURCE_MAP) {
         this.readUInt32(); // consume chunk type
-        this.resourceMap = this.readResourceMap();
+        this.readResourceMap(); // consume but not used in output
       }
     }
 
@@ -136,7 +135,7 @@ export class AxmlParser {
     const styleCount = this.readUInt32();
     const flags = this.readUInt32();
     const stringsOffset = this.readUInt32();
-    const _stylesOffset = this.readUInt32();
+    this.readUInt32(); // stylesOffset (unused)
 
     const isUtf8 = (flags & 0x00000100) !== 0;
 
@@ -180,7 +179,7 @@ export class AxmlParser {
     try {
       if (isUtf8) {
         // UTF-8 format: two length bytes (char count, byte count), then data, then null terminator
-        const _charCount = this.readUInt8();
+        this.readUInt8(); // charCount (unused)
         const byteCount = this.readUInt8();
 
         if (byteCount === 0) {
@@ -198,21 +197,21 @@ export class AxmlParser {
         this.offset = savedOffset;
         return Buffer.from(bytes).toString('utf8');
       } else {
-        // UTF-16: length _prefix (character count), then UTF-16LE data
-        let _charCount = this.readUInt16();
-        if ((_charCount & 0x8000) !== 0) {
+        // UTF-16: length prefix (character count), then UTF-16LE data
+        let charCount = this.readUInt16();
+        if ((charCount & 0x8000) !== 0) {
           // High bit set means extended length
-          const _charCount2 = this.readUInt16();
-          _charCount = ((_charCount & 0x7fff) << 16) | _charCount2;
+          const charCount2 = this.readUInt16();
+          charCount = ((charCount & 0x7fff) << 16) | charCount2;
         }
 
-        if (_charCount === 0) {
+        if (charCount === 0) {
           this.offset = savedOffset;
           return '';
         }
 
         const chars: number[] = [];
-        for (let i = 0; i < _charCount && this.offset < this.buffer.length; i++) {
+        for (let i = 0; i < charCount && this.offset < this.buffer.length; i++) {
           const char = this.readUInt16();
           if (char === 0) break;
           chars.push(char);
@@ -260,15 +259,14 @@ export class AxmlParser {
   }
 
   private readStartNamespace(): XmlEvent | null {
-    const _lineNumber = this.readUInt32();
+    this.readUInt32(); // lineNumber (unused)
     this.readUInt32(); // comment (unused)
-    const _prefixIdx = this.readUInt32();
+    const prefixIdx = this.readUInt32();
     const uriIdx = this.readUInt32();
 
-    if (_prefixIdx !== 0xffffffff && uriIdx !== 0xffffffff) {
-      const _prefix = this.getString(_prefixIdx);
+    if (prefixIdx !== 0xffffffff && uriIdx !== 0xffffffff) {
       const uri = this.getString(uriIdx);
-      this.namespaceMap.set(_prefixIdx, uri);
+      this.namespaceMap.set(prefixIdx, uri);
     }
 
     return null; // namespace declarations don't generate events
@@ -283,7 +281,7 @@ export class AxmlParser {
   }
 
   private readStartTag(): XmlEvent {
-    const _lineNumber = this.readUInt32();
+    const lineNumber = this.readUInt32();
     this.readUInt32(); // comment (unused)
     const namespaceIdx = this.readUInt32();
     const nameIdx = this.readUInt32();
@@ -307,12 +305,12 @@ export class AxmlParser {
       namespace,
       name,
       attributes,
-      _lineNumber,
+      _lineNumber: lineNumber,
     };
   }
 
   private readEndTag(): XmlEvent {
-    const _lineNumber = this.readUInt32();
+    const lineNumber = this.readUInt32();
     this.readUInt32(); // comment
     const namespaceIdx = this.readUInt32();
     const nameIdx = this.readUInt32();
@@ -324,12 +322,12 @@ export class AxmlParser {
       type: 'end',
       namespace,
       name,
-      _lineNumber,
+      _lineNumber: lineNumber,
     };
   }
 
   private readText(): XmlEvent {
-    const _lineNumber = this.readUInt32();
+    const lineNumber = this.readUInt32();
     this.readUInt32(); // comment
     const nameIdx = this.readUInt32();
     this.readUInt32(); // unknown1
@@ -340,7 +338,7 @@ export class AxmlParser {
     return {
       type: 'text',
       text,
-      _lineNumber,
+      _lineNumber: lineNumber,
     };
   }
 
@@ -348,7 +346,7 @@ export class AxmlParser {
     const namespaceIdx = this.readUInt32();
     const nameIdx = this.readUInt32();
     const rawValueIdx = this.readUInt32();
-    const _typedValueSize = this.readUInt16();
+    this.readUInt16(); // typedValueSize (unused)
     this.readUInt8(); // reserved (always 0)
     const typedValueType = this.readUInt8();
     const typedValueData = this.readUInt32();
@@ -374,17 +372,18 @@ export class AxmlParser {
       if (event.type === 'start') {
         const tag = this.formatStartTag(event, indent);
         lines.push(tag);
-        stack.push(event.name);
+        stack.push(event.name ?? '');
         indent++;
       } else if (event.type === 'end') {
         indent--;
         const expected = stack.pop();
-        if (expected !== event.name) {
+        const eventName = event.name ?? '';
+        if (expected !== eventName) {
           throw new Error(
-            `Mismatched XML tags: expected close of "${expected}", got "${event.name}"`,
+            `Mismatched XML tags: expected close of "${expected ?? 'undefined'}", got "${eventName ?? 'undefined'}"`,
           );
         }
-        lines.push(`${'  '.repeat(indent)}</${event.name}>`);
+        lines.push(`${'  '.repeat(indent)}</${eventName}>`);
       } else if (event.type === 'text' && event.text) {
         lines.push(`${'  '.repeat(indent)}${this.escapeXml(event.text)}`);
       }
@@ -398,15 +397,15 @@ export class AxmlParser {
   }
 
   private formatStartTag(event: XmlEvent, indent: number): string {
-    const _prefix = '  '.repeat(indent);
+    const prefix = '  '.repeat(indent);
     const attrs = event.attributes ?? [];
 
     if (attrs.length === 0) {
-      return `${_prefix}<${event.name}>`;
+      return `${prefix}<${event.name}>`;
     }
 
     const attrStrings = attrs.map((attr) => this.formatAttribute(attr));
-    return `${_prefix}<${event.name} ${attrStrings.join(' ')}>`;
+    return `${prefix}<${event.name} ${attrStrings.join(' ')}>`;
   }
 
   private formatAttribute(attr: XmlAttribute): string {
@@ -473,10 +472,6 @@ export class AxmlParser {
 
   private peekUInt32(): number {
     return this.buffer.readUInt32LE(this.offset);
-  }
-
-  private peekUInt8(): number {
-    return this.buffer.readUInt8(this.offset);
   }
 }
 

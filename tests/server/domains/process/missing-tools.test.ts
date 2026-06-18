@@ -3,7 +3,7 @@
  * This test should FAIL before the fix and PASS after.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type { MCPServerContext } from '@server/domains/shared/registry';
 import { processToolDefinitions } from '@server/domains/process/definitions';
 import manifest from '@server/domains/process/manifest';

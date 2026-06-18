@@ -98,9 +98,8 @@ async function partialSceneDump(
     completeness: stubData.completeness as CanvasSceneDump['completeness'],
     partialReason: stubData.partialReason as string | undefined,
     // Attach stub metadata
-    _stub: stubData._stub as string,
     stubType: stubData.stubType as string,
     reason: stubData.reason as string,
     fix: stubData.fix as string | undefined,
-  } as CanvasSceneDump & { _stub: string; stubType: string; reason: string; fix?: string };
+  } as CanvasSceneDump & { stubType: string; reason: string; fix?: string };
 }

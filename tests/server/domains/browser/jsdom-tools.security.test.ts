@@ -87,7 +87,9 @@ describe('JsdomHandlers - Security Isolation (CRIT-02)', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(`${result.error ?? ''} ${result.message ?? ''}`).toMatch(/'?require'? is not defined/i);
+      expect(`${result.error ?? ''} ${result.message ?? ''}`).toMatch(
+        /'?require'? is not defined/i,
+      );
     });
 
     it('blocks network access via Node.js APIs', async () => {
@@ -103,7 +105,9 @@ describe('JsdomHandlers - Security Isolation (CRIT-02)', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(`${result.error ?? ''} ${result.message ?? ''}`).toMatch(/'?require'? is not defined/i);
+      expect(`${result.error ?? ''} ${result.message ?? ''}`).toMatch(
+        /'?require'? is not defined/i,
+      );
     });
 
     it('blocks child_process spawn', async () => {
@@ -119,7 +123,9 @@ describe('JsdomHandlers - Security Isolation (CRIT-02)', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(`${result.error ?? ''} ${result.message ?? ''}`).toMatch(/'?require'? is not defined/i);
+      expect(`${result.error ?? ''} ${result.message ?? ''}`).toMatch(
+        /'?require'? is not defined/i,
+      );
     });
 
     it('blocks import() dynamic imports', async () => {
@@ -269,7 +275,9 @@ describe('JsdomHandlers - Security Isolation (CRIT-02)', () => {
 
   describe('DOM Access from Sandbox', () => {
     it('provides read-only document properties', async () => {
-      const sessionId = await setupSession('<html><head><title>Test Page</title></head><body><h1 id="test">Title</h1></body></html>');
+      const sessionId = await setupSession(
+        '<html><head><title>Test Page</title></head><body><h1 id="test">Title</h1></body></html>',
+      );
       const result = parseJson<{ success: boolean; result?: unknown }>(
         await handlers!.handleJsdomExecute({
           sessionId,
@@ -309,7 +317,12 @@ describe('JsdomHandlers - Security Isolation (CRIT-02)', () => {
 
     it('does not provide DOM query methods (security trade-off)', async () => {
       const sessionId = await setupSession('<html><body><div id="target"></div></body></html>');
-      const result = parseJson<{ success: boolean; error?: string; message?: string }>(
+      const result = parseJson<{
+        success: boolean;
+        error?: string;
+        message?: string;
+        result?: unknown;
+      }>(
         await handlers!.handleJsdomExecute({
           sessionId,
           code: 'typeof document.getElementById',

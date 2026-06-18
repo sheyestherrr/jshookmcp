@@ -28,7 +28,11 @@ vi.mock(import('@server/domains/shared/modules/native'), async (importOriginal) 
         return 'win32';
       }
     } as unknown as typeof actual.UnifiedProcessManager,
-    MemoryManager: class {} as unknown as typeof actual.MemoryManager,
+    MemoryManager: class MemoryManagerMock {
+      getPlatform() {
+        return 'win32';
+      }
+    } as unknown as typeof actual.MemoryManager,
   };
 });
 
@@ -93,12 +97,6 @@ function createBrowserPage(url: string) {
   return {
     url: () => url,
     evaluate: (...args: any[]) => state.pageEvaluate(...args),
-  };
-}
-
-function createMockCdpSession() {
-  return {
-    send: (...args: any[]) => state.cdpSessionSend(...args),
   };
 }
 

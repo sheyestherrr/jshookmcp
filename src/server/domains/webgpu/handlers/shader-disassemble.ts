@@ -102,7 +102,7 @@ export class ShaderDisassembleHandler {
 
   constructor(
     private ctx: MCPServerContext,
-    private deps: WebGPUDomainDependencies,
+    _deps: WebGPUDomainDependencies,
   ) {
     this.ddm = DetailedDataManager.getInstance();
   }

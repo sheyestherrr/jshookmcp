@@ -54,8 +54,7 @@ const manifest = {
       'webgpu_timing_analysis',
       'webgpu_capture_commands',
     ],
-    hint:
-      'WebGPU analysis workflow: get adapter info → compile/analyze shaders → detect side-channel timing → capture commands',
+    hint: 'WebGPU analysis workflow: get adapter info → compile/analyze shaders → detect side-channel timing → capture commands',
   },
 
   prerequisites: {

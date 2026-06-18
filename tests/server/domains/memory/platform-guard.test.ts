@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { getResponseText } from '@tests/test-utils';
 import { MemoryScanHandlers } from '@server/domains/memory/handlers.impl';
 
 describe('Memory Domain - Win32-only Platform Guards', () => {
@@ -76,7 +77,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
       );
 
       // Verify it's a failure response
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed).toHaveProperty('error');
       expect(parsed.error).toContain('only supported on Windows');
@@ -87,7 +88,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         breakpointId: 'bp-123',
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -95,7 +96,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
     it('memory_breakpoint (list) returns clear error on non-Win32', async () => {
       const result = await handlers.handleBreakpointList({});
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -107,7 +108,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         access: 'read',
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -120,7 +121,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         speed: 2.0,
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -131,7 +132,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         speed: 1.5,
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -143,7 +144,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         pid: 1234,
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -153,7 +154,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         pid: 1234,
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -163,7 +164,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         pid: 1234,
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -176,7 +177,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         moduleBase: '0x400000',
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -188,7 +189,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         table: 'both',
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -198,7 +199,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         pid: 1234,
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -210,7 +211,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         pid: 1234,
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -220,7 +221,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         pid: 1234,
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -230,7 +231,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         pid: 1234,
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error).toContain('only supported on Windows');
     });
@@ -244,7 +245,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
         access: 'write',
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
       expect(parsed.error.toLowerCase()).toMatch(/(hardware breakpoint|memory_breakpoint)/);
     });
@@ -271,7 +272,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
 
       for (const testCase of testCases) {
         const result = await testCase();
-        const parsed = JSON.parse(result.content[0].text);
+        const parsed = JSON.parse(getResponseText(result));
         expect(parsed).toHaveProperty('success', false);
         expect(parsed).toHaveProperty('error');
       }

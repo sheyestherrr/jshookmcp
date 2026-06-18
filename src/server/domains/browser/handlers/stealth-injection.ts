@@ -213,13 +213,15 @@ export class StealthInjectionHandlers {
           acceptLanguage: locale,
           platform: os,
           browser,
-          _note: 'Basic profile without fingerprint-generator. Install fingerprint-generator for full profile.',
+          _note:
+            'Basic profile without fingerprint-generator. Install fingerprint-generator for full profile.',
         };
 
         const stubData = createStub({
           tool: 'stealth_generate_fingerprint',
           stubType: 'partial',
-          reason: 'fingerprint-generator/fingerprint-injector packages not installed, using basic profile',
+          reason:
+            'fingerprint-generator/fingerprint-injector packages not installed, using basic profile',
           fix: 'Install for full fingerprint: pnpm add fingerprint-generator fingerprint-injector',
           data: {
             available: false,
@@ -228,10 +230,7 @@ export class StealthInjectionHandlers {
             profile: basicProfile,
           },
         });
-        return R.ok()
-          .merge(stubData)
-          .merge({ profile: basicProfile })
-          .build();
+        return R.ok().merge(stubData).merge({ profile: basicProfile }).build();
       }
 
       const profile = await fm.generateFingerprint({

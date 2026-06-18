@@ -228,7 +228,11 @@ describe('handlers.impl.core.runtime.inject', () => {
 
       expect(response.success).toBe(true);
       expect(response.remoteThreadId).toBe(42);
-      expect(state.injectDll).toHaveBeenCalledWith(1234, 'C:\\test.dll');
+      expect(state.injectDll).toHaveBeenCalledWith(
+        1234,
+        'C:\\test.dll',
+        expect.objectContaining({}),
+      );
       expect(state.recordMemoryAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           operation: 'inject_dll',
@@ -283,7 +287,12 @@ describe('handlers.impl.core.runtime.inject', () => {
 
       expect(response.success).toBe(true);
       expect(response.remoteThreadId).toBe(100);
-      expect(state.injectShellcode).toHaveBeenCalledWith(1234, '9090', 'hex');
+      expect(state.injectShellcode).toHaveBeenCalledWith(
+        1234,
+        '9090',
+        'hex',
+        expect.objectContaining({}),
+      );
       expect(state.recordMemoryAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           operation: 'inject_shellcode',
@@ -298,7 +307,12 @@ describe('handlers.impl.core.runtime.inject', () => {
 
       await handler.handleInjectShellcode({ pid: 1234, shellcode: '9090' });
 
-      expect(state.injectShellcode).toHaveBeenCalledWith(1234, '9090', 'hex');
+      expect(state.injectShellcode).toHaveBeenCalledWith(
+        1234,
+        '9090',
+        'hex',
+        expect.objectContaining({}),
+      );
     });
   });
 

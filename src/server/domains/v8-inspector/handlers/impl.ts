@@ -162,18 +162,13 @@ export class V8InspectorHandlers {
     }
 
     // Parse options
-    const includeDominatorTree = typeof args.includeDominatorTree === 'boolean'
-      ? args.includeDominatorTree
-      : false;
-    const dominatorTreeDepth = typeof args.depth === 'number' && args.depth > 0
-      ? args.depth
-      : 3;
-    const includeLeakDetection = typeof args.includeLeakDetection === 'boolean'
-      ? args.includeLeakDetection
-      : false;
-    const minLeakSize = typeof args.minLeakSize === 'number' && args.minLeakSize > 0
-      ? args.minLeakSize
-      : 1024 * 1024;
+    const includeDominatorTree =
+      typeof args.includeDominatorTree === 'boolean' ? args.includeDominatorTree : false;
+    const dominatorTreeDepth = typeof args.depth === 'number' && args.depth > 0 ? args.depth : 3;
+    const includeLeakDetection =
+      typeof args.includeLeakDetection === 'boolean' ? args.includeLeakDetection : false;
+    const minLeakSize =
+      typeof args.minLeakSize === 'number' && args.minLeakSize > 0 ? args.minLeakSize : 1024 * 1024;
 
     // Lazy-load parser
     const { HeapSnapshotParser } = await import('@modules/v8-inspector/HeapSnapshotParser');

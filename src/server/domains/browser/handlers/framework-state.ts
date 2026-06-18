@@ -320,7 +320,7 @@ export class FrameworkStateHandlers {
                     {
                       _source: 'probed-internals',
                       _note: 'State extracted via dynamic introspection (no devtools)',
-                      ...safeSerialize(internals),
+                      ...(safeSerialize(internals) as Record<string, unknown>),
                     },
                   ],
                 });

@@ -31,7 +31,7 @@ vi.mock('node:crypto', () => ({
   createHash: state.createHash,
 }));
 
-vi.mock('@modules/process/ProcessManager.impl', () => ({
+vi.mock('@modules/process', () => ({
   UnifiedProcessManager: class {
     async getProcessByPid(pid: number) {
       return state.processInfo(pid);
@@ -107,7 +107,7 @@ describe('InjectionValidator', () => {
         state.processInfo.mockResolvedValue({
           pid: 1234,
           name: 'test.exe',
-          path: '/usr/bin/test',
+          executablePath: '/usr/bin/test',
         });
 
         const result = await validator.validateTargetProcess(1234);
@@ -122,53 +122,74 @@ describe('InjectionValidator', () => {
 
     describe('Critical system process detection', () => {
       const criticalProcesses = {
-        win32: ['csrss.exe', 'smss.exe', 'winlogon.exe', 'services.exe', 'lsass.exe', 'wininit.exe'],
+        win32: [
+          'csrss.exe',
+          'smss.exe',
+          'winlogon.exe',
+          'services.exe',
+          'lsass.exe',
+          'wininit.exe',
+        ],
         linux: ['init', 'systemd', 'kthreadd'],
         darwin: ['launchd', 'kernel_task'],
       };
 
-      it.each(criticalProcesses.win32)('rejects Windows critical process: %s', async (processName) => {
-        const originalPlatform = process.platform;
-        Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      it.each(criticalProcesses.win32)(
+        'rejects Windows critical process: %s',
+        async (processName) => {
+          const originalPlatform = process.platform;
+          Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
-        state.processInfo.mockResolvedValue({
-          pid: 1234,
-          name: processName,
-          path: `C:\\Windows\\System32\\${processName}`,
-        });
+          state.processInfo.mockResolvedValue({
+            pid: 1234,
+            name: processName,
+            executablePath: `/usr/bin${processName}`,
+          });
 
-        const result = await validator.validateTargetProcess(1234);
+          const result = await validator.validateTargetProcess(1234);
 
-        expect(result.valid).toBe(false);
-        expect(result.isCriticalSystemProcess).toBe(true);
-        expect(result.errors).toContain(`Target process is a critical system process: ${processName}`);
+          expect(result.valid).toBe(false);
+          expect(result.isCriticalSystemProcess).toBe(true);
+          expect(result.errors).toContain(
+            `Target process is a critical system process: ${processName}`,
+          );
 
-        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
-      });
+          Object.defineProperty(process, 'platform', {
+            value: originalPlatform,
+            configurable: true,
+          });
+        },
+      );
 
-      it.each(criticalProcesses.linux)('rejects Linux critical process: %s', async (processName) => {
-        const originalPlatform = process.platform;
-        Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+      it.each(criticalProcesses.linux)(
+        'rejects Linux critical process: %s',
+        async (processName) => {
+          const originalPlatform = process.platform;
+          Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
 
-        state.processInfo.mockResolvedValue({
-          pid: 1,
-          name: processName,
-          path: `/sbin/${processName}`,
-        });
+          state.processInfo.mockResolvedValue({
+            pid: 1,
+            name: processName,
+            executablePath: `/sbin/${processName}`,
+          });
 
-        const result = await validator.validateTargetProcess(1);
+          const result = await validator.validateTargetProcess(1);
 
-        expect(result.valid).toBe(false);
-        expect(result.isCriticalSystemProcess).toBe(true);
+          expect(result.valid).toBe(false);
+          expect(result.isCriticalSystemProcess).toBe(true);
 
-        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
-      });
+          Object.defineProperty(process, 'platform', {
+            value: originalPlatform,
+            configurable: true,
+          });
+        },
+      );
 
       it('accepts non-critical process', async () => {
         state.processInfo.mockResolvedValue({
           pid: 1234,
           name: 'myapp.exe',
-          path: 'C:\\Users\\test\\myapp.exe',
+          executablePath: '/Users/test/myapp.exe',
         });
 
         const result = await validator.validateTargetProcess(1234);
@@ -184,7 +205,7 @@ describe('InjectionValidator', () => {
         state.processInfo.mockResolvedValue({
           pid: 1234,
           name: 'unsigned.exe',
-          path: 'C:\\test\\unsigned.exe',
+          executablePath: '/test/unsigned.exe',
         });
 
         const result = await validator.validateTargetProcess(1234);
@@ -199,7 +220,7 @@ describe('InjectionValidator', () => {
         state.processInfo.mockResolvedValue({
           pid: 1234,
           name: 'unsigned.exe',
-          path: 'C:\\test\\unsigned.exe',
+          executablePath: '/test/unsigned.exe',
         });
 
         const result = await validator.validateTargetProcess(1234);
@@ -223,19 +244,19 @@ describe('InjectionValidator', () => {
     it('rejects non-existent DLL file', async () => {
       state.existsSync.mockReturnValue(false);
 
-      const result = await validator.validateDllPayload('C:\\nonexistent.dll');
+      const result = await validator.validateDllPayload('/nonexistent.dll');
 
       expect(result.valid).toBe(false);
       expect(result.fileExists).toBe(false);
       expect(result.payloadType).toBe('dll');
-      expect(result.errors).toContain('DLL file not found: C:\\nonexistent.dll');
+      expect(result.errors).toContain('DLL file not found: /nonexistent.dll');
     });
 
     it('accepts existing DLL file', async () => {
       state.existsSync.mockReturnValue(true);
       state.statSync.mockReturnValue({ size: 1024 * 50 } as any);
 
-      const result = await validator.validateDllPayload('C:\\valid.dll');
+      const result = await validator.validateDllPayload('/valid.dll');
 
       expect(result.valid).toBe(true);
       expect(result.fileExists).toBe(true);
@@ -249,7 +270,7 @@ describe('InjectionValidator', () => {
       state.readFileSync.mockReturnValue(Buffer.from('dummy'));
       state.digest.mockReturnValue('mocked-hash');
 
-      const result = await validator.validateDllPayload('C:\\test.dll', {
+      const result = await validator.validateDllPayload('/test.dll', {
         expectedHash: 'mocked-hash',
       });
 
@@ -272,7 +293,7 @@ describe('InjectionValidator', () => {
       state.readFileSync.mockReturnValue(Buffer.from('dummy'));
       state.digest.mockReturnValue('different-hash');
 
-      const result = await validator.validateDllPayload('C:\\test.dll', {
+      const result = await validator.validateDllPayload('/test.dll', {
         expectedHash: 'expected-hash',
       });
 
@@ -286,7 +307,7 @@ describe('InjectionValidator', () => {
       state.existsSync.mockReturnValue(true);
       state.statSync.mockReturnValue({ size: 1024 } as any);
 
-      const result = await validator.validateDllPayload('C:\\test.dll');
+      const result = await validator.validateDllPayload('/test.dll');
 
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('DLL hash validation required but no expectedHash provided');
@@ -296,7 +317,7 @@ describe('InjectionValidator', () => {
       state.existsSync.mockReturnValue(true);
       state.statSync.mockReturnValue({ size: 100 * 1024 * 1024 } as any); // 100MB
 
-      const result = await validator.validateDllPayload('C:\\huge.dll');
+      const result = await validator.validateDllPayload('/huge.dll');
 
       expect(result.valid).toBe(true);
       expect(result.warnings).toContainEqual(
@@ -377,7 +398,7 @@ describe('InjectionValidator', () => {
       state.processInfo.mockResolvedValue({
         pid: 1234,
         name: 'test.exe',
-        path: '/test/test.exe',
+        executablePath: '/test/test.exe',
       });
 
       const targetValidation = await validator.validateTargetProcess(1234);
@@ -392,7 +413,7 @@ describe('InjectionValidator', () => {
       state.processInfo.mockResolvedValue({
         pid: 1234,
         name: 'test.exe',
-        path: '/test/test.exe',
+        executablePath: '/test/test.exe',
       });
 
       const targetValidation = await validator.validateTargetProcess(1234);
@@ -407,7 +428,7 @@ describe('InjectionValidator', () => {
       state.processInfo.mockResolvedValue({
         pid: 1234,
         name: 'unsigned.exe',
-        path: '/test/unsigned.exe',
+        executablePath: '/test/unsigned.exe',
       });
 
       const targetValidation = await validator.validateTargetProcess(1234);
@@ -425,7 +446,7 @@ describe('InjectionValidator', () => {
       state.processInfo.mockResolvedValue({
         pid: 1234,
         name: 'test.exe',
-        path: '/test/test.exe',
+        executablePath: '/test/test.exe',
       });
 
       const targetValidation = await validator.validateTargetProcess(1234);
@@ -447,11 +468,11 @@ describe('InjectionValidator', () => {
       state.processInfo.mockResolvedValue({
         pid: 1234,
         name: 'target.exe',
-        path: 'C:\\app\\target.exe',
+        executablePath: '/app/target.exe',
       });
 
       const targetValidation = await validator.validateTargetProcess(1234);
-      const payloadValidation = await validator.validateDllPayload('C:\\inject\\payload.dll');
+      const payloadValidation = await validator.validateDllPayload('/inject/payload.dll');
       const confirmation = validator.requireConfirmation(targetValidation, payloadValidation);
 
       expect(targetValidation.valid).toBe(true);
@@ -464,13 +485,13 @@ describe('InjectionValidator', () => {
       state.processInfo.mockResolvedValue({
         pid: 1234,
         name: 'target.exe',
-        path: 'C:\\app\\target.exe',
+        executablePath: '/app/target.exe',
       });
 
       const shellcode = Buffer.from([0x90, 0x90, 0x90, 0xc3]).toString('hex');
       const targetValidation = await validator.validateTargetProcess(1234);
       const payloadValidation = await validator.validateShellcodePayload(shellcode, 'hex');
-      const confirmation = validator.requireConfirmation(targetValidation, payloadValidation);
+      validator.requireConfirmation(targetValidation, payloadValidation);
 
       expect(targetValidation.valid).toBe(true);
       expect(payloadValidation.valid).toBe(true);
@@ -484,11 +505,11 @@ describe('InjectionValidator', () => {
       validator = new InjectionValidator({ ...config, requireHashForDll: true });
       state.existsSync.mockReturnValue(false);
 
-      const result = await validator.validateDllPayload('C:\\nonexistent.dll');
+      const result = await validator.validateDllPayload('/nonexistent.dll');
 
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThanOrEqual(1);
-      expect(result.errors).toContain('DLL file not found: C:\\nonexistent.dll');
+      expect(result.errors).toContain('DLL file not found: /nonexistent.dll');
     });
   });
 });

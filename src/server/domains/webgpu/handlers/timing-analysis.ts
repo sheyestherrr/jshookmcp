@@ -2,7 +2,7 @@ import { handleSafe, type ToolResponse } from '@server/domains/shared/ResponseBu
 import { argNumber, argBool, argString } from '@server/domains/shared/parse-args';
 import { getPageLockManager } from '@modules/webgpu/PageLockManager';
 import type { MCPServerContext } from '@server/domains/shared/registry';
-import type { WebGPUDomainDependencies, TimingStats } from '../types';
+import type { WebGPUDomainDependencies } from '../types';
 
 /**
  * Handler for webgpu_timing_analysis tool
@@ -12,8 +12,8 @@ export class TimingAnalysisHandler {
   private pageLockManager = getPageLockManager();
 
   constructor(
-    private ctx: MCPServerContext,
-    private deps: WebGPUDomainDependencies
+    _ctx: MCPServerContext,
+    private deps: WebGPUDomainDependencies,
   ) {}
 
   async handle(args: Record<string, unknown>): Promise<ToolResponse> {
@@ -25,7 +25,7 @@ export class TimingAnalysisHandler {
 
       const detectAnomalies = argBool(args, 'detectAnomalies', false);
       const meta = args['_meta'] as Record<string, unknown> | undefined;
-      const progressToken = meta ? argString(meta, 'progressToken') : undefined;
+      if (meta) argString(meta, 'progressToken'); // read if present, unused
 
       const page = await this.getActivePage();
       if (!page) {
@@ -37,7 +37,13 @@ export class TimingAnalysisHandler {
       // Acquire page lock to prevent concurrent GPU context access
       return await this.pageLockManager.withLock(pageId, async () => {
         const stats = await page.evaluate(
-          async ({ iterations, detectAnomalies }: { iterations: number; detectAnomalies: boolean }) => {
+          async ({
+            _iterations,
+            _detectAnomalies,
+          }: {
+            _iterations: number;
+            _detectAnomalies: boolean;
+          }) => {
             if (!navigator.gpu) {
               throw new Error('WebGPU not available');
             }
@@ -50,13 +56,15 @@ export class TimingAnalysisHandler {
             const device = await adapter.requestDevice();
             const timings: number[] = [];
 
-            for (let i = 0; i < iterations; i++) {
+            for (let i = 0; i < _iterations; i++) {
               const start = performance.now();
 
               // Simple GPU timing test: create buffer and wait for completion
               const buffer = device.createBuffer({
                 size: 1024,
-                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+                usage:
+                  (globalThis as any).GPUBufferUsage?.COPY_DST |
+                    (globalThis as any).GPUBufferUsage?.MAP_READ || 0,
               });
 
               await device.queue.onSubmittedWorkDone();
@@ -67,8 +75,9 @@ export class TimingAnalysisHandler {
               buffer.destroy();
 
               // Report progress every 20%
-              if ((window as any).__webgpuProgressCallback && i % Math.ceil(iterations / 5) === 0) {
-                (window as any).__webgpuProgressCallback(i / iterations);
+              const wpg = (window as any).webgpuProgressCallback;
+              if (wpg && i % Math.ceil(_iterations / 5) === 0) {
+                wpg(i / _iterations);
               }
             }
 
@@ -87,7 +96,7 @@ export class TimingAnalysisHandler {
               max,
             };
 
-            if (detectAnomalies) {
+            if (_detectAnomalies) {
               const threshold = 2.0; // 2 standard deviations
               result.anomalies = timings
                 .map((val, idx) => ({
@@ -100,7 +109,7 @@ export class TimingAnalysisHandler {
 
             return result;
           },
-          { iterations, detectAnomalies }
+          { _iterations: iterations, _detectAnomalies: detectAnomalies },
         );
 
         return stats;

@@ -160,7 +160,13 @@ describe('MemoryManager', () => {
 
     it('injectShellcode', async () => {
       await manager.injectShellcode(1234, '9090', 'hex');
-      expect(memoryImpl.injectShellcode).toHaveBeenCalledWith('win32', 1234, '9090', 'hex', undefined);
+      expect(memoryImpl.injectShellcode).toHaveBeenCalledWith(
+        'win32',
+        1234,
+        '9090',
+        'hex',
+        undefined,
+      );
     });
 
     it('checkDebugPort', async () => {

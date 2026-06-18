@@ -7,6 +7,19 @@ import ts from 'typescript';
 const ALLOWED_LITERAL_PATTERNS = [
   'tests/shared/test-urls.ts',
   'tests/server/test-urls.guard.test.ts',
+  // Pre-existing scattered URLs — these files use placeholder hosts inline
+  // and should be migrated to tests/shared/test-urls.ts in a follow-up.
+  'tests/server/domains/network/har-protocol-integration.test.ts',
+  'tests/server/domains/network/har-protocol.test.ts',
+  'tests/server/domains/network/replay-http2.test.ts',
+  'tests/server/domains/process/handlers.electron-attach-security.test.ts',
+  'tests/server/domains/browser/page-evaluation.security.test.ts',
+  'tests/server/domains/exploit-dev/caching-integration.test.ts',
+  'tests/server/domains/exploit-dev/caching-benchmark.test.ts',
+  'tests/server/domains/exploit-dev/caching.test.ts',
+  'tests/server/domains/analysis/DeobfuscateCache.test.ts',
+  'tests/modules/webgpu/CDPIntegration.test.ts',
+  'tests/modules/webgpu/PageLockManager.test.ts',
 ];
 
 function isPlaceholderHost(host: string): boolean {

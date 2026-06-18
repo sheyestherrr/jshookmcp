@@ -2,7 +2,7 @@ import { handleSafe, type ToolResponse } from '@server/domains/shared/ResponseBu
 import { getPageLockManager } from '@modules/webgpu/PageLockManager';
 import { getGPUMemoryStats } from '@modules/webgpu/CDPIntegration';
 import type { MCPServerContext } from '@server/domains/shared/registry';
-import type { WebGPUDomainDependencies, GPUMemoryAllocation } from '../types';
+import type { WebGPUDomainDependencies } from '../types';
 
 /**
  * Handler for webgpu_memory_layout tool
@@ -12,11 +12,11 @@ export class MemoryLayoutHandler {
   private pageLockManager = getPageLockManager();
 
   constructor(
-    private ctx: MCPServerContext,
-    private deps: WebGPUDomainDependencies
+    _ctx: MCPServerContext,
+    private deps: WebGPUDomainDependencies,
   ) {}
 
-  async handle(args: Record<string, unknown>): Promise<ToolResponse> {
+  async handle(_args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
       const page = await this.getActivePage();
       if (!page) {

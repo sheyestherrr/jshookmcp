@@ -22,20 +22,17 @@ export class WebGPUHandlers {
   private memoryLayoutHandler: MemoryLayoutHandler;
   private commandCaptureHandler: CommandCaptureHandler;
 
-  constructor(
-    private ctx: MCPServerContext,
-    deps?: WebGPUDomainDependencies
-  ) {
+  constructor(_ctx: MCPServerContext, deps?: WebGPUDomainDependencies) {
     const d = deps ?? {
-      pageController: ctx.pageController,
+      pageController: _ctx.pageController as WebGPUDomainDependencies['pageController'],
     };
 
-    this.adapterInfoHandler = new AdapterInfoHandler(ctx, d);
-    this.shaderCompileHandler = new ShaderCompileHandler(ctx, d);
-    this.shaderDisassembleHandler = new ShaderDisassembleHandler(ctx, d);
-    this.timingAnalysisHandler = new TimingAnalysisHandler(ctx, d);
-    this.memoryLayoutHandler = new MemoryLayoutHandler(ctx, d);
-    this.commandCaptureHandler = new CommandCaptureHandler(ctx, d);
+    this.adapterInfoHandler = new AdapterInfoHandler(_ctx, d);
+    this.shaderCompileHandler = new ShaderCompileHandler(_ctx, d);
+    this.shaderDisassembleHandler = new ShaderDisassembleHandler(_ctx, d);
+    this.timingAnalysisHandler = new TimingAnalysisHandler(_ctx, d);
+    this.memoryLayoutHandler = new MemoryLayoutHandler(_ctx, d);
+    this.commandCaptureHandler = new CommandCaptureHandler(_ctx, d);
   }
 
   async webgpu_adapter_info(args: Record<string, unknown>): Promise<ToolResponse> {

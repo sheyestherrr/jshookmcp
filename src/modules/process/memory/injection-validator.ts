@@ -12,15 +12,15 @@ import { createHash } from 'node:crypto';
 import { logger } from '@utils/logger';
 
 export enum InjectionValidationMode {
-  STRICT = 'strict',       // All checks enforced, confirmation required for unsigned processes
-  BALANCED = 'balanced',   // Validation + warnings, no confirmation required (default)
+  STRICT = 'strict', // All checks enforced, confirmation required for unsigned processes
+  BALANCED = 'balanced', // Validation + warnings, no confirmation required (default)
   PERMISSIVE = 'permissive', // Basic checks only (PID exists, file exists)
-  DISABLED = 'disabled',   // No validation (backward compatible)
+  DISABLED = 'disabled', // No validation (backward compatible)
 }
 
 export interface InjectionValidatorConfig {
   mode: InjectionValidationMode;
-  maxShellcodeSize: number;  // bytes
+  maxShellcodeSize: number; // bytes
   requireHashForDll: boolean;
 }
 
@@ -31,8 +31,8 @@ export interface TargetProcessValidation {
   isCriticalSystemProcess: boolean;
   processName?: string;
   executablePath?: string;
-  isSigned?: boolean;         // Win32 only
-  signatureValid?: boolean;   // Win32 only
+  isSigned?: boolean; // Win32 only
+  signatureValid?: boolean; // Win32 only
   warnings: string[];
   errors: string[];
 }
@@ -64,7 +64,15 @@ export interface ConfirmationRequirement {
 
 // Critical system processes that should never be injected into
 const CRITICAL_SYSTEM_PROCESSES: Record<string, string[]> = {
-  win32: ['csrss.exe', 'smss.exe', 'winlogon.exe', 'services.exe', 'lsass.exe', 'wininit.exe', 'System'],
+  win32: [
+    'csrss.exe',
+    'smss.exe',
+    'winlogon.exe',
+    'services.exe',
+    'lsass.exe',
+    'wininit.exe',
+    'System',
+  ],
   linux: ['init', 'systemd', 'kthreadd'],
   darwin: ['launchd', 'kernel_task'],
 };
@@ -108,7 +116,7 @@ export class InjectionValidator {
 
     // Check if process exists and is accessible
     try {
-      const { UnifiedProcessManager } = await import('@modules/process/ProcessManager.impl');
+      const { UnifiedProcessManager } = await import('@modules/process');
       const processMgr = new UnifiedProcessManager();
       const processInfo = await processMgr.getProcessByPid(pid);
 
@@ -121,14 +129,14 @@ export class InjectionValidator {
       result.processExists = true;
       result.processAccessible = true;
       result.processName = processInfo.name;
-      result.executablePath = processInfo.path;
+      result.executablePath = processInfo.executablePath ?? '';
 
       // Check if it's a critical system process
       const platform = processMgr.getPlatform();
       const criticalProcesses = CRITICAL_SYSTEM_PROCESSES[platform] ?? [];
       const processNameLower = processInfo.name?.toLowerCase() ?? '';
 
-      if (criticalProcesses.some(critical => processNameLower.includes(critical.toLowerCase()))) {
+      if (criticalProcesses.some((critical) => processNameLower.includes(critical.toLowerCase()))) {
         result.valid = false;
         result.isCriticalSystemProcess = true;
         result.errors.push(`Target process is a critical system process: ${processInfo.name}`);
@@ -137,7 +145,7 @@ export class InjectionValidator {
 
       // Platform-specific signature validation (Win32 only in STRICT/BALANCED mode)
       if (platform === 'win32' && this.config.mode !== InjectionValidationMode.PERMISSIVE) {
-        const signatureCheck = await this.checkWindowsSignature(processInfo.path);
+        const signatureCheck = await this.checkWindowsSignature(processInfo.executablePath ?? '');
         result.isSigned = signatureCheck.isSigned;
         result.signatureValid = signatureCheck.isValid;
 
@@ -145,10 +153,11 @@ export class InjectionValidator {
           result.warnings.push(`Process is not digitally signed: ${processInfo.name}`);
         }
       }
-
     } catch (error) {
       result.valid = false;
-      result.errors.push(`Failed to validate process: ${error instanceof Error ? error.message : String(error)}`);
+      result.errors.push(
+        `Failed to validate process: ${error instanceof Error ? error.message : String(error)}`,
+      );
       logger.debug('Process validation error:', error);
     }
 
@@ -160,7 +169,7 @@ export class InjectionValidator {
    */
   async validateDllPayload(
     dllPath: string,
-    options?: { expectedHash?: string }
+    options?: { expectedHash?: string },
   ): Promise<PayloadValidation> {
     const result: PayloadValidation = {
       valid: true,
@@ -190,7 +199,9 @@ export class InjectionValidator {
 
       // Warn on unusually large files
       if (result.fileSize > MAX_REASONABLE_DLL_SIZE) {
-        result.warnings.push(`DLL file is unusually large (${Math.round(result.fileSize / 1024 / 1024)}MB). Verify this is correct.`);
+        result.warnings.push(
+          `DLL file is unusually large (${Math.round(result.fileSize / 1024 / 1024)}MB). Verify this is correct.`,
+        );
       }
 
       // Hash validation
@@ -209,10 +220,11 @@ export class InjectionValidator {
           result.errors.push('DLL hash mismatch');
         }
       }
-
     } catch (error) {
       result.valid = false;
-      result.errors.push(`Failed to validate DLL: ${error instanceof Error ? error.message : String(error)}`);
+      result.errors.push(
+        `Failed to validate DLL: ${error instanceof Error ? error.message : String(error)}`,
+      );
       logger.debug('DLL validation error:', error);
     }
 
@@ -224,7 +236,7 @@ export class InjectionValidator {
    */
   async validateShellcodePayload(
     shellcode: string,
-    encoding: 'hex' | 'base64'
+    encoding: 'hex' | 'base64',
   ): Promise<PayloadValidation> {
     const result: PayloadValidation = {
       valid: true,
@@ -283,20 +295,21 @@ export class InjectionValidator {
       if (result.shellcodeSize > this.config.maxShellcodeSize) {
         result.valid = false;
         result.errors.push(
-          `Shellcode size (${result.shellcodeSize} bytes) exceeds maximum allowed (${this.config.maxShellcodeSize} bytes)`
+          `Shellcode size (${result.shellcodeSize} bytes) exceeds maximum allowed (${this.config.maxShellcodeSize} bytes)`,
         );
       }
 
       // Warn on suspiciously small shellcode
       if (result.shellcodeSize < MIN_REASONABLE_SHELLCODE_SIZE) {
         result.warnings.push(
-          `Shellcode is suspiciously small (${result.shellcodeSize} bytes). Verify this is correct.`
+          `Shellcode is suspiciously small (${result.shellcodeSize} bytes). Verify this is correct.`,
         );
       }
-
     } catch (error) {
       result.valid = false;
-      result.errors.push(`Failed to validate shellcode: ${error instanceof Error ? error.message : String(error)}`);
+      result.errors.push(
+        `Failed to validate shellcode: ${error instanceof Error ? error.message : String(error)}`,
+      );
       logger.debug('Shellcode validation error:', error);
     }
 
@@ -308,7 +321,7 @@ export class InjectionValidator {
    */
   requireConfirmation(
     targetValidation: TargetProcessValidation,
-    payloadValidation: PayloadValidation
+    payloadValidation: PayloadValidation,
   ): ConfirmationRequirement {
     const result: ConfirmationRequirement = {
       required: false,
@@ -367,7 +380,9 @@ export class InjectionValidator {
     }
   }
 
-  private async checkWindowsSignature(executablePath?: string): Promise<{ isSigned: boolean; isValid: boolean }> {
+  private async checkWindowsSignature(
+    _executablePath?: string,
+  ): Promise<{ isSigned: boolean; isValid: boolean }> {
     // Placeholder for Windows signature validation
     // Real implementation would use Get-AuthenticodeSignature or similar
     // For now, return unknown status

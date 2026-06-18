@@ -1,5 +1,18 @@
 import { vi } from 'vitest';
 import * as fs from 'node:fs';
+import type { ToolResponse } from '@server/types';
+
+/**
+ * Extract text content from the first MCP content block of a tool response.
+ * Throws if the response has no text content, which helps surface test failures early.
+ */
+export function getResponseText(response: ToolResponse): string {
+  const first = response.content[0];
+  if (!first || first.type !== 'text') {
+    throw new Error('Expected first content block to be text');
+  }
+  return first.text;
+}
 
 /**
  * Utility to parse JSON in tests with type safety.

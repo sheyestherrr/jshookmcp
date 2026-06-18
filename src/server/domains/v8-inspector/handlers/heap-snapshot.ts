@@ -37,8 +37,15 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
-function isCDPPageLike(v: unknown): v is { createCDPSession: () => Promise<unknown> } {
-  return isRecord(v) && typeof v['createCDPSession'] === 'function';
+function isCDPPageLike(v: unknown): v is {
+  createCDPSession: () => Promise<unknown>;
+  evaluate: (...args: unknown[]) => Promise<unknown>;
+} {
+  return (
+    isRecord(v) &&
+    typeof v['createCDPSession'] === 'function' &&
+    typeof v['evaluate'] === 'function'
+  );
 }
 
 function unwrapRuntimeValue(value: unknown): unknown {
@@ -169,8 +176,9 @@ export async function handleHeapSnapshotCapture(
   let fallbackSizeBytes = 0;
   try {
     const page = await options.getPage();
-    if (page && typeof page.evaluate === 'function') {
-      const memInfo = await page.evaluate(() => {
+    const pageWithEvaluate = page as { evaluate?: (fn: () => unknown) => Promise<unknown> };
+    if (pageWithEvaluate && typeof pageWithEvaluate.evaluate === 'function') {
+      const memInfo = (await pageWithEvaluate.evaluate(() => {
         const m = (performance as any).memory;
         return m
           ? {
@@ -179,7 +187,7 @@ export async function handleHeapSnapshotCapture(
               jsHeapSizeLimit: m.jsHeapSizeLimit ?? 0,
             }
           : null;
-      });
+      })) as { usedJSHeapSize?: number } | null;
       if (memInfo && typeof memInfo.usedJSHeapSize === 'number') {
         fallbackSizeBytes = memInfo.usedJSHeapSize;
       }

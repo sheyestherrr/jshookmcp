@@ -113,7 +113,7 @@ export class ShaderCompileHandler {
   private compileCache = getShaderCompileCache();
 
   constructor(
-    private ctx: MCPServerContext,
+    _ctx: MCPServerContext,
     private deps: WebGPUDomainDependencies,
   ) {}
 

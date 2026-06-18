@@ -1,7 +1,10 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { V8InspectorHandlers } from '@server/domains/v8-inspector/handlers/impl';
 import type { MCPServerContext } from '@server/MCPServer.context';
-import { storeSnapshot, clearSnapshotCache } from '@server/domains/v8-inspector/handlers/heap-snapshot';
+import {
+  storeSnapshot,
+  clearSnapshotCache,
+} from '@server/domains/v8-inspector/handlers/heap-snapshot';
 
 // Mock snapshot data
 function generateMockSnapshot() {
@@ -20,17 +23,50 @@ function generateMockSnapshot() {
       edge_count: 4,
     },
     nodes: [
-      6, 0, 1, 0, 2, 0, // Root
-      1, 1, 2, 1024, 1, 0, // Array
-      2, 2, 3, 256, 0, 0, // String
-      3, 3, 4, 512, 1, 0, // Object
-      4, 4, 5, 128, 0, 0, // Function
+      6,
+      0,
+      1,
+      0,
+      2,
+      0, // Root
+      1,
+      1,
+      2,
+      1024,
+      1,
+      0, // Array
+      2,
+      2,
+      3,
+      256,
+      0,
+      0, // String
+      3,
+      3,
+      4,
+      512,
+      1,
+      0, // Object
+      4,
+      4,
+      5,
+      128,
+      0,
+      0, // Function
     ],
     edges: [
-      2, 1, 6, // Root -> Array
-      2, 3, 18, // Root -> Object
-      1, 0, 12, // Array -> String
-      2, 4, 24, // Object -> Function
+      2,
+      1,
+      6, // Root -> Array
+      2,
+      3,
+      18, // Root -> Object
+      1,
+      0,
+      12, // Array -> String
+      2,
+      4,
+      24, // Object -> Function
     ],
     strings: ['(root)', 'Array', 'String', 'Object', 'Function'],
   });
@@ -168,7 +204,7 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
       expect(result.totalCandidates).toBeGreaterThanOrEqual(0);
 
       if (result.leakCandidates.length > 0) {
-        const leak = result.leakCandidates[0];
+        const leak = result.leakCandidates[0]!;
         expect(leak).toHaveProperty('nodeId');
         expect(leak).toHaveProperty('name');
         expect(leak).toHaveProperty('reason');
@@ -200,8 +236,8 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
       const candidates = result.leakCandidates;
       for (let i = 1; i < candidates.length; i++) {
         // Allow small confidence differences (sorting by size within same confidence)
-        if (Math.abs(candidates[i - 1].confidence - candidates[i].confidence) > 0.01) {
-          expect(candidates[i - 1].confidence).toBeGreaterThanOrEqual(candidates[i].confidence);
+        if (Math.abs(candidates[i - 1]!.confidence - candidates[i]!.confidence) > 0.01) {
+          expect(candidates[i - 1]!.confidence).toBeGreaterThanOrEqual(candidates[i]!.confidence);
         }
       }
     });
@@ -213,7 +249,7 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
       });
 
       if (result.leakCandidates.length > 0) {
-        const leak = result.leakCandidates[0];
+        const leak = result.leakCandidates[0]!;
         expect(leak.path).toBeInstanceOf(Array);
         expect(leak.path.length).toBeGreaterThan(0);
       }
@@ -230,9 +266,7 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
     });
 
     it('should throw when snapshotId is missing', async () => {
-      await expect(
-        handlers.v8_heap_snapshot_analyze({}),
-      ).rejects.toThrow();
+      await expect(handlers.v8_heap_snapshot_analyze({})).rejects.toThrow();
     });
   });
 });

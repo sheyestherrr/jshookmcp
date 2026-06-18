@@ -4,8 +4,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { UnifiedProcessManager } from '@modules/process/ProcessManager.impl';
-import type { MemoryManager } from '@modules/process/MemoryManager';
 
 // Mock the process modules
 vi.mock('@modules/process/index', () => ({
@@ -21,16 +19,15 @@ vi.mock('@modules/process/memory/injector', () => ({
 
 // Mock the validator module - will be implemented in this phase
 vi.mock('@modules/process/memory/injection-validator', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@modules/process/memory/injection-validator')>();
+  const actual =
+    await importOriginal<typeof import('@modules/process/memory/injection-validator')>();
   return {
     ...actual,
     createValidatorFromEnv: vi.fn(() => actual.createValidatorFromEnv()),
   };
 });
 
-import { injectDll, injectShellcode } from '@modules/process/memory/injector';
 import { InjectionHandlers } from '@server/domains/process/handlers/injection-handlers';
-import { InjectionValidationMode } from '@modules/process/memory/injection-validator';
 
 describe('Injection Validation Integration', () => {
   let handlers: InjectionHandlers;
@@ -95,7 +92,7 @@ describe('Injection Validation Integration', () => {
           confirmed: undefined,
           payloadHash: undefined,
           validationMode: undefined,
-        })
+        }),
       );
     });
 
@@ -178,7 +175,7 @@ describe('Injection Validation Integration', () => {
       expect(mockMemoryManager.injectDll).toHaveBeenCalledWith(
         1000,
         'C:\\test\\valid.dll',
-        expect.objectContaining({ confirmed: true })
+        expect.objectContaining({ confirmed: true }),
       );
     });
 
@@ -397,7 +394,7 @@ describe('Injection Validation Integration', () => {
           operation: 'inject_dll',
           result: 'failure',
           error: expect.stringContaining('validation failed'),
-        })
+        }),
       );
     });
 
@@ -420,7 +417,7 @@ describe('Injection Validation Integration', () => {
           operation: 'inject_shellcode',
           pid: 6000,
           result: 'success',
-        })
+        }),
       );
     });
   });

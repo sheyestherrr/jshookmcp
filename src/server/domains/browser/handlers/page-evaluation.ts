@@ -101,7 +101,7 @@ export class PageEvaluationHandlers {
         // This prevents code injection attacks (CRIT-01)
         const { evaluateFunction } = transformCodeForCamoufox({ code });
 
-        const result = await context.evaluate(evaluateFunction);
+        const result = await context.evaluate(evaluateFunction as () => unknown);
         const processedResult = applyEvaluationPostFilters(result, this.deps.detailedDataManager, {
           autoSummarize,
           maxSize,

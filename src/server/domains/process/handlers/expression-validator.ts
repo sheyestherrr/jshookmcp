@@ -24,7 +24,6 @@
 
 import * as parser from '@babel/parser';
 import traverse from '@babel/traverse';
-import type { Node } from '@babel/types';
 
 const MAX_EXPRESSION_LENGTH = 50000; // Prevent DoS via extremely long expressions
 
@@ -51,11 +50,7 @@ const BLOCKED_MEMBER_PATTERNS = [
 ];
 
 // Dangerous global access patterns
-const BLOCKED_GLOBALS = new Set([
-  'AsyncFunction',
-  'GeneratorFunction',
-  'AsyncGeneratorFunction',
-]);
+const BLOCKED_GLOBALS = new Set(['AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction']);
 
 export interface ValidationResult {
   valid: boolean;
@@ -107,7 +102,8 @@ export function validateExpression(expression: string): ValidationResult {
         if (BLOCKED_IDENTIFIERS.has(name)) {
           // Allow identifiers in safe contexts (e.g., object keys, property names)
           const parent = path.parent;
-          const isMemberProperty = parent.type === 'MemberExpression' && parent.property === path.node;
+          const isMemberProperty =
+            parent.type === 'MemberExpression' && parent.property === path.node;
           const isObjectKey = parent.type === 'ObjectProperty' && parent.key === path.node;
 
           if (!isMemberProperty && !isObjectKey) {

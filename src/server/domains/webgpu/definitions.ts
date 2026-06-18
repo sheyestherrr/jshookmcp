@@ -1,6 +1,6 @@
-import type { ToolDefinition } from '@server/registry/contracts';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-export const webgpuTools: readonly ToolDefinition[] = [
+export const webgpuTools: Tool[] = [
   {
     name: 'webgpu_adapter_info',
     description:
@@ -101,4 +101,4 @@ export const webgpuTools: readonly ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-] as const;
+];

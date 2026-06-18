@@ -255,16 +255,7 @@ describe('DeobfuscateCache Integration', () => {
       await cache.init();
 
       // Create first handler instance and populate cache
-      const handlers1 = new CoreAnalysisHandlers({
-        collector: createMockCollector(),
-        scriptManager: createMockScriptManager(),
-        deobfuscator: new Deobfuscator(),
-        advancedDeobfuscator: new AdvancedDeobfuscator(),
-        obfuscationDetector: new ObfuscationDetector(),
-        analyzer: new CodeAnalyzer(),
-        cryptoDetector: new CryptoDetector(),
-        hookManager: new HookManager(),
-      });
+      const handlers1 = createHandlers();
 
       const code = 'const persisted = true;';
       await handlers1.handleDeobfuscate({ code });

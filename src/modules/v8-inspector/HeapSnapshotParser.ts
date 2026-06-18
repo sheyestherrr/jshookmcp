@@ -1,3 +1,5 @@
+import type { DominatorNode } from './DominatorTreeBuilder';
+
 export interface ParsedNode {
   id: number;
   name: string;
@@ -49,13 +51,7 @@ export interface HeapAnalysisResult {
     name: string;
     retainedSize: number;
     shallowSize: number;
-    children: Array<{
-      nodeId: number;
-      name: string;
-      retainedSize: number;
-      shallowSize: number;
-      children: unknown[];
-    }>;
+    children: DominatorNode[];
   };
   suspectedLeaks?: Array<{
     nodeId: number;
@@ -585,22 +581,10 @@ export class HeapSnapshotParser {
    * Truncate dominator tree to specified depth
    */
   private truncateTree(
-    node: {
-      nodeId: number;
-      name: string;
-      retainedSize: number;
-      shallowSize: number;
-      children: Array<{
-        nodeId: number;
-        name: string;
-        retainedSize: number;
-        shallowSize: number;
-        children: unknown[];
-      }>;
-    },
+    node: DominatorNode,
     maxDepth: number,
     currentDepth = 0,
-  ): HeapAnalysisResult['dominatorTree'] {
+  ): NonNullable<HeapAnalysisResult['dominatorTree']> {
     if (currentDepth >= maxDepth) {
       return {
         nodeId: node.nodeId,
@@ -616,15 +600,7 @@ export class HeapSnapshotParser {
       name: node.name,
       retainedSize: node.retainedSize,
       shallowSize: node.shallowSize,
-      children: node.children.map((child) =>
-        this.truncateTree(child, maxDepth, currentDepth + 1),
-      ) as Array<{
-        nodeId: number;
-        name: string;
-        retainedSize: number;
-        shallowSize: number;
-        children: unknown[];
-      }>,
+      children: node.children.map((child) => this.truncateTree(child, maxDepth, currentDepth + 1)),
     };
   }
 

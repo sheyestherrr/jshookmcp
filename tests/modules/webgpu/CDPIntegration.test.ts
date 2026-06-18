@@ -220,8 +220,8 @@ describe('CDPIntegration', () => {
       const analyzed = analyzeCommandTrace(trace);
 
       expect(analyzed.inferredTypes).toHaveLength(3);
-      expect(analyzed.inferredTypes[0].inferredType).toBe('render');
-      expect(analyzed.inferredTypes[1].inferredType).toBe('render');
+      expect(analyzed.inferredTypes[0]!.inferredType).toBe('render');
+      expect(analyzed.inferredTypes[1]!.inferredType).toBe('render');
     });
 
     it('should infer compute commands from long gaps', () => {
@@ -238,8 +238,8 @@ describe('CDPIntegration', () => {
 
       const analyzed = analyzeCommandTrace(trace);
 
-      expect(analyzed.inferredTypes[0].inferredType).toBe('compute');
-      expect(analyzed.inferredTypes[1].inferredType).toBe('compute');
+      expect(analyzed.inferredTypes[0]!.inferredType).toBe('compute');
+      expect(analyzed.inferredTypes[1]!.inferredType).toBe('compute');
     });
 
     it('should infer copy commands from very short gaps', () => {
@@ -256,8 +256,8 @@ describe('CDPIntegration', () => {
 
       const analyzed = analyzeCommandTrace(trace);
 
-      expect(analyzed.inferredTypes[0].inferredType).toBe('copy');
-      expect(analyzed.inferredTypes[1].inferredType).toBe('copy');
+      expect(analyzed.inferredTypes[0]!.inferredType).toBe('copy');
+      expect(analyzed.inferredTypes[1]!.inferredType).toBe('copy');
     });
 
     it('should handle empty trace', () => {
@@ -285,7 +285,7 @@ describe('CDPIntegration', () => {
 
       expect(analyzed.inferredTypes).toHaveLength(1);
       // Single command with no next command has gap=0, which is < 5 → inferred as 'copy'
-      expect(analyzed.inferredTypes[0].inferredType).toBe('copy');
+      expect(analyzed.inferredTypes[0]!.inferredType).toBe('copy');
     });
 
     it('should preserve original trace data', () => {

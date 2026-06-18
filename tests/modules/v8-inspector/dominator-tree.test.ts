@@ -22,9 +22,9 @@ describe('DominatorTreeBuilder', () => {
 
       expect(tree.nodeId).toBe(1);
       expect(tree.children.length).toBe(1);
-      expect(tree.children[0].nodeId).toBe(2);
-      expect(tree.children[0].children.length).toBe(1);
-      expect(tree.children[0].children[0].nodeId).toBe(3);
+      expect(tree.children[0]!.nodeId).toBe(2);
+      expect(tree.children[0]!.children.length).toBe(1);
+      expect(tree.children[0]!.children[0]!.nodeId).toBe(3);
     });
 
     it('should compute dominators for a diamond graph', () => {
@@ -82,9 +82,7 @@ describe('DominatorTreeBuilder', () => {
       ];
 
       // Only 1 -> 2, node 3 is disconnected
-      const edges: ParsedEdge[] = [
-        { fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' },
-      ];
+      const edges: ParsedEdge[] = [{ fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' }];
 
       const builder = new DominatorTreeBuilder();
       const tree = builder.buildDominatorTree(nodes, edges);
@@ -112,8 +110,8 @@ describe('DominatorTreeBuilder', () => {
       const tree = builder.buildDominatorTree(nodes, edges);
 
       expect(tree.retainedSize).toBe(300); // 0 + 100 + 200
-      expect(tree.children[0].retainedSize).toBe(300); // 100 + 200
-      expect(tree.children[0].children[0].retainedSize).toBe(200); // 200
+      expect(tree.children[0]!.retainedSize).toBe(300); // 100 + 200
+      expect(tree.children[0]!.children[0]!.retainedSize).toBe(200); // 200
     });
 
     it('should compute retained sizes for branching tree', () => {
@@ -142,9 +140,7 @@ describe('DominatorTreeBuilder', () => {
         { id: 2, name: 'A', selfSize: 0, type: 'object' },
       ];
 
-      const edges: ParsedEdge[] = [
-        { fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' },
-      ];
+      const edges: ParsedEdge[] = [{ fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' }];
 
       const builder = new DominatorTreeBuilder();
       const tree = builder.buildDominatorTree(nodes, edges);
@@ -160,9 +156,7 @@ describe('DominatorTreeBuilder', () => {
         { id: 2, name: 'Detached HTMLDivElement', selfSize: 2048, type: 'object' },
       ];
 
-      const edges: ParsedEdge[] = [
-        { fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' },
-      ];
+      const edges: ParsedEdge[] = [{ fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' }];
 
       const builder = new DominatorTreeBuilder();
       const tree = builder.buildDominatorTree(nodes, edges);
@@ -179,17 +173,13 @@ describe('DominatorTreeBuilder', () => {
         { id: 2, name: 'HTMLElement', selfSize: 1024, type: 'object' },
       ];
 
-      const edges: ParsedEdge[] = [
-        { fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' },
-      ];
+      const edges: ParsedEdge[] = [{ fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' }];
 
       const builder = new DominatorTreeBuilder();
       const tree = builder.buildDominatorTree(nodes, edges);
       const leaks = builder.findLeakCandidates(tree, 0);
 
-      const detachedLeak = leaks.find(
-        (l) => l.reason === 'detached-dom' && l.nodeId === 2,
-      );
+      const detachedLeak = leaks.find((l) => l.reason === 'detached-dom' && l.nodeId === 2);
       expect(detachedLeak).toBeDefined();
     });
 
@@ -199,9 +189,7 @@ describe('DominatorTreeBuilder', () => {
         { id: 2, name: 'Array', selfSize: 2 * 1024 * 1024, type: 'object' },
       ];
 
-      const edges: ParsedEdge[] = [
-        { fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' },
-      ];
+      const edges: ParsedEdge[] = [{ fromId: 1, toId: 2, nameOrIndex: 'ref', type: 'property' }];
 
       const builder = new DominatorTreeBuilder();
       const tree = builder.buildDominatorTree(nodes, edges);
@@ -251,8 +239,8 @@ describe('DominatorTreeBuilder', () => {
       expect(leaks.length).toBeGreaterThan(0);
       // First leak should have highest confidence
       for (let i = 1; i < leaks.length; i++) {
-        if (Math.abs(leaks[i - 1].confidence - leaks[i].confidence) > 0.01) {
-          expect(leaks[i - 1].confidence).toBeGreaterThanOrEqual(leaks[i].confidence);
+        if (Math.abs(leaks[i - 1]!.confidence - leaks[i]!.confidence) > 0.01) {
+          expect(leaks[i - 1]!.confidence).toBeGreaterThanOrEqual(leaks[i]!.confidence);
         }
       }
     });
@@ -282,9 +270,7 @@ describe('DominatorTreeBuilder', () => {
   describe('performance', () => {
     it('should handle 10k nodes within 2 seconds', () => {
       const nodeCount = 10000;
-      const nodes: ParsedNode[] = [
-        { id: 1, name: 'Root', selfSize: 0, type: 'synthetic' },
-      ];
+      const nodes: ParsedNode[] = [{ id: 1, name: 'Root', selfSize: 0, type: 'synthetic' }];
       const edges: ParsedEdge[] = [];
 
       for (let i = 2; i <= nodeCount; i++) {
@@ -331,4 +317,3 @@ function findNodeInTree(tree: any, nodeId: number): any {
 
   return null;
 }
-

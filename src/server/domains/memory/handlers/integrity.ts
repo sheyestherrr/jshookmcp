@@ -211,11 +211,12 @@ export class IntegrityHandlers {
         count: filteredPages.length,
         scan: stats,
         truncated: truncated || stats.truncated,
-        hint: (truncated || stats.truncated)
-          ? `Scan stopped after ${truncated ? maxRegions : stats.scannedRegions} regions${truncated ? ' (maxRegions limit)' : ''} in ${stats.durationMs}ms to avoid hanging. Results may be partial.`
-          : guardPages.length > 0
-            ? `Found ${guardPages.length} guard page regions — these may indicate anti-tampering.`
-            : 'No guard pages found.',
+        hint:
+          truncated || stats.truncated
+            ? `Scan stopped after ${truncated ? maxRegions : stats.scannedRegions} regions${truncated ? ' (maxRegions limit)' : ''} in ${stats.durationMs}ms to avoid hanging. Results may be partial.`
+            : guardPages.length > 0
+              ? `Found ${guardPages.length} guard page regions — these may indicate anti-tampering.`
+              : 'No guard pages found.',
       };
     });
   }
@@ -235,7 +236,6 @@ export class IntegrityHandlers {
         args.moduleName as string | undefined,
       );
       const { sections, stats } = result;
-      const modified = sections.filter((r) => r.isModified);
 
       // Truncate results if exceeding maxSections
       const truncated = sections.length > maxSections;
@@ -248,11 +248,12 @@ export class IntegrityHandlers {
         modifiedCount: filteredModified.length,
         scan: stats,
         truncated: truncated || stats.truncated,
-        hint: (truncated || stats.truncated)
-          ? `Checked ${stats.scannedSections} executable section(s)${truncated ? ` (maxSections limit: ${maxSections})` : ''} across ${stats.scannedModules} module(s) before hitting safety limits. Results may be partial.`
-          : filteredModified.length > 0
-            ? `${filteredModified.length} section(s) modified — code may have been patched or hooked.`
-            : 'All checked sections match disk — no runtime modifications detected.',
+        hint:
+          truncated || stats.truncated
+            ? `Checked ${stats.scannedSections} executable section(s)${truncated ? ` (maxSections limit: ${maxSections})` : ''} across ${stats.scannedModules} module(s) before hitting safety limits. Results may be partial.`
+            : filteredModified.length > 0
+              ? `${filteredModified.length} section(s) modified — code may have been patched or hooked.`
+              : 'All checked sections match disk — no runtime modifications detected.',
       };
     });
   }

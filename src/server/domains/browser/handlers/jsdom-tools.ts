@@ -253,7 +253,10 @@ export class JsdomHandlers {
 
       if (!sandboxResult.ok) {
         return R.fail(sandboxResult.error ?? 'Execution failed')
-          .set('consoleLogs', sandboxResult.logs.map((msg) => ({ level: 'log', args: [msg] })))
+          .set(
+            'consoleLogs',
+            sandboxResult.logs.map((msg) => ({ level: 'log', args: [msg] })),
+          )
           .set('timedOut', sandboxResult.timedOut)
           .build();
       }
@@ -261,7 +264,10 @@ export class JsdomHandlers {
       return R.ok()
         .set('sessionId', sessionId)
         .set('result', sandboxResult.output)
-        .set('consoleLogs', sandboxResult.logs.map((msg) => ({ level: 'log', args: [msg] })))
+        .set(
+          'consoleLogs',
+          sandboxResult.logs.map((msg) => ({ level: 'log', args: [msg] })),
+        )
         .set('timeoutHintMs', timeoutHintMs)
         .set('durationMs', sandboxResult.durationMs)
         .build();
@@ -484,45 +490,6 @@ function buildCookieString(cookie: Record<string, unknown>): string {
   if (cookie.httpOnly === true) parts.push('HttpOnly');
   if (typeof cookie.sameSite === 'string') parts.push(`SameSite=${cookie.sameSite}`);
   return parts.join('; ');
-}
-
-function createCapturingConsole(
-  original: unknown,
-  logs: Array<{ level: string; args: unknown[] }>,
-): Record<string, (...args: unknown[]) => void> {
-  const levels = ['log', 'info', 'warn', 'error', 'debug', 'trace'] as const;
-  const proxy: Record<string, (...args: unknown[]) => void> = {};
-  for (const level of levels) {
-    proxy[level] = (...callArgs: unknown[]) => {
-      logs.push({ level, args: callArgs.map((x) => safeSerialize(x)) });
-      const orig = (original as Record<string, unknown>)?.[level];
-      if (typeof orig === 'function') {
-        try {
-          (orig as (...a: unknown[]) => void).apply(original, callArgs);
-        } catch {
-          /* swallow secondary failures */
-        }
-      }
-    };
-  }
-  return proxy;
-}
-
-function safeSerialize(value: unknown): unknown {
-  if (value === null || value === undefined) return value;
-  const t = typeof value;
-  if (t === 'string' || t === 'number' || t === 'boolean') return value;
-  if (t === 'bigint') return `${(value as bigint).toString()}n`;
-  if (t === 'function') {
-    const fn = value as { name?: string };
-    return `[Function: ${fn.name || 'anonymous'}]`;
-  }
-  if (t === 'symbol') return String(value);
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch {
-    return String(value);
-  }
 }
 
 function prettyPrintHtml(html: string): string {

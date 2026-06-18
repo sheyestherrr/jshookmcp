@@ -38,7 +38,7 @@ describe('PageLockManager', () => {
       await expect(
         manager.withLock('page1', async () => {
           throw new Error('test error');
-        })
+        }),
       ).rejects.toThrow('test error');
     });
 
@@ -54,7 +54,7 @@ describe('PageLockManager', () => {
       await expect(
         manager.withLock('page1', async () => {
           throw new Error('fail');
-        })
+        }),
       ).rejects.toThrow('fail');
 
       expect(manager.isLocked('page1')).toBe(false);
@@ -121,7 +121,7 @@ describe('PageLockManager', () => {
           execution.push(i);
           await new Promise((resolve) => setTimeout(resolve, 10));
           return i;
-        })
+        }),
       );
 
       const results = await Promise.all(promises);

@@ -112,9 +112,7 @@ function isHttp2Protocol(protocol?: string): boolean {
   return normalized === 'h2' || normalized === 'h2c' || normalized === 'http/2';
 }
 
-function normalizeHttp2Headers(
-  headers: Record<string, string>,
-): http2.OutgoingHttpHeaders {
+function normalizeHttp2Headers(headers: Record<string, string>): http2.OutgoingHttpHeaders {
   const output: http2.OutgoingHttpHeaders = {};
   for (const [name, value] of Object.entries(headers)) {
     const lowerName = name.toLowerCase();
@@ -171,12 +169,12 @@ async function replayHttp2Request(
   bodyTruncated: boolean;
 }> {
   return new Promise((resolve, reject) => {
+    let session: http2.ClientHttp2Session | null = null;
+
     const timer = setTimeout(() => {
-      session.close();
+      session?.close();
       reject(new Error(`HTTP/2 request timed out after ${timeoutMs}ms`));
     }, timeoutMs);
-
-    let session: http2.ClientHttp2Session | null = null;
 
     try {
       const effectivePort = Number.parseInt(
@@ -224,8 +222,8 @@ async function replayHttp2Request(
       let truncated = false;
       let responseHeaders: http2.IncomingHttpHeaders = {};
 
-      request.on('response', (headers) => {
-        responseHeaders = headers;
+      request.on('response', (incomingHeaders) => {
+        responseHeaders = incomingHeaders;
       });
 
       request.on('data', (chunk: Buffer) => {
@@ -248,7 +246,7 @@ async function replayHttp2Request(
           status: parsed.status,
           statusText: parsed.statusText,
           headers: parsed.headers,
-          body: bodyChain.toString('utf8'),
+          body: bodyChain.toBuffer().toString('utf8'),
           bodyTruncated: truncated,
         });
       });

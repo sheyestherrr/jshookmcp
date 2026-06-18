@@ -49,9 +49,11 @@ export interface Har {
 }
 
 function headersToHar(
-  headers: Record<string, string> = {},
+  headers: Record<string, string | undefined> = {},
 ): Array<{ name: string; value: string }> {
-  return Object.entries(headers).map(([name, value]) => ({ name, value }));
+  return Object.entries(headers)
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+    .map(([name, value]) => ({ name, value }));
 }
 
 function parseCookies(cookieHeader: string): Array<{ name: string; value: string }> {
@@ -112,7 +114,7 @@ interface RawRequest {
   requestId: string;
   url: string;
   method: string;
-  headers?: Record<string, string>;
+  headers?: Record<string, string | undefined>;
   postData?: string;
   timestamp?: number;
   resourceType?: string;
@@ -122,7 +124,7 @@ interface RawRequest {
 interface RawResponse {
   status?: number;
   statusText?: string;
-  headers?: Record<string, string>;
+  headers?: Record<string, string | undefined>;
   mimeType?: string;
   timing?: { receiveHeadersEnd?: number };
   protocol?: string;

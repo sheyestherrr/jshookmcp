@@ -19,7 +19,7 @@ export class CommandCaptureHandler {
   private pageLockManager = getPageLockManager();
 
   constructor(
-    private ctx: MCPServerContext,
+    _ctx: MCPServerContext,
     private deps: WebGPUDomainDependencies,
   ) {
     this.ddm = DetailedDataManager.getInstance();

@@ -74,10 +74,6 @@ describe('PageEvaluationHandlers – Security (CRIT-01)', () => {
       vi.clearAllMocks();
       deps = createCamoufoxDeps();
       handlers = new PageEvaluationHandlers(deps);
-      camoufoxPage = null;
-      deps.getCamoufoxPage().then((p) => {
-        camoufoxPage = p;
-      });
     });
 
     it('rejects code attempting to break out of function scope', async () => {
@@ -268,7 +264,7 @@ describe('PageEvaluationHandlers – Security (CRIT-01)', () => {
     it('executes async code', async () => {
       deps = createCamoufoxDeps({
         camoufoxPageOverrides: {
-          evaluate: vi.fn(async (_fn: any) => {
+          evaluate: vi.fn(async (fn: any) => {
             if (typeof fn === 'function') {
               return await fn();
             }
@@ -297,7 +293,7 @@ describe('PageEvaluationHandlers – Security (CRIT-01)', () => {
   describe('Camoufox Path Isolation', () => {
     it('uses Camoufox native evaluate API instead of new Function()', async () => {
       const camoufoxPage = {
-        evaluate: vi.fn(async () => 'camoufox-result'),
+        evaluate: vi.fn(async () => 'camoufox-result') as Mock<(fn: any) => Promise<any>>,
       };
 
       const deps = createCamoufoxDeps({
@@ -311,7 +307,7 @@ describe('PageEvaluationHandlers – Security (CRIT-01)', () => {
       expect(camoufoxPage.evaluate).toHaveBeenCalled();
 
       // The argument passed should be a function, NOT a string
-      const callArg = camoufoxPage.evaluate.mock.calls[0][0];
+      const callArg = camoufoxPage.evaluate.mock.calls[0]?.[0];
       expect(typeof callArg).toBe('function');
     });
 

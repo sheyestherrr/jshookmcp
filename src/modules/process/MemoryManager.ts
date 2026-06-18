@@ -166,7 +166,13 @@ export class MemoryManager {
     pid: number,
     dllPath: string,
     options?: { confirmed?: boolean; payloadHash?: string; validationMode?: string },
-  ): Promise<{ success: boolean; remoteThreadId?: number; error?: string; confirmationRequired?: boolean; validationFailed?: boolean }> {
+  ): Promise<{
+    success: boolean;
+    remoteThreadId?: number;
+    error?: string;
+    confirmationRequired?: boolean;
+    validationFailed?: boolean;
+  }> {
     return injectDllImpl(this.platform, pid, dllPath, options);
   }
 
@@ -179,7 +185,13 @@ export class MemoryManager {
     shellcode: string,
     encoding: 'hex' | 'base64' = 'hex',
     options?: { confirmed?: boolean; validationMode?: string },
-  ): Promise<{ success: boolean; remoteThreadId?: number; error?: string; confirmationRequired?: boolean; validationFailed?: boolean }> {
+  ): Promise<{
+    success: boolean;
+    remoteThreadId?: number;
+    error?: string;
+    confirmationRequired?: boolean;
+    validationFailed?: boolean;
+  }> {
     return injectShellcodeImpl(this.platform, pid, shellcode, encoding, options);
   }
 

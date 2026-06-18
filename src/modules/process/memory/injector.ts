@@ -23,11 +23,13 @@ function validatePath(p: string): void {
 }
 
 // Shared validator instance (lazy-initialized)
-let _validator: InjectionValidator | null = null;
+let validator: InjectionValidator | null = null;
 function getValidator(modeOverride?: string): InjectionValidator {
   if (modeOverride) {
     // Create a new validator with the override mode
-    const mode = Object.values(InjectionValidationMode).includes(modeOverride as InjectionValidationMode)
+    const mode = Object.values(InjectionValidationMode).includes(
+      modeOverride as InjectionValidationMode,
+    )
       ? (modeOverride as InjectionValidationMode)
       : InjectionValidationMode.BALANCED;
 
@@ -40,10 +42,10 @@ function getValidator(modeOverride?: string): InjectionValidator {
     return new InjectionValidator(config);
   }
 
-  if (!_validator) {
-    _validator = createValidatorFromEnv();
+  if (!validator) {
+    validator = createValidatorFromEnv();
   }
-  return _validator;
+  return validator;
 }
 
 // ── DLL Injection ──
@@ -155,15 +157,21 @@ export async function injectDll(
   pid: number,
   dllPath: string,
   options?: { confirmed?: boolean; payloadHash?: string; validationMode?: string },
-): Promise<{ success: boolean; remoteThreadId?: number; error?: string; confirmationRequired?: boolean; validationFailed?: boolean }> {
+): Promise<{
+  success: boolean;
+  remoteThreadId?: number;
+  error?: string;
+  confirmationRequired?: boolean;
+  validationFailed?: boolean;
+}> {
   // Validation phase
-  const validator = getValidator(options?.validationMode);
+  const injectionValidator = getValidator(options?.validationMode);
 
   // Skip validation if confirmed flag is set or validation is disabled
   if (!options?.confirmed) {
     try {
       // Validate target process
-      const targetValidation = await validator.validateTargetProcess(pid);
+      const targetValidation = await injectionValidator.validateTargetProcess(pid);
       if (!targetValidation.valid) {
         return {
           success: false,
@@ -173,7 +181,7 @@ export async function injectDll(
       }
 
       // Validate DLL payload
-      const payloadValidation = await validator.validateDllPayload(dllPath, {
+      const payloadValidation = await injectionValidator.validateDllPayload(dllPath, {
         expectedHash: options?.payloadHash,
       });
       if (!payloadValidation.valid) {
@@ -185,7 +193,10 @@ export async function injectDll(
       }
 
       // Check if confirmation is required
-      const confirmationReq = validator.requireConfirmation(targetValidation, payloadValidation);
+      const confirmationReq = injectionValidator.requireConfirmation(
+        targetValidation,
+        payloadValidation,
+      );
       if (confirmationReq.required) {
         return {
           success: false,
@@ -371,15 +382,21 @@ export async function injectShellcode(
   shellcode: string,
   encoding: 'hex' | 'base64' = 'hex',
   options?: { confirmed?: boolean; validationMode?: string },
-): Promise<{ success: boolean; remoteThreadId?: number; error?: string; confirmationRequired?: boolean; validationFailed?: boolean }> {
+): Promise<{
+  success: boolean;
+  remoteThreadId?: number;
+  error?: string;
+  confirmationRequired?: boolean;
+  validationFailed?: boolean;
+}> {
   // Validation phase
-  const validator = getValidator(options?.validationMode);
+  const injectionValidator = getValidator(options?.validationMode);
 
   // Skip validation if confirmed flag is set or validation is disabled
   if (!options?.confirmed) {
     try {
       // Validate target process
-      const targetValidation = await validator.validateTargetProcess(pid);
+      const targetValidation = await injectionValidator.validateTargetProcess(pid);
       if (!targetValidation.valid) {
         return {
           success: false,
@@ -389,7 +406,10 @@ export async function injectShellcode(
       }
 
       // Validate shellcode payload
-      const payloadValidation = await validator.validateShellcodePayload(shellcode, encoding);
+      const payloadValidation = await injectionValidator.validateShellcodePayload(
+        shellcode,
+        encoding,
+      );
       if (!payloadValidation.valid) {
         return {
           success: false,
@@ -399,7 +419,10 @@ export async function injectShellcode(
       }
 
       // Check if confirmation is required
-      const confirmationReq = validator.requireConfirmation(targetValidation, payloadValidation);
+      const confirmationReq = injectionValidator.requireConfirmation(
+        targetValidation,
+        payloadValidation,
+      );
       if (confirmationReq.required) {
         return {
           success: false,
@@ -411,10 +434,14 @@ export async function injectShellcode(
 
       // Log warnings (non-blocking)
       if (targetValidation.warnings.length > 0) {
-        logger.warn(`Shellcode injection warnings (target): ${targetValidation.warnings.join('; ')}`);
+        logger.warn(
+          `Shellcode injection warnings (target): ${targetValidation.warnings.join('; ')}`,
+        );
       }
       if (payloadValidation.warnings.length > 0) {
-        logger.warn(`Shellcode injection warnings (payload): ${payloadValidation.warnings.join('; ')}`);
+        logger.warn(
+          `Shellcode injection warnings (payload): ${payloadValidation.warnings.join('; ')}`,
+        );
       }
     } catch (validationError) {
       logger.error('Validation error during shellcode injection:', validationError);

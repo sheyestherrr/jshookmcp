@@ -54,7 +54,7 @@ describe('webgpu_adapter_info', () => {
     if (result.success === true) {
       // Vendor should be dynamically detected, not hardcoded
       expect(['NVIDIA', 'AMD', 'Intel', 'Apple', 'ARM', 'Qualcomm']).not.toContain(
-        result.adapter?.vendor
+        result.adapter?.vendor,
       );
     }
   });

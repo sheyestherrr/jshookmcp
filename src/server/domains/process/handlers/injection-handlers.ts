@@ -163,7 +163,8 @@ export class InjectionHandlers {
       const dllPath = requireString(args.dllPath, 'dllPath');
       const confirmed = typeof args.confirmed === 'boolean' ? args.confirmed : undefined;
       const payloadHash = typeof args.payloadHash === 'string' ? args.payloadHash : undefined;
-      const validationMode = typeof args.validationMode === 'string' ? args.validationMode : undefined;
+      const validationMode =
+        typeof args.validationMode === 'string' ? args.validationMode : undefined;
 
       const result = await this.memoryManager.injectDll(pid, dllPath, {
         confirmed,
@@ -238,7 +239,8 @@ export class InjectionHandlers {
       const shellcode = requireString(args.shellcode, 'shellcode');
       const encoding = (args.encoding as 'hex' | 'base64') || 'hex';
       const confirmed = typeof args.confirmed === 'boolean' ? args.confirmed : undefined;
-      const validationMode = typeof args.validationMode === 'string' ? args.validationMode : undefined;
+      const validationMode =
+        typeof args.validationMode === 'string' ? args.validationMode : undefined;
       const size = getShellcodeSize(shellcode, encoding);
 
       const result = await this.memoryManager.injectShellcode(pid, shellcode, encoding, {

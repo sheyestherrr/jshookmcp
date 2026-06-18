@@ -86,7 +86,10 @@ describe('CRIT-08 Integration: Real-world HAR Export with Mixed Protocols', () =
         {
           status: 200,
           statusText: 'OK',
-          headers: { 'content-type': 'application/javascript', 'cache-control': 'max-age=31536000' },
+          headers: {
+            'content-type': 'application/javascript',
+            'cache-control': 'max-age=31536000',
+          },
           mimeType: 'application/javascript',
           protocol: 'h2',
         },

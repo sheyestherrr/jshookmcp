@@ -1,6 +1,9 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { ToolArgs } from '@server/types';
-import { clearSnapshotCache, storeSnapshot, getSnapshot } from '@server/domains/v8-inspector/handlers/heap-snapshot';
+import {
+  clearSnapshotCache,
+  storeSnapshot,
+} from '@server/domains/v8-inspector/handlers/heap-snapshot';
 
 /**
  * Integration tests for v8_heap_snapshot_analyze with class histogram.
@@ -47,9 +50,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
 
   describe('v8_heap_snapshot_analyze', () => {
     it('should analyze snapshot and return class histogram', async () => {
-      const { V8InspectorHandlers } = await import(
-        '@server/domains/v8-inspector/handlers/impl'
-      );
+      const { V8InspectorHandlers } = await import('@server/domains/v8-inspector/handlers/impl');
 
       // Store a mock snapshot
       const snapshotId = 'test-snapshot-1';
@@ -96,9 +97,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
     });
 
     it('should respect topN parameter', async () => {
-      const { V8InspectorHandlers } = await import(
-        '@server/domains/v8-inspector/handlers/impl'
-      );
+      const { V8InspectorHandlers } = await import('@server/domains/v8-inspector/handlers/impl');
 
       // Store a mock snapshot
       const snapshotId = 'test-snapshot-2';
@@ -122,9 +121,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
     });
 
     it('should detect detached DOM nodes', async () => {
-      const { V8InspectorHandlers } = await import(
-        '@server/domains/v8-inspector/handlers/impl'
-      );
+      const { V8InspectorHandlers } = await import('@server/domains/v8-inspector/handlers/impl');
 
       // Create snapshot with detached DOM nodes
       const snapshotWithDOM = JSON.stringify({
@@ -170,9 +167,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
     });
 
     it('should throw error for non-existent snapshot', async () => {
-      const { V8InspectorHandlers } = await import(
-        '@server/domains/v8-inspector/handlers/impl'
-      );
+      const { V8InspectorHandlers } = await import('@server/domains/v8-inspector/handlers/impl');
 
       const mockCtx = { eventBus: { emit: vi.fn() } } as any;
       const mockClient = {} as any;
@@ -186,9 +181,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
     });
 
     it('should throw error for missing snapshotId', async () => {
-      const { V8InspectorHandlers } = await import(
-        '@server/domains/v8-inspector/handlers/impl'
-      );
+      const { V8InspectorHandlers } = await import('@server/domains/v8-inspector/handlers/impl');
 
       const mockCtx = { eventBus: { emit: vi.fn() } } as any;
       const mockClient = {} as any;
@@ -202,9 +195,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
     });
 
     it('should handle large snapshots efficiently', async () => {
-      const { V8InspectorHandlers } = await import(
-        '@server/domains/v8-inspector/handlers/impl'
-      );
+      const { V8InspectorHandlers } = await import('@server/domains/v8-inspector/handlers/impl');
 
       // Generate a large snapshot (1000 nodes)
       const nodes: number[] = [];
@@ -268,9 +259,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
     });
 
     it('should return histogram sorted by retained size', async () => {
-      const { V8InspectorHandlers } = await import(
-        '@server/domains/v8-inspector/handlers/impl'
-      );
+      const { V8InspectorHandlers } = await import('@server/domains/v8-inspector/handlers/impl');
 
       const snapshotId = 'test-snapshot-sorted';
       storeSnapshot({

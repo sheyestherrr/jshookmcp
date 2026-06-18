@@ -28,6 +28,23 @@ export interface DominatorNode {
 }
 
 /**
+ * Compute retained size for a single node recursively.
+ * Moved to module scope since it doesn't capture any outer scope variables.
+ */
+function computeRetainedSizeRecursive(node: DominatorNode): number {
+  // Start with shallow size
+  let retained = node.shallowSize;
+
+  // Add retained sizes of all children
+  for (const child of node.children) {
+    retained += computeRetainedSizeRecursive(child);
+  }
+
+  node.retainedSize = retained;
+  return retained;
+}
+
+/**
  * Suspected memory leak candidate with confidence score
  */
 export interface LeakCandidate {
@@ -101,19 +118,6 @@ export class DominatorTreeBuilder {
    * @param tree - Root of dominator tree
    */
   computeRetainedSizes(tree: DominatorNode): void {
-    const computeRetainedSizeRecursive = (node: DominatorNode): number => {
-      // Start with shallow size
-      let retained = node.shallowSize;
-
-      // Add retained sizes of all children
-      for (const child of node.children) {
-        retained += computeRetainedSizeRecursive(child);
-      }
-
-      node.retainedSize = retained;
-      return retained;
-    };
-
     computeRetainedSizeRecursive(tree);
   }
 
@@ -272,7 +276,7 @@ export class DominatorTreeBuilder {
    * Lengauer-Tarjan algorithm for computing dominators
    * Uses the semi-NCA variant for improved performance
    */
-  private computeLengauerTarjan(rootId: number, dfsState: DFSState): Map<number, number> {
+  private computeLengauerTarjan(_rootId: number, dfsState: DFSState): Map<number, number> {
     const { pre, vertex, parent } = dfsState;
     const n = vertex.length;
 
@@ -308,7 +312,7 @@ export class DominatorTreeBuilder {
 
         const u = this.eval(v, semi, pre);
         const semiW = semi.get(w) ?? i;
-        const semiU = semi.get(u) ?? (pre.get(u) ?? i);
+        const semiU = semi.get(u) ?? pre.get(u) ?? i;
 
         if (semiU < semiW) {
           semi.set(w, semiU);
@@ -365,7 +369,7 @@ export class DominatorTreeBuilder {
   /**
    * Evaluate function for path compression (part of union-find)
    */
-  private eval(v: number, semi: Map<number, number>, pre: Map<number, number>): number {
+  private eval(v: number, _semi: Map<number, number>, _pre: Map<number, number>): number {
     // Simplified eval - returns node with minimum semi-dominator on path to root
     // In full implementation, this would use path compression for efficiency
     return v;
@@ -427,9 +431,7 @@ export class DominatorTreeBuilder {
 
     // Check for DOM element types
     const isDOMNode =
-      nameLower.startsWith('html') ||
-      nameLower.includes('element') ||
-      nameLower.includes('node');
+      nameLower.startsWith('html') || nameLower.includes('element') || nameLower.includes('node');
 
     if (isDOMNode) {
       // Check if it's disconnected from document
