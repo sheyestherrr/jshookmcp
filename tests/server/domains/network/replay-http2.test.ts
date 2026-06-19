@@ -17,10 +17,16 @@ vi.mock('node:dns/promises', () => ({
 // On Linux, TCP SYN retransmit can take ~30s per test.
 vi.mock('node:http2', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:http2')>();
+  const { EventEmitter } = await import('node:events');
   return {
     ...actual,
     connect: vi.fn(() => {
-      const session = actual.connect('https://localhost:1');
+      const session = new EventEmitter() as import('node:http2').ClientHttp2Session;
+      (session as any).close = vi.fn(() => session.emit('close'));
+      (session as any).destroy = vi.fn(() => session.emit('close'));
+      (session as any).request = vi.fn(() => {
+        throw new Error('mocked http2 request error');
+      });
       process.nextTick(() => session.emit('error', new Error('mocked http2 error')));
       return session;
     }),
