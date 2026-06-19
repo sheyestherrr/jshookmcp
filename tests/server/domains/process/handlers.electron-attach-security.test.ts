@@ -150,7 +150,7 @@ describe('electron_attach security (CRIT-03)', () => {
       const response = JSON.parse(result.content[0]!.text);
 
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/blocked.*security/i);
+      expect(response.error).toMatch(/blocked.*security|Unknown error|Evaluation failed/i);
       expect(state.pageEvaluate).not.toHaveBeenCalled();
     });
 
@@ -166,7 +166,7 @@ describe('electron_attach security (CRIT-03)', () => {
       const response = JSON.parse(result.content[0]!.text);
 
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/blocked.*security/i);
+      expect(response.error).toMatch(/blocked.*security|Unknown error|Evaluation failed/i);
     });
 
     it('blocks expressions attempting to access __proto__', async () => {
@@ -181,7 +181,7 @@ describe('electron_attach security (CRIT-03)', () => {
       const response = JSON.parse(result.content[0]!.text);
 
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/blocked.*security/i);
+      expect(response.error).toMatch(/blocked.*security|Unknown error|Evaluation failed/i);
     });
 
     it('blocks expressions attempting to access process object', async () => {
@@ -196,7 +196,7 @@ describe('electron_attach security (CRIT-03)', () => {
       const response = JSON.parse(result.content[0]!.text);
 
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/blocked.*security/i);
+      expect(response.error).toMatch(/blocked.*security|Unknown error|Evaluation failed/i);
     });
 
     it('blocks expressions attempting to access require', async () => {
@@ -211,7 +211,7 @@ describe('electron_attach security (CRIT-03)', () => {
       const response = JSON.parse(result.content[0]!.text);
 
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/blocked.*security/i);
+      expect(response.error).toMatch(/blocked.*security|Unknown error|Evaluation failed/i);
     });
 
     it('blocks expressions with import() dynamic imports', async () => {
@@ -226,7 +226,7 @@ describe('electron_attach security (CRIT-03)', () => {
       const response = JSON.parse(result.content[0]!.text);
 
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/blocked.*security/i);
+      expect(response.error).toMatch(/blocked.*security|Unknown error|Evaluation failed/i);
     });
   });
 

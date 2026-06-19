@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as parser from '@babel/parser';
+vi.mock('@babel/parser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@babel/parser')>();
+  return { ...actual, parse: vi.fn(actual.parse) };
+});
 
 vi.mock('@src/utils/logger', () => ({
   logger: {
@@ -50,7 +54,7 @@ describe('EnvironmentEmulator', () => {
   });
 
   it('falls back to regex detection when parser throws', async () => {
-    const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+    vi.mocked(parser.parse).mockImplementation(() => {
       throw new Error('parse-failed');
     });
     const emulator = new EnvironmentEmulator();
@@ -62,7 +66,6 @@ describe('EnvironmentEmulator', () => {
 
     expect(result.detectedVariables.document).toContain('document.title');
     expect(result.detectedVariables.window).toContain('window.outerWidth');
-    parseSpy.mockRestore();
   });
 
   it('ignores legacy dependencies and leaves unknown variables unresolved', async () => {

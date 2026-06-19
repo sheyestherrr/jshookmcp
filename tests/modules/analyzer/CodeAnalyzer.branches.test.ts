@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import * as parser from '@babel/parser';
+vi.mock('@babel/parser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@babel/parser')>();
+  return { ...actual, parse: vi.fn(actual.parse) };
+});
+
 import { CodeAnalyzer } from '@modules/analyzer/CodeAnalyzer';
 
 vi.mock('@utils/logger', () => ({
@@ -97,8 +102,7 @@ describe('CodeAnalyzer - Branch Coverage', () => {
 
   describe('AST syntax error handling inside internal traversals', () => {
     it('handles parsing failures in sub-analyzers without throwing', async () => {
-      const parseSpy = vi
-        .spyOn(parser, 'parse')
+      vi.mocked(parser.parse)
         .mockImplementationOnce(() => {
           return { type: 'File', program: { type: 'Program', body: [] } } as any;
         })
@@ -114,8 +118,6 @@ describe('CodeAnalyzer - Branch Coverage', () => {
 
       expect(result.structure.modules).toEqual([]);
       expect(result.structure.callGraph.edges).toEqual([]);
-
-      parseSpy.mockRestore();
     });
   });
 

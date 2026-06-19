@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as testUrls from '@tests/shared/test-urls';
 
 import * as parser from '@babel/parser';
+vi.mock('@babel/parser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@babel/parser')>();
+  return { ...actual, parse: vi.fn(actual.parse) };
+});
 
 const findBrowserExecutableMock = vi.hoisted(() => vi.fn(() => undefined));
 const fetchRealEnvironmentDataMock = vi.hoisted(() => vi.fn());
@@ -141,7 +145,7 @@ describe('EnvironmentEmulator – coverage gaps', () => {
   // ─── regex fallback detection ───────────────────────────────────
   describe('detectWithRegex fallback', () => {
     it('detects variables with regex when AST parsing fails', async () => {
-      const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+      vi.mocked(parser.parse).mockImplementation(() => {
         throw new Error('parse-failed');
       });
 
@@ -157,12 +161,10 @@ describe('EnvironmentEmulator – coverage gaps', () => {
       expect(result.detectedVariables.navigator).toContain('navigator.platform');
       expect(result.detectedVariables.location).toContain('location.origin');
       expect(result.detectedVariables.screen).toContain('screen.colorDepth');
-
-      parseSpy.mockRestore();
     });
 
     it('deduplicates regex results', async () => {
-      const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+      vi.mocked(parser.parse).mockImplementation(() => {
         throw new Error('parse-failed');
       });
 
@@ -175,8 +177,6 @@ describe('EnvironmentEmulator – coverage gaps', () => {
 
       const aCount = result.detectedVariables.window.filter((v: string) => v === 'window.a').length;
       expect(aCount).toBe(1);
-
-      parseSpy.mockRestore();
     });
   });
 

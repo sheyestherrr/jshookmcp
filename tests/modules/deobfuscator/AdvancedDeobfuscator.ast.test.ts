@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as parser from '@babel/parser';
+vi.mock('@babel/parser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@babel/parser')>();
+  return { ...actual, parse: vi.fn(actual.parse) };
+});
 
 const loggerState = vi.hoisted(() => ({
   info: vi.fn(),
@@ -67,12 +71,10 @@ describe('AdvancedDeobfuscator AST helpers', () => {
   });
 
   it('returns the original code when parsing fails', () => {
-    const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+    vi.mocked(parser.parse).mockImplementation(() => {
       throw new Error('parse failed');
     });
 
     expect(removeDeadCode('const keep = true;')).toBe('const keep = true;');
-
-    parseSpy.mockRestore();
   });
 });

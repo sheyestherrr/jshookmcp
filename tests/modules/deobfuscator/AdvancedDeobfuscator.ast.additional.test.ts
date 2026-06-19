@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as parser from '@babel/parser';
+vi.mock('@babel/parser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@babel/parser')>();
+  return { ...actual, parse: vi.fn(actual.parse) };
+});
 
 const loggerState = vi.hoisted(() => ({
   info: vi.fn(),
@@ -91,7 +95,7 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
     });
 
     it('returns original code on parse error', () => {
-      const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+      vi.mocked(parser.parse).mockImplementation(() => {
         throw new Error('syntax error');
       });
 
@@ -99,7 +103,6 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
       const result = derotateStringArray(code);
       expect(result).toBe(code);
       expect(loggerState.error).toHaveBeenCalled();
-      parseSpy.mockRestore();
     });
   });
 
@@ -164,7 +167,7 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
     });
 
     it('returns original code on parse error', () => {
-      const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+      vi.mocked(parser.parse).mockImplementation(() => {
         throw new Error('parse error');
       });
 
@@ -172,7 +175,6 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
       const result = removeDeadCode(code);
       expect(result).toBe(code);
       expect(loggerState.error).toHaveBeenCalled();
-      parseSpy.mockRestore();
     });
 
     it('handles nested dead code blocks', () => {
@@ -288,7 +290,7 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
     });
 
     it('returns original code on parse error', () => {
-      const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+      vi.mocked(parser.parse).mockImplementation(() => {
         throw new Error('parse error');
       });
 
@@ -296,7 +298,6 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
       const result = removeOpaquePredicates(code);
       expect(result).toBe(code);
       expect(loggerState.error).toHaveBeenCalled();
-      parseSpy.mockRestore();
     });
   });
 
@@ -340,7 +341,7 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
     });
 
     it('returns original code on parse error', () => {
-      const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+      vi.mocked(parser.parse).mockImplementation(() => {
         throw new Error('parse error');
       });
 
@@ -348,7 +349,6 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
       const result = decodeStrings(code);
       expect(result).toBe(code);
       expect(loggerState.error).toHaveBeenCalled();
-      parseSpy.mockRestore();
     });
   });
 
@@ -435,7 +435,7 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
     });
 
     it('returns original code on parse error', () => {
-      const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+      vi.mocked(parser.parse).mockImplementation(() => {
         throw new Error('parse error');
       });
 
@@ -443,7 +443,6 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
       const result = applyASTOptimizations(code);
       expect(result).toBe(code);
       expect(loggerState.error).toHaveBeenCalled();
-      parseSpy.mockRestore();
     });
 
     it('handles chained constant folding', () => {
@@ -543,23 +542,21 @@ describe('AdvancedDeobfuscator AST – additional coverage', () => {
     });
 
     it('returns 100 on parse error as fallback', () => {
-      const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+      vi.mocked(parser.parse).mockImplementation(() => {
         throw new Error('bad code');
       });
 
       const result = estimateCodeComplexity('not valid js }}}');
       expect(result).toBe(100);
-      parseSpy.mockRestore();
     });
 
     it('returns 100 on non-Error exception', () => {
-      const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+      vi.mocked(parser.parse).mockImplementation(() => {
         throw 'string error';
       });
 
       const result = estimateCodeComplexity('whatever');
       expect(result).toBe(100);
-      parseSpy.mockRestore();
     });
   });
 });

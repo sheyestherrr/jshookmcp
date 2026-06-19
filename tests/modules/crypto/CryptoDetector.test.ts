@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as parser from '@babel/parser';
+vi.mock('@babel/parser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@babel/parser')>();
+  return { ...actual, parse: vi.fn(actual.parse) };
+});
+
 import { CryptoRulesManager } from '@modules/crypto/CryptoRules';
 
 const loggerState = vi.hoisted(() => ({
@@ -197,7 +202,7 @@ describe('CryptoDetector', () => {
 
   it('handles AST parser failures and strength extremes', () => {
     const detector = new CryptoDetector({ chat: async () => ({ content: '{}' }) } as any);
-    const parseSpy = vi.spyOn(parser, 'parse').mockImplementation(() => {
+    vi.mocked(parser.parse).mockImplementation(() => {
       throw new Error('parse failed');
     });
 
@@ -223,8 +228,6 @@ describe('CryptoDetector', () => {
     );
     expect(broken.overall).toBe('broken');
     expect(broken.score).toBeLessThan(40);
-
-    parseSpy.mockRestore();
   });
 
   it('covers custom rule loading, missing line numbers, weak strength and crypto.subtle parameter parsing', async () => {
