@@ -40,7 +40,7 @@
 | `memory_dump_region` | 将指定内存区域转储到文件以供分析。 |
 | `memory_list_regions` | 列出进程中的全部内存区域及其保护标志。 |
 | `memory_audit_export` | 导出内存操作审计轨迹为 JSON，并可通过 clear=true 在导出后清空缓冲区。 |
-| `inject_dll` | 通过 CreateRemoteThread 与 LoadLibraryA (Windows) 或 gdb/lldb (Linux/macOS) 向目标进程注入 DLL 或 shared object。默认启用；可通过 ENABLE_INJECTION_TOOLS=false 禁用。需要高权限。 |
-| `inject_shellcode` | 向目标进程注入并执行 Shellcode，支持 hex 或 base64。默认启用；可通过 ENABLE_INJECTION_TOOLS=false 禁用。 |
+| `inject_dll` | 通过 CreateRemoteThread 与 LoadLibraryA (Windows) 或 gdb/lldb (Linux/macOS) 向目标进程注入 DLL 或 shared object。需要高权限，并会先执行目标进程与载荷校验。 |
+| `inject_shellcode` | 向目标进程注入并执行 Shellcode，支持 hex 或 base64。需要高权限，并会先执行目标进程与载荷校验。 |
 | `check_debug_port` | 通过 NtQueryInformationProcess 检查进程是否处于调试状态。 |
 | `enumerate_modules` | 列出进程中所有已加载模块（DLL）及其基址。 |

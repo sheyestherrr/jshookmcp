@@ -40,7 +40,7 @@ Process, module, memory diagnostics, and controlled injection domain for host-le
 | `memory_dump_region` | Dump a process memory region to a binary file for offline analysis. If pid is omitted, the active browser renderer PID is auto-discovered from the current browser session. |
 | `memory_list_regions` | List all memory regions in a process with protection flags. If pid is omitted, the active browser renderer PID is auto-discovered from the current browser session. |
 | `memory_audit_export` | Export the in-memory audit trail for memory operations as JSON. |
-| `inject_dll` | Inject a DLL into a target process. Requires elevated privileges and ENABLE_INJECTION_TOOLS=true. Target process and payload are validated before injection. |
-| `inject_shellcode` | Allocate and execute raw shellcode in a target process. Requires elevated privileges and ENABLE_INJECTION_TOOLS=true. Target process and payload are validated before injection. |
+| `inject_dll` | Inject a DLL into a target process. Requires elevated privileges. Target process and payload are validated before injection. |
+| `inject_shellcode` | Allocate and execute raw shellcode in a target process. Requires elevated privileges. Target process and payload are validated before injection. |
 | `check_debug_port` | Check if a process is being debugged using NtQueryInformationProcess (ProcessDebugPort). |
 | `enumerate_modules` | List all loaded modules (DLLs) in a process with their base addresses. |

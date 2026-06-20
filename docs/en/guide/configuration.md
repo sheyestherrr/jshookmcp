@@ -223,7 +223,6 @@ Runtime configuration is defined by `src/utils/config.ts`. The current runtime d
 | `PROCESS_LAUNCH_WAIT_MS`             | Wait after launching a debug process.       | `2000`                  |
 | `WIN_DEBUG_PORT_POLL_ATTEMPTS`       | Windows debug-port poll attempts.           | `20`                    |
 | `WIN_DEBUG_PORT_POLL_INTERVAL_MS`    | Windows debug-port poll interval.           | `500`                   |
-| `ENABLE_INJECTION_TOOLS`             | Enable memory injection tools.              | `true`                  |
 
 ### 13. ADB bridge and binary instrumentation
 

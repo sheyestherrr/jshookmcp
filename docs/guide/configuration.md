@@ -223,7 +223,6 @@ Clone 仓库后，在项目根目录创建 `.env` 文件（参考 `.env.example`
 | `PROCESS_LAUNCH_WAIT_MS`             | 启动调试进程后的等待时间。    | `2000`          |
 | `WIN_DEBUG_PORT_POLL_ATTEMPTS`       | Windows 调试端口轮询次数。                | `20`            |
 | `WIN_DEBUG_PORT_POLL_INTERVAL_MS`    | Windows 调试端口轮询间隔。                | `500`           |
-| `ENABLE_INJECTION_TOOLS`             | 是否启用内存注入工具。                    | `true`          |
 
 ### 13. ADB 桥接与二进制插桩
 
