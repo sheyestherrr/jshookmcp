@@ -63,6 +63,25 @@ function isValidSyscallName(name: string): boolean {
   return SYSCALL_NAME_RE.test(name) && name.length <= 64;
 }
 
+function normalizeSyscallList(value: unknown): string[] | undefined {
+  const rawValues = readStringArray(value);
+  if (!rawValues) {
+    return undefined;
+  }
+
+  const normalizedValues: string[] = [];
+  const seen = new Set<string>();
+  for (const rawValue of rawValues) {
+    const normalizedValue = rawValue.trim().toLowerCase();
+    if (!normalizedValue || seen.has(normalizedValue)) {
+      continue;
+    }
+    seen.add(normalizedValue);
+    normalizedValues.push(normalizedValue);
+  }
+  return normalizedValues;
+}
+
 function readBackend(value: unknown): SyscallBackend | undefined {
   if (value === 'etw' || value === 'strace' || value === 'dtrace') {
     return value;
@@ -290,7 +309,7 @@ export class SyscallHookHandlers {
 
   async handleSyscallEbpfTrace(args: Record<string, unknown>): Promise<unknown> {
     const rawPid = readNumber(args['pid']);
-    const syscalls = readStringArray(args['syscalls']);
+    const syscalls = normalizeSyscallList(args['syscalls']);
     const durationSec = readNumber(args['durationSec']) ?? SYSCALL_TRACE_DURATION_DEFAULT_SEC;
     const simulate = readBoolean(args['simulate']) ?? false;
 

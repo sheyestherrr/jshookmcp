@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 import type {
   CdpSessionLike,
   DiscoverItem,
@@ -8,6 +8,7 @@ import type {
   TextToolResponse,
 } from '@server/domains/sourcemap/handlers.impl.sourcemap-parse-base';
 import { resolveArtifactPath } from '@utils/artifacts';
+import { resolveContainedPath } from '@utils/safeOutput';
 import { SourcemapToolHandlersExtension } from '@server/domains/sourcemap/handlers.impl.sourcemap-extension';
 
 export class SourcemapToolHandlersMain extends SourcemapToolHandlersExtension {
@@ -155,7 +156,17 @@ export class SourcemapToolHandlersMain extends SourcemapToolHandlersExtension {
         const rawSourcePath = parsed.map.sources[index] ?? '';
         const sourcePath = this.combineSourceRoot(parsed.map.sourceRoot, rawSourcePath);
         const relativePath = this.normalizeSourcePath(sourcePath, index);
-        const absolutePath = resolve(outputRoot, relativePath);
+        let absolutePath: string;
+        try {
+          absolutePath = resolveContainedPath(
+            outputRoot,
+            relativePath,
+            'reconstructed source path',
+          );
+        } catch {
+          skippedFiles += 1;
+          continue;
+        }
 
         const sourceContent =
           parsed.map.sourcesContent && index < parsed.map.sourcesContent.length

@@ -3,8 +3,9 @@
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 import { resolveArtifactPath } from '@utils/artifacts';
+import { resolveContainedPath } from '@utils/safeOutput';
 import { SOURCEMAP_V4_RAW_FIELD_MAX_LEN, SOURCEMAP_V4_RETRY_DELAY_MS } from '@src/constants';
 import type {
   CdpSessionLike,
@@ -319,7 +320,17 @@ export class SourcemapHandlers {
         const rawSourcePath = parsed.map.sources[index] ?? '';
         const sourcePath = combineSourceRoot(parsed.map.sourceRoot, rawSourcePath);
         const relativePath = normalizeSourcePath(sourcePath, index);
-        const absolutePath = resolve(outputRoot, relativePath);
+        let absolutePath: string;
+        try {
+          absolutePath = resolveContainedPath(
+            outputRoot,
+            relativePath,
+            'reconstructed source path',
+          );
+        } catch {
+          skippedFiles += 1;
+          continue;
+        }
 
         const sourceContent =
           parsed.map.sourcesContent && index < parsed.map.sourcesContent.length

@@ -445,6 +445,39 @@ describe('SourcemapToolHandlers', () => {
 
       expect(getText(res)).toContain('"skippedFiles": 1');
     });
+
+    it('skips sources that still escape the output root after normalization', async () => {
+      const mockMap = {
+        version: 3,
+        sources: ['..'],
+        sourcesContent: ['content'],
+        mappings: 'AAAA',
+        names: [],
+      };
+      globalFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify(mockMap)),
+      });
+
+      vi.mocked(resolveArtifactPath).mockResolvedValue({
+        absolutePath: '/',
+        displayPath: '/',
+      });
+      const normalizeSpy = vi
+        .spyOn(
+          await import('../../../../src/server/domains/sourcemap/handlers/sourcemap-parsing'),
+          'normalizeSourcePath',
+        )
+        .mockReturnValue('..');
+
+      const res = await handlers.handleSourcemapReconstructTree({
+        sourceMapUrl: withPath(TEST_HTTP_URLS.root, 'escape.map'),
+      });
+
+      expect(getText(res)).toContain('"writtenFiles": 0');
+      expect(getText(res)).toContain('"skippedFiles": 1');
+      normalizeSpy.mockRestore();
+    });
   });
 
   describe('handleExtensionListInstalled', () => {

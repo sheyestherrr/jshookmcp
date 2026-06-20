@@ -241,5 +241,42 @@ describe('SourcemapToolHandlersMain', () => {
       expect(parsed.success).toBe(false);
       expect(parsed.error).toContain('no map string err');
     });
+
+    it('skips escaped reconstructed paths after final containment check', async () => {
+      vi.spyOn(handlers as any, 'parseSourceMapStats').mockResolvedValue({
+        resolvedUrl: withPath(TEST_HTTP_URLS.root, 'source.map'),
+        map: {
+          version: 3,
+          sourceRoot: '/',
+          sources: ['..'],
+          sourcesContent: ['console.log("escape")'],
+          mappings: '',
+          names: [],
+        },
+        mappingsCount: 1,
+        segmentCount: 1,
+      });
+      vi.spyOn(handlers as any, 'safeTarget').mockReturnValue('target');
+      vi.spyOn(handlers as any, 'combineSourceRoot').mockImplementation((_r: any, s: any) => s);
+      vi.spyOn(handlers as any, 'normalizeSourcePath').mockImplementation(() => '..');
+      const artifacts = await import('../../../../src/utils/artifacts');
+      vi.spyOn(artifacts, 'resolveArtifactPath').mockResolvedValue({
+        absolutePath: '/fake/dir/file.tmp',
+        displayPath: '/fake/dir/file.tmp',
+      });
+
+      const res = await handlers.handleSourcemapReconstructTree({
+        sourceMapUrl: 'http://foo.com/map',
+      });
+      const parsed = JSON.parse((res.content[0] as any).text);
+
+      if (parsed.success === false) {
+        expect(String(parsed.error)).toContain('reconstructed source path');
+      } else {
+        expect(parsed.writtenFiles).toBe(0);
+        expect(parsed.skippedFiles).toBe(1);
+      }
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
   });
 });
