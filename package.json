@@ -125,6 +125,7 @@
     "quickjs-emscripten": "^0.32.0",
     "rebrowser-puppeteer-core": "^24.8.1",
     "yauzl": "^3.4.0",
+    "z3-solver": "^4.16.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
