@@ -19,7 +19,7 @@
 - syscall-hook + process
 - syscall-hook + instrumentation
 
-## 工具清单（13）
+## 工具清单（15）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -36,3 +36,5 @@
 | `syscall_trace_compare` | 待补充中文：Diff two syscall trace snapshots to find appeared/disappeared syscalls and frequency changes. Useful for understanding what OS calls a JS operation triggers. Capture baseline → perform operation → capture target → compare. |
 | `syscall_trace_export` | 待补充中文：Export captured syscall events to portable NDJSON with optional time-range filtering and deduplication. Returns both structured array and NDJSON string. |
 | `syscall_ebpf_attach` | 待补充中文：Live eBPF syscall attach — spawns a bpftrace process, captures syscall events as structured JSON in real time, and returns them directly. Unlike syscall_ebpf_trace (script-generator), this tool actually runs bpftrace and captures output. Falls back to script mode on non-Linux or when bpftrace is unavailable. Requires bpftrace + CAP_BPF or root on Linux. |
+| `syscall_origin_map` | 待补充中文：Build a unified syscall→JS origin map by integrating live CDP call stacks (syscall_stack_capture) with static timing heuristics (syscall_correlate_js). Aggregates recent syscall events by JavaScript function so callers can see which JS function triggered which syscalls and how often. Debugger stacks are preferred when available; heuristics fill the gaps. |
+| `syscall_pattern_detect` | 待补充中文：Scan captured syscall events for behavioral patterns relevant to reverse engineering: anti-debug probes (ptrace / IsDebuggerPresent), system fingerprinting (uname / getuid), filesystem enumeration (openat + getdents), network beaconing (connect / sendto), process spawning (clone / execve), and Windows registry probing. Returns classified patterns with evidence. |
