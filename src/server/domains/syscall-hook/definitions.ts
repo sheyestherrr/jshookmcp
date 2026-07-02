@@ -159,4 +159,37 @@ export const syscallHookToolDefinitions: Tool[] = [
       .boolean('simulate', 'Use synthetic events when bpftrace is unavailable', { default: false })
       .query(),
   ),
+  tool('syscall_origin_map', (t) =>
+    t
+      .desc(
+        'Build a unified syscall→JS origin map by integrating live CDP call stacks ' +
+          '(syscall_stack_capture) with static timing heuristics (syscall_correlate_js). ' +
+          'Aggregates recent syscall events by JavaScript function so callers can see ' +
+          'which JS function triggered which syscalls and how often. Debugger stacks ' +
+          'are preferred when available; heuristics fill the gaps.',
+      )
+      .number('maxEvents', 'Maximum number of recent syscall events to analyze (default: 50)', {
+        default: 50,
+        minimum: 1,
+        maximum: 500,
+      })
+      .boolean('useDebugger', 'Attempt CDP call stack capture (default: true)', { default: true })
+      .query(),
+  ),
+  tool('syscall_pattern_detect', (t) =>
+    t
+      .desc(
+        'Scan captured syscall events for behavioral patterns relevant to reverse ' +
+          'engineering: anti-debug probes (ptrace / IsDebuggerPresent), system ' +
+          'fingerprinting (uname / getuid), filesystem enumeration (openat + getdents), ' +
+          'network beaconing (connect / sendto), process spawning (clone / execve), ' +
+          'and Windows registry probing. Returns classified patterns with evidence.',
+      )
+      .number('maxEvents', 'Maximum number of recent syscall events to scan (default: 200)', {
+        default: 200,
+        minimum: 1,
+        maximum: 2000,
+      })
+      .query(),
+  ),
 ];

@@ -13,6 +13,8 @@ import { handleSyscallStackCapture } from './handlers/stack-capture';
 import { handleSyscallTraceCompare } from './handlers/trace-compare';
 import { handleSyscallTraceExport } from './handlers/trace-export';
 import { handleSyscallEbpfAttach } from './handlers/ebpf-attach';
+import { handleSyscallOriginMap } from './handlers/origin-map';
+import { handleSyscallPatternDetect } from './handlers/pattern-detect';
 import type { MCPServerContext } from '@server/MCPServer.context';
 import {
   SYSCALL_TRACE_DURATION_DEFAULT_SEC,
@@ -552,6 +554,22 @@ END {
 
   async handleSyscallEbpfAttach(args: Record<string, unknown>): Promise<unknown> {
     return handleSyscallEbpfAttach(args);
+  }
+
+  // ── Origin Map (stack_capture + correlate_js integration) ─────────────────────
+
+  async handleSyscallOriginMap(args: Record<string, unknown>): Promise<unknown> {
+    const monitor = this.ensureMonitor();
+    const events = await monitor.captureEvents();
+    return handleSyscallOriginMap(args, events, this.ctx);
+  }
+
+  // ── Pattern Detection ─────────────────────────────────────────────────────────
+
+  async handleSyscallPatternDetect(args: Record<string, unknown>): Promise<unknown> {
+    const monitor = this.ensureMonitor();
+    const events = await monitor.captureEvents();
+    return handleSyscallPatternDetect(args, events);
   }
 
   private ensureMonitor(): SyscallMonitor {

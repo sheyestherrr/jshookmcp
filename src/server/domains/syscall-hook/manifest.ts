@@ -39,6 +39,8 @@ const registrations = defineMethodRegistrations<
     { tool: 'syscall_trace_compare', method: 'handleSyscallTraceCompare' },
     { tool: 'syscall_trace_export', method: 'handleSyscallTraceExport' },
     { tool: 'syscall_ebpf_attach', method: 'handleSyscallEbpfAttach' },
+    { tool: 'syscall_origin_map', method: 'handleSyscallOriginMap' },
+    { tool: 'syscall_pattern_detect', method: 'handleSyscallPatternDetect' },
   ],
 });
 
