@@ -1070,35 +1070,9 @@ describe('NEON Saturating Instructions', () => {
   });
 });
 
-describe('NEON De-interleave Load/Store', () => {
-  // Note: LD2/LD3/LD4/ST2/ST3/ST4 tests require memory setup and are complex
-  // These would be placeholder tests until load/store multi-element is implemented
-
-  it('Placeholder: LD2 de-interleave', () => {
-    // This will be implemented by Agent 4 after load/store decoder is ready
-    expect(true).toBe(true);
-  });
-
-  it('Placeholder: ST2 interleave', () => {
-    expect(true).toBe(true);
-  });
-
-  it('Placeholder: LD3 RGB de-interleave', () => {
-    expect(true).toBe(true);
-  });
-
-  it('Placeholder: ST3 RGB interleave', () => {
-    expect(true).toBe(true);
-  });
-
-  it('Placeholder: LD4 RGBA de-interleave', () => {
-    expect(true).toBe(true);
-  });
-
-  it('Placeholder: ST4 RGBA interleave', () => {
-    expect(true).toBe(true);
-  });
-});
+// NEON De-interleave Load/Store (LD2/LD3/LD4/ST2/ST3/ST4) tests live in
+// ./neon-deinterleave.test.ts — 8 real tests covering 8/16-bit element
+// de-interleaving plus LD2→ST2 round-trip.
 
 describe('NEON Real-World Scenarios', () => {
   describe('Image Processing', () => {

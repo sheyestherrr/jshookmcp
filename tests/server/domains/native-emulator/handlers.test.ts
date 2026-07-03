@@ -208,20 +208,18 @@ describe('NativeEmulatorHandlers — happy path', () => {
     expect(data.isa).toBe('aarch64-integer+neon+crypto+fp');
     const simd = data.simd as { supported: string[]; unsupported: string[] };
     expect(simd.supported).toEqual(
-      expect.arrayContaining(['contiguous-ld1-st1', 'aes-sha-pmull', 'scalar-fp']),
-    );
-    // The remaining gaps are declared, not hidden.
-    expect(simd.unsupported).toEqual(
       expect.arrayContaining([
+        'contiguous-ld1-st1',
+        'aes-sha-pmull',
+        'scalar-fp',
         'ld2-ld3-ld4-deinterleaving',
         'long-widening-neon',
         'saturating-neon',
-        'bit-bif',
-        'integer-pmul',
-        'ins',
-        'vector-fmov-immediate',
-        'fp16',
       ]),
+    );
+    // The remaining gaps are declared, not hidden.
+    expect(simd.unsupported).toEqual(
+      expect.arrayContaining(['bit-bif', 'integer-pmul', 'ins', 'vector-fmov-immediate', 'fp16']),
     );
     expect(String(data.note)).toMatch(/NEON/);
     expect(String(data.note)).toMatch(/saturating|widening/);
