@@ -28,8 +28,6 @@ const WIN32_ONLY_TOOLS = new Set([
   'memory_heap_enumerate',
   'memory_heap_stats',
   'memory_heap_anomalies',
-  'memory_pe_headers',
-  'memory_pe_imports_exports',
   'memory_breakpoint',
   'memory_find_accesses',
   'memory_speedhack',
@@ -131,8 +129,8 @@ describe('memory manifest platform filtering', () => {
     const linuxManifest = await loadManifestWithPlatform('linux');
 
     expect(win32Manifest.registrations.length).toBe(34);
-    // E5-A: integrity_check / anticheat_detect / guard_pages cross-platform (22→25).
-    // E5-B: inline_hook_detect raw-pattern fallback (25→26).
-    expect(linuxManifest.registrations.length).toBe(26);
+    // E5-A: +3 (integrity/anticheat/guard). E5-B: +1 (inline_hook_detect).
+    // E5-C: +2 (pe_headers/pe_imports_exports). Total Linux: 22→26→28.
+    expect(linuxManifest.registrations.length).toBe(28);
   });
 });

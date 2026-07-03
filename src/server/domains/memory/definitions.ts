@@ -400,20 +400,25 @@ export const memoryScanToolDefinitions: readonly Tool[] = [
           ' type, entry point, image base, section count, and data directory info.',
       )
       .number('pid', 'Target process ID (optional when a browser session is attached)')
-      .string('moduleBase', 'Module base address (hex, e.g. "0x7ff612340000")')
-      .required('moduleBase')
+      .string('moduleBase', 'Module base address (hex, e.g. "0x7ff612340000") — Win32')
+      .string(
+        'moduleName',
+        'Module name/path substring (cross-platform: required on Linux/macOS to locate the on-disk ELF/Mach-O binary)',
+      )
+      .required()
       .query(),
   ),
   tool('memory_pe_imports_exports', (t) =>
     t
       .desc(
         'Parse import and/or export tables from a PE module in process memory. Returns DLL names, function names,' +
-          ' ordinals, hints, and forwarded exports.',
+          ' ordinals, hints, and forwarded exports. Cross-platform: parses ELF .dynsym / Mach-O LC_SYMTAB from disk when moduleName is given on Linux/macOS.',
       )
       .number('pid', 'Target process ID (optional when a browser session is attached)')
-      .string('moduleBase', 'Module base address (hex)')
+      .string('moduleBase', 'Module base address (hex) — Win32')
+      .string('moduleName', 'Module name/path substring (cross-platform: required on Linux/macOS)')
       .enum('table', ['imports', 'exports', 'both'], 'Which table to parse', { default: 'both' })
-      .required('moduleBase')
+      .required()
       .query(),
   ),
   tool('memory_inline_hook_detect', (t) =>

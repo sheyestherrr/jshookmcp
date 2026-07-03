@@ -161,7 +161,9 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
   });
 
   describe('PE Analysis Tools', () => {
-    it('memory_pe_headers returns clear error on non-Win32', async () => {
+    it('memory_pe_headers without moduleName returns guidance error (non-Win32)', async () => {
+      // E5-C: non-Win32 now parses ELF/Mach-O from disk, which requires moduleName
+      // (not moduleBase). Without it the handler throws a guidance error.
       const result = await handlers.handlePEHeaders({
         pid: 1234,
         moduleBase: '0x400000',
@@ -169,10 +171,10 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
 
       const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
-      expect(parsed.error).toContain('only supported on Windows');
+      expect(parsed.error).toMatch(/moduleName/);
     });
 
-    it('memory_pe_imports_exports returns clear error on non-Win32', async () => {
+    it('memory_pe_imports_exports without moduleName returns guidance error (non-Win32)', async () => {
       const result = await handlers.handlePEImportsExports({
         pid: 1234,
         moduleBase: '0x400000',
@@ -181,7 +183,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
 
       const parsed = JSON.parse(getResponseText(result));
       expect(parsed).toHaveProperty('success', false);
-      expect(parsed.error).toContain('only supported on Windows');
+      expect(parsed.error).toMatch(/moduleName/);
     });
 
     it('memory_inline_hook_detect returns guidance when no startAddress (non-Win32)', async () => {

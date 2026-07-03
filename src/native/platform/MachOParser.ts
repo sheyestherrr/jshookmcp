@@ -19,6 +19,10 @@ const MH_MAGIC_64 = 0xfeedfacf;
 const FAT_MAGIC = 0xcafebabe;
 const FAT_CIGAM = 0xbebafeca;
 const LC_SEGMENT_64 = 0x19;
+/** LC_SYMTAB — classic symbol table (nlist_64). */
+const LC_SYMTAB = 0x2;
+/** n_type bit: external symbol (import or export candidate). */
+const N_EXT = 0x01;
 
 function parseThin(data: Buffer, offset: number): MachoSection[] {
   if (offset + 32 > data.length) return [];
@@ -114,4 +118,150 @@ export function parseMachoSections(filePath: string): MachoSection[] {
   }
 
   return [];
+}
+
+/** Mach-O 64-bit header fields exposed by `parseMachOHeader` (E5-C parity). */
+export interface MachOHeader {
+  /** CPU type: 0x01000007=x86_64, 0x0100000C=arm64. */
+  cpuType: number;
+  /** CPU subtype. */
+  cpuSubtype: number;
+  /** File type: 1=object, 2=executable, 6=dylib, 7=bundle. */
+  fileType: number;
+  /** Number of load commands. */
+  ncmds: number;
+  /** Size of all load commands. */
+  sizeofcmds: number;
+  /** Header flags. */
+  flags: number;
+}
+
+/** A single Mach-O symbol (nlist_64). */
+export interface MachOSymbol {
+  name: string;
+  /** Virtual address (n_value; 0 for undefined imports). */
+  value: bigint;
+  /** Section index (n_sect); 0 = undefined (import). */
+  sect: number;
+  /** True if external (N_EXT). */
+  isExternal: boolean;
+  /** True if undefined import (n_sect == 0 && N_EXT). */
+  isImport: boolean;
+}
+
+export interface MachOSymbolTable {
+  imports: MachOSymbol[];
+  exports: MachOSymbol[];
+}
+
+/** Find the file offset of the thin Mach-O 64 slice inside a FAT binary (or 0). */
+function findThinOffset(data: Buffer): number {
+  if (data.length < 4) return -1;
+  const magic = data.readUInt32LE(0);
+  if (magic === FAT_MAGIC || magic === FAT_CIGAM) {
+    const narch = data.readUInt32BE(4);
+    for (let i = 0; i < narch; i++) {
+      const archOff = 8 + i * 20;
+      if (archOff + 20 > data.length) break;
+      const cputype = data.readUInt32BE(archOff);
+      const offset = data.readUInt32BE(archOff + 8);
+      const size = data.readUInt32BE(archOff + 12);
+      if ((cputype === 0x01000007 || cputype === 0x0100000c) && offset + size <= data.length) {
+        if (data.readUInt32LE(offset) === MH_MAGIC_64) return offset;
+      }
+    }
+    return -1;
+  }
+  return magic === MH_MAGIC_64 ? 0 : -1;
+}
+
+/** Parse the Mach-O 64 header. Returns null for non-Mach-O files. */
+export function parseMachOHeader(filePath: string): MachOHeader | null {
+  let data: Buffer;
+  try {
+    data = readFileSync(filePath);
+  } catch {
+    return null;
+  }
+  const offset = findThinOffset(data);
+  if (offset < 0 || offset + 32 > data.length) return null;
+  return {
+    cpuType: data.readUInt32LE(offset + 4),
+    cpuSubtype: data.readUInt32LE(offset + 8),
+    fileType: data.readUInt32LE(offset + 12),
+    ncmds: data.readUInt32LE(offset + 16),
+    sizeofcmds: data.readUInt32LE(offset + 20),
+    flags: data.readUInt32LE(offset + 24),
+  };
+}
+
+/**
+ * Parse the LC_SYMTAB symbol table and split into imports (undefined external)
+ * and exports (defined external). Returns empty lists for non-Mach-O files or
+ * files with no symbol table.
+ */
+export function parseMachOSymbols(filePath: string): MachOSymbolTable {
+  let data: Buffer;
+  try {
+    data = readFileSync(filePath);
+  } catch {
+    return { imports: [], exports: [] };
+  }
+  const offset = findThinOffset(data);
+  if (offset < 0 || offset + 32 > data.length) return { imports: [], exports: [] };
+
+  const sizeofcmds = data.readUInt32LE(offset + 20);
+  const cmdStart = offset + 32;
+  const cmdEnd = Math.min(cmdStart + sizeofcmds, data.length);
+
+  // Find LC_SYMTAB.
+  let symoff = 0;
+  let nsyms = 0;
+  let stroff = 0;
+  let strsize = 0;
+  let found = false;
+  let cursor = cmdStart;
+  while (cursor + 8 <= cmdEnd) {
+    const cmd = data.readUInt32LE(cursor);
+    const cmdsize = data.readUInt32LE(cursor + 4);
+    if (cmdsize < 8) break;
+    if (cmd === LC_SYMTAB && cursor + 24 <= data.length) {
+      symoff = data.readUInt32LE(cursor + 8);
+      nsyms = data.readUInt32LE(cursor + 12);
+      stroff = data.readUInt32LE(cursor + 16);
+      strsize = data.readUInt32LE(cursor + 20);
+      found = true;
+      break;
+    }
+    cursor += cmdsize;
+  }
+  if (!found) return { imports: [], exports: [] };
+
+  const imports: MachOSymbol[] = [];
+  const exports: MachOSymbol[] = [];
+  // nlist_64 is 16 bytes: n_strx(4) n_type(1) n_sect(1) n_desc(2) n_value(8).
+  for (let i = 0; i < Math.min(nsyms, 8192); i++) {
+    const entry = symoff + i * 16;
+    if (entry + 16 > data.length) break;
+    const nStrx = data.readUInt32LE(entry);
+    const nType = data[entry + 4]!;
+    const nSect = data[entry + 5]!;
+    const nValue = data.readBigUInt64LE(entry + 8);
+    const isExternal = (nType & N_EXT) !== 0;
+    if (!isExternal) continue; // local symbols are not import/export candidates
+    const name = readCString(data, stroff + nStrx, 256);
+    if (!name) continue;
+    const isImport = nSect === 0;
+    const sym: MachOSymbol = {
+      name,
+      value: nValue,
+      sect: nSect,
+      isExternal,
+      isImport,
+    };
+    if (isImport) imports.push(sym);
+    else exports.push(sym);
+  }
+  void strsize;
+  return { imports, exports };
 }

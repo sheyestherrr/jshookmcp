@@ -16,6 +16,12 @@ import type { PlatformMemoryAPI } from '@native/platform/PlatformMemoryAPI';
 import { scanGuardPages as crossPlatformScanGuardPages } from '@native/platform/GuardPageScanner';
 import { scanIntegrity as crossPlatformScanIntegrity } from '@native/platform/IntegrityScanner';
 import { scanRangeForHooks } from '@native/platform/HookPatternScanner';
+import { parseElfHeader, parseElfSections, parseElfSymbols } from '@native/platform/ElfParser';
+import {
+  parseMachOHeader,
+  parseMachoSections,
+  parseMachOSymbols,
+} from '@native/platform/MachOParser';
 
 const TOOL_SPEEDHACK = 'memory_speedhack';
 const TOOL_GUARD_PAGES = 'memory_guard_pages';
@@ -237,48 +243,134 @@ export class IntegrityHandlers {
 
   async handlePEHeaders(args: Record<string, unknown>) {
     return handleSafe(async () => {
-      if (!this.peAnalyzer) {
+      const pid = await this.resolvePid(args.pid);
+
+      // Win32 fast path — PEAnalyzer reads the in-memory PE header by base addr.
+      if (this.peAnalyzer) {
+        const moduleBase = validateHexAddress(args.moduleBase, 'moduleBase');
+        const headers = await this.peAnalyzer.parseHeaders(pid, moduleBase);
+        let sections: unknown[] = [];
+        try {
+          sections = await this.peAnalyzer.listSections(pid, moduleBase);
+        } catch {
+          // best-effort: section enumeration failure does not invalidate headers
+        }
+        return { ...headers, sections };
+      }
+
+      // Cross-platform fallback — parse ELF/Mach-O header from the on-disk
+      // binary. Unlike PE (which is parsed from process memory by base address),
+      // ELF/Mach-O need the module's disk path, so callers must supply moduleName
+      // (a substring of the module path as reported by enumerateModules).
+      const moduleName = argString(args, 'moduleName');
+      if (!moduleName) {
         throw new Error(
-          'PE analysis tools (memory_pe_*) are only supported on Windows. ' +
-            'This tool requires Win32 PE format introspection.',
+          `memory_pe_headers on ${process.platform} requires 'moduleName' (a substring ` +
+            `of the module path). Win32 PE uses in-memory 'moduleBase'; ELF/Mach-O parse ` +
+            `the on-disk binary so they need the file path.`,
         );
       }
-      const pid = await this.resolvePid(args.pid);
-      const moduleBase = validateHexAddress(args.moduleBase, 'moduleBase');
-      // Return headers + section table so callers can see section names, RVAs,
-      // sizes and permissions without a separate memory_pe_imports_exports call.
-      // listSections is best-effort — a failure to enumerate sections does not
-      // invalidate the header parse.
-      const headers = await this.peAnalyzer.parseHeaders(pid, moduleBase);
-      let sections: unknown[] = [];
-      try {
-        sections = await this.peAnalyzer.listSections(pid, moduleBase);
-      } catch {
-        // best-effort: section enumeration failure does not invalidate headers
+      const api = getPlatformApi();
+      if (!api) {
+        throw new Error(`memory_pe_headers: no platform memory provider on ${process.platform}.`);
       }
-      return { ...headers, sections };
+      const isElf = api.platform === 'linux';
+      const isMacho = api.platform === 'darwin';
+      if (!isElf && !isMacho) {
+        throw new Error(
+          `memory_pe_headers: unsupported platform ${process.platform} (need Win32 PEAnalyzer or Linux/macOS ELF/Mach-O).`,
+        );
+      }
+      const handle = api.openProcess(pid, false);
+      try {
+        const mods = api.enumerateModules(handle);
+        const mod = (mods as Array<{ name: string; baseAddress: bigint }>).find((m) =>
+          m.name.toLowerCase().includes(moduleName.toLowerCase()),
+        );
+        if (!mod) {
+          throw new Error(`memory_pe_headers: no loaded module matches '${moduleName}'.`);
+        }
+        const path = mod.name;
+        const header = isElf ? parseElfHeader(path) : parseMachOHeader(path);
+        const sections = isElf ? parseElfSections(path) : parseMachoSections(path);
+        if (!header) {
+          throw new Error(
+            `memory_pe_headers: '${path}' is not a recognised ${isElf ? 'ELF64' : 'Mach-O 64'} binary.`,
+          );
+        }
+        return {
+          format: isElf ? 'elf64' : 'mach-o-64',
+          moduleName: path.split('/').pop() ?? path,
+          moduleBase: `0x${mod.baseAddress.toString(16)}`,
+          ...header,
+          sections,
+          platformNote: `Parsed on-disk ${isElf ? 'ELF' : 'Mach-O'} (Win32 PE in-memory parse not available on ${api.platform}).`,
+        };
+      } finally {
+        api.closeProcess(handle);
+      }
     });
   }
 
   async handlePEImportsExports(args: Record<string, unknown>) {
     return handleSafe(async () => {
-      if (!this.peAnalyzer) {
+      const table = argEnum(args, 'table', PE_TABLE_OPTIONS, 'both');
+      const pid = await this.resolvePid(args.pid);
+
+      // Win32 fast path — PEAnalyzer parses the in-memory import/export tables.
+      if (this.peAnalyzer) {
+        const base = validateHexAddress(args.moduleBase, 'moduleBase');
+        const result: Record<string, unknown> = {};
+        if (table === 'imports' || table === 'both') {
+          result.imports = await this.peAnalyzer.parseImports(pid, base);
+        }
+        if (table === 'exports' || table === 'both') {
+          result.exports = await this.peAnalyzer.parseExports(pid, base);
+        }
+        return result;
+      }
+
+      // Cross-platform fallback — ELF .dynsym / Mach-O LC_SYMTAB from disk.
+      const moduleName = argString(args, 'moduleName');
+      if (!moduleName) {
+        throw new Error(`memory_pe_imports_exports on ${process.platform} requires 'moduleName'.`);
+      }
+      const api = getPlatformApi();
+      if (!api) {
         throw new Error(
-          'PE analysis tools (memory_pe_*) are only supported on Windows. ' +
-            'This tool requires Win32 PE format introspection.',
+          `memory_pe_imports_exports: no platform memory provider on ${process.platform}.`,
         );
       }
-      const table = argEnum(args, 'table', PE_TABLE_OPTIONS, 'both');
-      const base = validateHexAddress(args.moduleBase, 'moduleBase');
-      const pid = await this.resolvePid(args.pid);
-      const result: Record<string, unknown> = {};
-      if (table === 'imports' || table === 'both') {
-        result.imports = await this.peAnalyzer.parseImports(pid, base);
+      const isElf = api.platform === 'linux';
+      const isMacho = api.platform === 'darwin';
+      if (!isElf && !isMacho) {
+        throw new Error(`memory_pe_imports_exports: unsupported platform ${process.platform}.`);
       }
-      if (table === 'exports' || table === 'both') {
-        result.exports = await this.peAnalyzer.parseExports(pid, base);
+      const handle = api.openProcess(pid, false);
+      try {
+        const mods = api.enumerateModules(handle);
+        const mod = (mods as Array<{ name: string; baseAddress: bigint }>).find((m) =>
+          m.name.toLowerCase().includes(moduleName.toLowerCase()),
+        );
+        if (!mod) {
+          throw new Error(`memory_pe_imports_exports: no loaded module matches '${moduleName}'.`);
+        }
+        const path = mod.name;
+        const symtab = isElf ? parseElfSymbols(path) : parseMachOSymbols(path);
+        const result: Record<string, unknown> = {};
+        if (table === 'imports' || table === 'both') {
+          result.imports = symtab.imports;
+        }
+        if (table === 'exports' || table === 'both') {
+          result.exports = symtab.exports;
+        }
+        result.format = isElf ? 'elf64-dynsym' : 'mach-o-nlist';
+        result.moduleName = path.split('/').pop() ?? path;
+        result.platformNote = `Parsed on-disk ${isElf ? 'ELF .dynsym' : 'Mach-O LC_SYMTAB'} (undefined=import, defined external=export).`;
+        return result;
+      } finally {
+        api.closeProcess(handle);
       }
-      return result;
     });
   }
 
