@@ -50,6 +50,20 @@ export interface AsarDeobfuscateResult {
 
 const MIN_FLAG_SCORE = 30;
 
+// Pre-compiled hot-path regexes — these were previously created fresh per
+// file inside analyzeFile(), which re-jitted the same patterns hundreds of
+// times across a 500-file ASAR scan. Hoisting them to module scope makes the
+// scan O(files × filesize) in matching cost, with zero per-file compile.
+const HEX_NAME_RE = /_0x[0-9a-fA-F]{4,8}/g;
+const EVAL_ATOB_RE = /\beval\s*\(\s*atob\s*\(/;
+const NEW_FUNCTION_RE = /\bnew\s+Function\s*\(/;
+const EVAL_BASE64_RE = /\beval\s*\(\s*(?:window\.|global\.)?atob\s*\(/;
+const HEX_LITERAL_RE = /\b0x[0-9a-fA-F]{4,}\b/g;
+const LOOP_SWITCH_RE =
+  /(?:while\s*\([^)]*\)\s*\{|for\s*\([^)]*\)\s*\{)[\s\S]{0,2000}?\bswitch\s*\(/g;
+const HEX_CASE_RE = /case\s+0x[0-9a-fA-F]+:/g;
+const DECIMAL_CASE_RE = /case\s+\d+:/g;
+
 export async function handleAsarDeobfuscate(args: Record<string, unknown>): Promise<ToolResponse> {
   try {
     const inputPath = parseStringArg(args, 'inputPath', true);
@@ -169,7 +183,10 @@ function analyzeFile(path: string, size: number, content: string): AsarFileObfus
   let score = 0;
 
   // String-array obfuscation: high density of _0x[0-9a-f]{4,} identifiers.
-  const hexNameMatches = content.match(/_0x[0-9a-fA-F]{4,8}/g);
+  // Reset lastIndex because the regex is module-scoped (shared state) and
+  // match() returns null on a non-global flag — but we use the g-flag pattern
+  // via String.match which is stateless for the global flag.
+  const hexNameMatches = content.match(HEX_NAME_RE);
   const hexNameCount = hexNameMatches ? hexNameMatches.length : 0;
   indicators.hexNameCount = hexNameCount;
   if (hexNameCount > 50) {
@@ -188,9 +205,9 @@ function analyzeFile(path: string, size: number, content: string): AsarFileObfus
   }
 
   // Dynamic code execution.
-  const evalAtob = /\beval\s*\(\s*atob\s*\(/.test(content);
-  const newFunction = /\bnew\s+Function\s*\(/.test(content);
-  const evalBase64 = /\beval\s*\(\s*(?:window\.|global\.)?atob\s*\(/.test(content);
+  const evalAtob = EVAL_ATOB_RE.test(content);
+  const newFunction = NEW_FUNCTION_RE.test(content);
+  const evalBase64 = EVAL_BASE64_RE.test(content);
   indicators.dynamicCode = evalAtob || newFunction || evalBase64;
   if (indicators.dynamicCode) {
     score += 25;
@@ -220,7 +237,7 @@ function analyzeFile(path: string, size: number, content: string): AsarFileObfus
   }
 
   // Numeric/string literal flood (common in packed payloads).
-  const numericLiteralMatches = content.match(/\b0x[0-9a-fA-F]{4,}\b/g);
+  const numericLiteralMatches = content.match(HEX_LITERAL_RE);
   const hexLiteralCount = numericLiteralMatches ? numericLiteralMatches.length : 0;
   indicators.hexLiteralCount = hexLiteralCount;
   if (hexLiteralCount > 100) {
@@ -266,17 +283,18 @@ function countOccurrences(haystack: string, needle: string): number {
  * with many sequential numeric case labels (the dispatcher pattern).
  */
 function detectSwitchInLoop(content: string): boolean {
-  const loopSwitchPattern =
-    /(?:while\s*\([^)]*\)\s*\{|for\s*\([^)]*\)\s*\{)[\s\S]{0,2000}?\bswitch\s*\(/g;
+  // LOOP_SWITCH_RE carries the global flag; reset lastIndex so a previous
+  // caller's state never bleeds into this scan (defensive — exec advances it).
+  LOOP_SWITCH_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = loopSwitchPattern.exec(content)) !== null) {
+  while ((match = LOOP_SWITCH_RE.exec(content)) !== null) {
     const switchStart = match.index + match[0].length;
     const switchBody = content.slice(switchStart, switchStart + 4000);
-    const caseLabels = switchBody.match(/case\s+0x[0-9a-fA-F]+:/g);
+    const caseLabels = switchBody.match(HEX_CASE_RE);
     if (caseLabels && caseLabels.length >= 5) {
       return true;
     }
-    const decimalCases = switchBody.match(/case\s+\d+:/g);
+    const decimalCases = switchBody.match(DECIMAL_CASE_RE);
     if (decimalCases && decimalCases.length >= 5) {
       return true;
     }

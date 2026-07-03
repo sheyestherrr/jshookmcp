@@ -115,4 +115,37 @@ describe('handleSyscallOriginMap', () => {
     expect(result.origins).toEqual([]);
     expect(result.unmappedCount).toBe(0);
   });
+
+  it('attributes events to the live debugger frame when one is paused', async () => {
+    // Synthesize a MCPServerContext with a paused debugger whose top frame is
+    // `app.handleRequest`. tryGetJsStack reads getPausedState() synchronously,
+    // so every event should be attributed to that frame as the 'debugger'
+    // source (mode 'debugger').
+    const events: SyscallEvent[] = [makeEvent('read', ['fd=3']), makeEvent('write', ['fd=4'])];
+    const callFrames = [
+      {
+        callFrameId: 'cf-0',
+        functionName: 'app.handleRequest',
+        url: 'app.js',
+        location: { scriptId: 's1', lineNumber: 10, columnNumber: 0 },
+        scopeChain: [],
+        this: undefined,
+      },
+    ];
+    const fakeDebuggerManager = {
+      getPausedState: () => ({ callFrames, reason: 'other' }),
+    };
+    const ctx = { debuggerManager: fakeDebuggerManager } as unknown as Parameters<
+      typeof handleSyscallOriginMap
+    >[2];
+
+    const result = await handleSyscallOriginMap({ useDebugger: true }, events, ctx);
+
+    expect(result.success).toBe(true);
+    expect(result.mode).toBe('debugger');
+    expect(result.origins).toHaveLength(1);
+    expect(result.origins[0]?.jsFunction).toBe('app.handleRequest');
+    expect(result.origins[0]?.source).toBe('debugger');
+    expect(result.origins[0]?.topFrame?.scriptUrl).toBe('app.js');
+  });
 });

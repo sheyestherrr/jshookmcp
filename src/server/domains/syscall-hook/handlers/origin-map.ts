@@ -10,6 +10,7 @@
  */
 
 import type { MCPServerContext } from '@server/MCPServer.context';
+import type { DebuggerManager, CallFrame } from '@modules/debugger/DebuggerManager';
 import type { SyscallEvent } from '@modules/syscall-hook';
 import { SyscallToJSMapper } from '@modules/syscall-hook';
 import { argNumber, argBool } from '@server/domains/shared/parse-args';
@@ -53,32 +54,35 @@ interface OriginMapResult {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-async function tryGetJsStack(ctx: MCPServerContext): Promise<StackFrame[] | undefined> {
-  try {
-    const dm = ctx.debuggerManager;
-    if (!dm) return undefined;
+/**
+ * Pull the paused CDP call frames from the runtime debugger, if one is
+ * attached and currently paused. Returns `undefined` when no debugger is
+ * attached or the target isn't paused — in those cases the caller falls
+ * back to the heuristic mapper.
+ *
+ * Uses the real `DebuggerManager.getPausedState()` contract (synchronous,
+ * returns `PausedState | null`) rather than reflective property probing,
+ * so a contract change surfaces at compile time. There is no async CDP
+ * round-trip here — `getPausedState` reads the cached paused state already
+ * captured by the DebuggerManager's event handler — so no try/catch is
+ * needed.
+ */
+function tryGetJsStack(ctx: MCPServerContext): StackFrame[] | undefined {
+  const dm = ctx.debuggerManager as DebuggerManager | undefined;
+  if (!dm) return undefined;
 
-    let callFrames: unknown;
-    const dmUnknown = dm as unknown as Record<string, unknown>;
-    if (typeof dmUnknown.getPausedState === 'function') {
-      const state = await (dmUnknown.getPausedState as () => Promise<{ callFrames?: unknown }>)();
-      callFrames = state?.callFrames;
-    }
-
-    if (!Array.isArray(callFrames) || callFrames.length === 0) {
-      return undefined;
-    }
-
-    return (callFrames as Array<Record<string, unknown>>).map((frame) => ({
-      functionName:
-        typeof frame['functionName'] === 'string' ? frame['functionName'] : '<anonymous>',
-      scriptUrl: typeof frame['url'] === 'string' ? frame['url'] : undefined,
-      lineNumber: typeof frame['lineNumber'] === 'number' ? frame['lineNumber'] : undefined,
-      columnNumber: typeof frame['columnNumber'] === 'number' ? frame['columnNumber'] : undefined,
-    }));
-  } catch {
+  const state = dm.getPausedState();
+  const callFrames = state?.callFrames;
+  if (!callFrames || callFrames.length === 0) {
     return undefined;
   }
+
+  return callFrames.map((frame: CallFrame) => ({
+    functionName: frame.functionName || '<anonymous>',
+    scriptUrl: frame.url || undefined,
+    lineNumber: frame.location?.lineNumber,
+    columnNumber: frame.location?.columnNumber,
+  }));
 }
 
 interface AccumulatedEntry {
@@ -106,7 +110,7 @@ export async function handleSyscallOriginMap(
   // expose frames); we attribute every event to that frame when available.
   let liveStack: StackFrame[] | undefined;
   if (useDebugger && ctx) {
-    liveStack = await tryGetJsStack(ctx);
+    liveStack = tryGetJsStack(ctx);
   }
 
   const byFunction = new Map<string, AccumulatedEntry>();

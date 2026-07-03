@@ -5,6 +5,7 @@
 import type { StateMachine } from '@modules/protocol-analysis';
 import { ProtocolPatternEngine, StateMachineInferrer } from '@modules/protocol-analysis';
 import type { EventBus, ServerEventMap } from '@server/EventBus';
+import { DetailedDataManager } from '@utils/DetailedDataManager';
 import type { ProtocolAtomicEvent, ProtocolAtomicEventPayload } from './shared';
 
 export const EMPTY_STATE_MACHINE: StateMachine = {
@@ -19,6 +20,8 @@ export class ProtocolAnalysisBaseHandlers {
   protected engine?: ProtocolPatternEngine;
   protected inferrer?: StateMachineInferrer;
   protected eventBus?: EventBus<ServerEventMap>;
+  /** Shared large-response sink; lazy-init via getInstance() so tests can reset it. */
+  protected readonly detailedDataManager: DetailedDataManager = DetailedDataManager.getInstance();
 
   constructor(
     engine?: ProtocolPatternEngine,

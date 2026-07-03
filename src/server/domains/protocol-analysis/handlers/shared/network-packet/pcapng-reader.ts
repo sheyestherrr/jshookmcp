@@ -31,6 +31,21 @@ export interface PcapngParseOptions {
   interfaceFilter?: number;
   /** When true, include raw bodyHex on every block (verbose). Default false. */
   includeRawBodies?: boolean;
+  /**
+   * Per-packet payload (hex string) above this many bytes is offloaded via the
+   * `offloadPacket` callback and the summary carries `dataRef` instead of
+   * `dataHex`. Default 65536 (64 KiB of hex = 32 KiB of payload). Set to
+   * `Infinity` to disable offloading.
+   */
+  offloadThreshold?: number;
+  /**
+   * Optional sink for large packet payloads. When a payload exceeds
+   * `offloadThreshold`, this callback receives the hex string and returns a
+   * detailId stored on the packet summary as `dataRef`. If omitted, large
+   * payloads are still truncated to `maxBytesPerPacket` and inlined — i.e.
+   * the handler must wire this up to enable true offloading.
+   */
+  offloadPacket?: (hex: string, packetIndex: number) => string;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,13 +154,15 @@ function detectEndianness(buffer: Buffer): PacketEndianness | null {
   if (buffer.length < 8) return null;
   // SHB block type 0x0A0D0D0A is endian-agnostic.
   const firstType = buffer.readUInt32BE(0);
-  if (firstType !== PCAPNG_BLOCK_TYPE.SECTION_HEADER) return null;
+  if (firstType !== PCAPNG_BLOCK_TYPE.SECTION_HEADER) {
+    return null; // not a PCAPNG SHB — caller surfaces a clear error
+  }
   // The Byte-Order Magic at offset 8 reveals endianness.
   const bomBe = buffer.readUInt32BE(8);
   const bomLe = buffer.readUInt32LE(8);
   if (bomBe === PCAPNG_BYTE_ORDER_MAGIC) return 'big';
   if (bomLe === PCAPNG_BYTE_ORDER_MAGIC) return 'little';
-  return null;
+  return null; // SHB present but BOM unrecognised — malformed section header
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +173,19 @@ export function parsePcapng(buffer: Buffer, options: PcapngParseOptions = {}): P
   const warnings: string[] = [];
   const endian = detectEndianness(buffer);
   if (endian === null) {
-    throw new Error('Not a PCAPNG file: missing Section Header Block with valid Byte-Order Magic');
+    if (buffer.length < 8) {
+      throw new Error('Not a PCAPNG file: buffer too short for a Section Header Block');
+    }
+    // First 4 bytes are SHB block type — distinguish "wrong magic" from "BOM corrupted".
+    const firstType = buffer.readUInt32BE(0);
+    if (firstType !== PCAPNG_BLOCK_TYPE.SECTION_HEADER) {
+      throw new Error(
+        `Not a PCAPNG file: first block type is 0x${firstType.toString(16)} (expected Section Header Block 0x${PCAPNG_BLOCK_TYPE.SECTION_HEADER.toString(16)})`,
+      );
+    }
+    throw new Error(
+      'Not a PCAPNG file: Section Header Block present but Byte-Order Magic is malformed',
+    );
   }
 
   const result: PcapngReadResult = {
@@ -340,7 +369,13 @@ function parseEnhancedPacket(
   const packetBytes = buffer.subarray(dataStart, dataStart + capturedLength);
   const limit = options.maxBytesPerPacket ?? packetBytes.length;
   const visibleLength = Math.min(limit, packetBytes.length);
+  const truncated = visibleLength < packetBytes.length;
 
+  const payload = summarizePacketPayload(
+    packetBytes.subarray(0, visibleLength),
+    packetIndex,
+    options,
+  );
   result.packets.push({
     index: packetIndex,
     blockIndex: result.blockCount - 1,
@@ -351,8 +386,8 @@ function parseEnhancedPacket(
     timestampHex: timestampToHex(timestampHigh, timestampLow),
     capturedLength,
     originalLength,
-    dataHex: packetBytes.subarray(0, visibleLength).toString('hex'),
-    truncated: visibleLength < packetBytes.length,
+    ...payload,
+    truncated,
   });
 }
 
@@ -371,7 +406,13 @@ function parseSimplePacket(
   const packetBytes = buffer.subarray(dataStart, dataStart + capturedLength);
   const limit = options.maxBytesPerPacket ?? packetBytes.length;
   const visibleLength = Math.min(limit, packetBytes.length);
+  const truncated = visibleLength < packetBytes.length;
 
+  const payload = summarizePacketPayload(
+    packetBytes.subarray(0, visibleLength),
+    packetIndex,
+    options,
+  );
   result.packets.push({
     index: packetIndex,
     blockIndex: result.blockCount - 1,
@@ -382,9 +423,31 @@ function parseSimplePacket(
     timestampHex: null,
     capturedLength,
     originalLength,
-    dataHex: packetBytes.subarray(0, visibleLength).toString('hex'),
-    truncated: visibleLength < packetBytes.length,
+    ...payload,
+    truncated,
   });
+}
+
+/**
+ * Decide whether a packet payload hex stays inline (`dataHex`) or is offloaded
+ * via `options.offloadPacket` (`dataRef`). Offloading keeps multi-MB payloads
+ * out of the LLM context window, matching the project's response-offload
+ * pipeline; the inline default is preserved when no sink is wired or the
+ * payload is small.
+ */
+const DEFAULT_OFFLOAD_THRESHOLD = 65536; // 64 KiB of hex = 32 KiB of payload
+
+function summarizePacketPayload(
+  visibleBytes: Buffer,
+  packetIndex: number,
+  options: PcapngParseOptions,
+): { dataHex?: string; dataRef?: string } {
+  const hex = visibleBytes.toString('hex');
+  const threshold = options.offloadThreshold ?? DEFAULT_OFFLOAD_THRESHOLD;
+  if (hex.length > threshold && options.offloadPacket) {
+    return { dataRef: options.offloadPacket(hex, packetIndex) };
+  }
+  return { dataHex: hex };
 }
 
 function parseNameResolution(

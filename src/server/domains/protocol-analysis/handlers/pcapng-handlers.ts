@@ -53,10 +53,20 @@ export class ProtocolAnalysisPcapngHandlers extends ProtocolAnalysisFingerprintH
       if (buffer.length < 12) {
         throw new Error('PCAPNG file is too small to contain a Section Header Block');
       }
+      // Offload any packet payload whose hex exceeds 64 KiB to the shared
+      // DetailedDataManager sink — the summary then carries `dataRef` (a
+      // retrievable detailId) instead of inline `dataHex`, keeping multi-MB
+      // captures out of the LLM context window (matches the project's
+      // response-offload pipeline, issue #62).
+      const offloadPacket = (hex: string, packetIndex: number): string => {
+        const detailId = this.detailedDataManager.store({ packetIndex, hex });
+        return detailId;
+      };
       const result = parsePcapng(buffer, {
         maxPackets,
         maxBytesPerPacket,
         interfaceFilter,
+        offloadPacket,
       });
       this.emitEvent('protocol:pcapng_read', {
         path,

@@ -99,7 +99,17 @@ export type PcapngPacketSummary = {
   timestampHex: string | null;
   capturedLength: number;
   originalLength: number;
-  dataHex: string;
+  /**
+   * Inline hex of the captured packet payload, present when the payload is
+   * small enough to keep in the tool response. Mutually exclusive with
+   * `dataRef`: when the payload exceeds `PcapngParseOptions.offloadThreshold`
+   * (default 64 KiB of hex), it is stored in the `DetailedDataManager` and
+   * `dataRef` carries the retrievable detailId instead — keeping multi-MB
+   * payloads out of the LLM context window.
+   */
+  dataHex?: string;
+  /** detailId for a large payload offloaded to DetailedDataManager. */
+  dataRef?: string;
   truncated: boolean;
 };
 

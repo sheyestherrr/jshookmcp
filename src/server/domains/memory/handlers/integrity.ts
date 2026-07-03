@@ -37,7 +37,13 @@ const HOOK_SCAN_MODES = new Set<'inline' | 'iat' | 'both'>(['inline', 'iat', 'bo
 function getPlatformApi(): PlatformMemoryAPI | null {
   try {
     return createPlatformProvider();
-  } catch {
+  } catch (err) {
+    // Fail-soft: native platform provider may be unavailable (non-Win32 koffi
+    // module absent, ABI mismatch, etc.). Down-tools degrade to per-handler
+    // fallbacks; log so the absence isn't silent.
+    logger.debug(
+      `memory: platform memory provider unavailable (${err instanceof Error ? err.message : String(err)}); using per-handler fallbacks`,
+    );
     return null;
   }
 }
