@@ -11,6 +11,7 @@
  */
 
 import { argString, argNumber } from '@server/domains/shared/parse-args';
+import { createCDPSession } from './cdp-session';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -55,29 +56,7 @@ function mapTier(status: number): { optimized: boolean; tier: FunctionOptStatus[
 
 // ── CDP Helpers ────────────────────────────────────────────────────────────────
 
-interface CDPSessionLike {
-  send<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
-  detach(): Promise<void>;
-}
-
-async function createCDPSession(getPage?: () => Promise<unknown>): Promise<CDPSessionLike | null> {
-  if (!getPage) return null;
-  try {
-    const page = await getPage();
-    if (
-      page &&
-      typeof page === 'object' &&
-      'createCDPSession' in page &&
-      typeof (page as Record<string, unknown>).createCDPSession === 'function'
-    ) {
-      const factory = (page as Record<string, unknown>).createCDPSession as () => Promise<unknown>;
-      return (await factory()) as CDPSessionLike;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
+// createCDPSession imported from shared cdp-session.ts
 
 // ── Handler ────────────────────────────────────────────────────────────────────
 
