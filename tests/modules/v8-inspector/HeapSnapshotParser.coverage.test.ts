@@ -148,3 +148,42 @@ describe('HeapSnapshotParser — real 2-node snapshot (deep parse)', () => {
     expect(dom.size).toBeGreaterThan(0);
   });
 });
+
+describe('HeapSnapshotParser — line-format snapshot (parseLineSnapshot)', () => {
+  // The line format (multi-line text) routes through parseLineSnapshot:
+  // first line = meta JSON, subsequent lines = JSON record arrays where
+  // tag 0 = node (compact: [0, "name", id, selfSize]) and tag 1 = edge.
+  const LINE_FORMAT = [
+    JSON.stringify({
+      node_types: [['hidden', 'object']],
+      edge_types: [['element', 'property']],
+      strings: ['Root', 'Obj'],
+    }),
+    '[0, "Root", 1, 16]',
+    '[0, "Obj", 2, 32]',
+  ].join('\n');
+
+  it('parses compact node records from the line format', () => {
+    const p = new HeapSnapshotParser();
+    p.feedChunk([LINE_FORMAT]);
+    expect(p.nodeCount).toBe(2);
+    const names = p.getAllNodes().map((n) => n.name);
+    expect(names).toContain('Root');
+    expect(names).toContain('Obj');
+  });
+
+  it('queries + retained sizes work on line-format data', () => {
+    const p = new HeapSnapshotParser();
+    p.feedChunk([LINE_FORMAT]);
+    // Compact records use typeIdx 0 → first node type ("hidden"), so filter on that.
+    expect(p.getObjectsByType('hidden').length).toBeGreaterThan(0);
+    expect(p.getAllRetainedSizes().length).toBe(2);
+    expect(p.getTopRetainers(5).length).toBeGreaterThan(0);
+  });
+
+  it('returns empty for a line-format snapshot with only a meta line', () => {
+    const p = new HeapSnapshotParser();
+    p.feedChunk([JSON.stringify({ node_types: [[]], edge_types: [[]], strings: [] })]);
+    expect(p.nodeCount).toBe(0);
+  });
+});
