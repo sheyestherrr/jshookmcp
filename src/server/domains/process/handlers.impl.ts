@@ -156,7 +156,7 @@ export class ProcessToolHandlers extends ProcessHandlersBase {
     super(ctx);
     // Re-use the same deps and processMgmt from the base class
     this.injection = new InjectionHandlers(this.deps, this.processMgmt);
-    this.hollowing = new HollowingDetectionHandlers();
+    this.hollowing = new HollowingDetectionHandlers(this.processMgmt);
     this.handleEnum = new HandleEnumerationHandlers(this.processMgmt);
     this.apcDetection = new ApcDetectionHandlers(this.deps);
   }

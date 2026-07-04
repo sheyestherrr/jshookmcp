@@ -223,7 +223,7 @@ export const processToolDefinitions: Tool[] = [
   tool('process_enum_threads', (t) =>
     t
       .desc(
-        'Enumerate all threads in a process. Returns thread IDs. Uses CreateToolhelp32Snapshot (Win32 only).',
+        'Enumerate all threads in a process. Returns thread IDs. Cross-platform: Win32 uses CreateToolhelp32Snapshot; Linux reads /proc/{pid}/task; macOS uses `ps -M`.',
       )
       .number('pid', 'Process ID to enumerate threads for')
       .required('pid'),
@@ -235,7 +235,9 @@ export const processToolDefinitions: Tool[] = [
         'Detect process hollowing (malware technique that unmaps original process image and injects malicious code). ' +
           'Compares process memory sections (.text, .data, .rdata) with on-disk PE file using SHA-256 hashes. ' +
           'Returns detection result with confidence score and list of differing sections. ' +
-          'WARNING: autoRestore=true is HIGH RISK and may crash the target process. Win32 only.',
+          'WARNING: autoRestore=true is HIGH RISK, may crash the target process, and is Win32-only. ' +
+          'Cross-platform: Win32 compares PE sections; Linux/macOS compare ELF/Mach-O executable ' +
+          'sections via IntegrityScanner (autoRestore unavailable).',
       )
       .number('pid', 'Process ID to check for hollowing')
       .boolean(

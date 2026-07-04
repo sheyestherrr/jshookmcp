@@ -121,8 +121,10 @@ describe('CRIT-07: Missing process tool registrations', () => {
       if (platform === 'win32') {
         expect(registeredNames.size).toBe(definedNames.size);
       } else {
-        // check_debug_port is the only Win32-only tool (process_enum_threads was added later)
-        expect(registeredNames.size).toBe(definedNames.size - 1);
+        // Win32-only tools (manifest WIN32_ONLY_TOOLS): check_debug_port,
+        // process_enum_handles, process_detect_apc.
+        // (process_enum_threads + process_detect_hollowing are cross-platform.)
+        expect(registeredNames.size).toBe(definedNames.size - 3);
       }
     });
   });

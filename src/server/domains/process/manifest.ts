@@ -23,11 +23,13 @@ async function ensure(ctx: MCPServerContext): Promise<H> {
 
 const IS_WIN32 = EFFECTIVE_PLATFORM === 'win32';
 
-// Win32-only tool names — use CreateRemoteThread / NtQueryInformationProcess / CreateToolhelp32Snapshot
+// Win32-only tool names — use CreateRemoteThread / NtQueryInformationProcess / CreateToolhelp32Snapshot.
+// `process_enum_threads` is cross-platform (Win32 Toolhelp32Snapshot fast path; Linux /proc/{pid}/task;
+// macOS `ps -M`) via ThreadEnumerator — see injection-handlers.ts::handleProcessEnumThreads.
+// `process_detect_hollowing` is cross-platform (Win32 PE compareMemoryWithDisk; Linux/macOS
+// IntegrityScanner ELF/Mach-O section hash fallback) — see hollowing-detection.ts.
 const WIN32_ONLY_TOOLS = new Set([
   'check_debug_port',
-  'process_enum_threads',
-  'process_detect_hollowing',
   'process_enum_handles',
   'process_detect_apc',
 ]);

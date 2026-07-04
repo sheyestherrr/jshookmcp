@@ -26,6 +26,8 @@ const CROSS_PLATFORM_TOOLS = [
   'inject_shellcode',
   'enumerate_modules',
   'check_debug_port',
+  'process_enum_threads',
+  'process_detect_hollowing',
 ];
 
 async function loadManifestWithPlatform(platform?: 'win32' | 'linux' | 'darwin') {
@@ -56,7 +58,7 @@ describe('process manifest platform filtering', () => {
     const manifest = await loadManifestWithPlatform('linux');
     const registeredNames = new Set(manifest.registrations.map((r) => r.tool.name));
 
-    expect(manifest.registrations.length).toBe(20);
+    expect(manifest.registrations.length).toBe(22);
     for (const tool of CROSS_PLATFORM_TOOLS) {
       if (tool === 'inject_dll' || tool === 'inject_shellcode' || tool === 'check_debug_port') {
         continue;
@@ -64,5 +66,8 @@ describe('process manifest platform filtering', () => {
       expect(registeredNames.has(tool), `Missing cross-platform tool: ${tool}`).toBe(true);
     }
     expect(registeredNames.has('check_debug_port')).toBe(false);
+    // process_enum_threads + process_detect_hollowing are now cross-platform
+    expect(registeredNames.has('process_enum_threads')).toBe(true);
+    expect(registeredNames.has('process_detect_hollowing')).toBe(true);
   });
 });

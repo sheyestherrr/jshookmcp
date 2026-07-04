@@ -2,7 +2,15 @@
  * Process Hollowing Detection Handler
  *
  * Detects process hollowing attacks where malware unmaps the original process image
- * and injects malicious code. Compares process memory sections with on-disk PE file.
+ * and injects malicious code. Compares process memory sections with on-disk binary.
+ *
+ * Platform strategy:
+ *   - Win32:  PEAnalyzer.compareMemoryWithDisk on the main module (PE sections),
+ *             with optional autoRestore via WriteProcessMemory.
+ *   - Linux/macOS: IntegrityScanner.scanIntegrity — ELF/Mach-O executable-section
+ *             SHA-256 hash comparison (reuses the E5-A cross-platform integrity
+ *             primitive). autoRestore is Win32-only (cross-platform ptrace/mach
+ *             write is too risky to ship without a dedicated audit).
  */
 
 import { argNumber, argBool } from '@server/domains/shared/parse-args';
@@ -14,10 +22,18 @@ import {
   GetModuleFileNameEx,
   GetModuleInformation,
 } from '@native/Win32API';
+import { createPlatformProvider } from '@native/platform/factory';
+import { scanIntegrity, type IntegritySectionResult } from '@native/platform/IntegrityScanner';
+import type { ProcessManagementHandlers } from './process-management';
 import { logger } from '@utils/logger';
 
 export class HollowingDetectionHandlers {
   private peAnalyzer = new PEAnalyzer();
+  private processMgmt?: ProcessManagementHandlers;
+
+  constructor(processMgmt?: ProcessManagementHandlers) {
+    this.processMgmt = processMgmt;
+  }
 
   async handleDetectHollowing(args: Record<string, unknown>) {
     try {
@@ -29,117 +45,11 @@ export class HollowingDetectionHandlers {
       // includeMemoryDump is reserved for future use (e.g., forensic analysis)
       // const includeMemoryDump = argBool(args, 'includeMemoryDump', false);
 
-      // 1. Open process handle
-      const hProcess = openProcessForMemory(pid);
-
-      try {
-        // 2. Enumerate process modules
-        const modulesResult = EnumProcessModules(hProcess);
-        if (!modulesResult.success || modulesResult.modules.length === 0) {
-          return {
-            success: false,
-            isHollowed: false,
-            confidence: 0,
-            error: 'No modules found in target process (process may have exited)',
-          };
-        }
-
-        const mainModuleHandle = modulesResult.modules[0]!;
-        const moduleBaseHex = `0x${mainModuleHandle.toString(16)}`;
-
-        // 3. Get module file path
-        const diskPath = GetModuleFileNameEx(hProcess, mainModuleHandle);
-        if (!diskPath) {
-          return {
-            success: false,
-            isHollowed: false,
-            confidence: 0,
-            error: 'Failed to get module path (process may have exited or access denied)',
-            moduleBase: moduleBaseHex,
-          };
-        }
-
-        // 4. Get module info
-        const moduleInfoResult = GetModuleInformation(hProcess, mainModuleHandle);
-        if (!moduleInfoResult.success) {
-          return {
-            success: false,
-            isHollowed: false,
-            confidence: 0,
-            error: 'Failed to get module information',
-            moduleBase: moduleBaseHex,
-            modulePath: diskPath,
-          };
-        }
-
-        // 5. Compare memory with disk
-        let comparisonResult;
-        try {
-          comparisonResult = await this.peAnalyzer.compareMemoryWithDisk(
-            pid,
-            moduleBaseHex,
-            diskPath,
-          );
-        } catch (error) {
-          return {
-            success: false,
-            isHollowed: false,
-            confidence: 0,
-            error: `Failed to compare memory with disk: ${error instanceof Error ? error.message : String(error)}`,
-            moduleBase: moduleBaseHex,
-            modulePath: diskPath,
-          };
-        }
-
-        const isHollowed = !comparisonResult.isMatch;
-
-        // 6. Optional: Auto-restore from disk (HIGH RISK)
-        let restored = false;
-        let restoreError: string | undefined;
-
-        if (autoRestore && isHollowed) {
-          logger.warn(
-            `[process_detect_hollowing] autoRestore=true for PID ${pid} - attempting restoration (HIGH RISK)`,
-          );
-          try {
-            restored = await this.restoreFromDisk(
-              pid,
-              mainModuleHandle,
-              diskPath,
-              comparisonResult.differences,
-            );
-          } catch (error) {
-            restoreError = `Restoration failed: ${error instanceof Error ? error.message : String(error)}`;
-            logger.error(`[process_detect_hollowing] Restoration failed for PID ${pid}:`, error);
-          }
-        }
-
-        // 7. Build result
-        return {
-          success: true,
-          isHollowed,
-          confidence: comparisonResult.confidence,
-          modulePath: diskPath,
-          moduleBase: moduleBaseHex,
-          moduleSizeOfImage: moduleInfoResult.info.SizeOfImage,
-          differences: comparisonResult.differences.map((d) => ({
-            section: d.sectionName,
-            offset: `0x${d.offsetStart.toString(16)}`,
-            size: d.bytesCompared,
-            memoryHash: d.memoryHash.substring(0, 16) + '...', // Truncate for readability
-            diskHash: d.diskHash.substring(0, 16) + '...',
-          })),
-          restored,
-          restoreError,
-          warning: autoRestore
-            ? 'HIGH RISK: Memory restoration attempted. Target process may crash or behave unexpectedly.'
-            : isHollowed
-              ? 'Process appears to be hollowed. Use autoRestore=true to attempt restoration (HIGH RISK).'
-              : undefined,
-        };
-      } finally {
-        CloseHandle(hProcess);
+      const platform = this.processMgmt?.platformValue ?? process.platform;
+      if (platform !== 'win32') {
+        return this.detectHollowingCrossPlatform(pid, platform);
       }
+      return this.detectHollowingWin32(pid, autoRestore);
     } catch (error) {
       return {
         success: false,
@@ -148,6 +58,185 @@ export class HollowingDetectionHandlers {
         error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+  }
+
+  // ── Win32 fast path: PE section comparison + optional restore ──
+
+  private async detectHollowingWin32(pid: number, autoRestore: boolean) {
+    // 1. Open process handle
+    const hProcess = openProcessForMemory(pid);
+
+    try {
+      // 2. Enumerate process modules
+      const modulesResult = EnumProcessModules(hProcess);
+      if (!modulesResult.success || modulesResult.modules.length === 0) {
+        return {
+          success: false,
+          isHollowed: false,
+          confidence: 0,
+          error: 'No modules found in target process (process may have exited)',
+        };
+      }
+
+      const mainModuleHandle = modulesResult.modules[0]!;
+      const moduleBaseHex = `0x${mainModuleHandle.toString(16)}`;
+
+      // 3. Get module file path
+      const diskPath = GetModuleFileNameEx(hProcess, mainModuleHandle);
+      if (!diskPath) {
+        return {
+          success: false,
+          isHollowed: false,
+          confidence: 0,
+          error: 'Failed to get module path (process may have exited or access denied)',
+          moduleBase: moduleBaseHex,
+        };
+      }
+
+      // 4. Get module info
+      const moduleInfoResult = GetModuleInformation(hProcess, mainModuleHandle);
+      if (!moduleInfoResult.success) {
+        return {
+          success: false,
+          isHollowed: false,
+          confidence: 0,
+          error: 'Failed to get module information',
+          moduleBase: moduleBaseHex,
+          modulePath: diskPath,
+        };
+      }
+
+      // 5. Compare memory with disk
+      let comparisonResult;
+      try {
+        comparisonResult = await this.peAnalyzer.compareMemoryWithDisk(
+          pid,
+          moduleBaseHex,
+          diskPath,
+        );
+      } catch (error) {
+        return {
+          success: false,
+          isHollowed: false,
+          confidence: 0,
+          error: `Failed to compare memory with disk: ${error instanceof Error ? error.message : String(error)}`,
+          moduleBase: moduleBaseHex,
+          modulePath: diskPath,
+        };
+      }
+
+      const isHollowed = !comparisonResult.isMatch;
+
+      // 6. Optional: Auto-restore from disk (HIGH RISK)
+      let restored = false;
+      let restoreError: string | undefined;
+
+      if (autoRestore && isHollowed) {
+        logger.warn(
+          `[process_detect_hollowing] autoRestore=true for PID ${pid} - attempting restoration (HIGH RISK)`,
+        );
+        try {
+          restored = await this.restoreFromDisk(
+            pid,
+            mainModuleHandle,
+            diskPath,
+            comparisonResult.differences,
+          );
+        } catch (error) {
+          restoreError = `Restoration failed: ${error instanceof Error ? error.message : String(error)}`;
+          logger.error(`[process_detect_hollowing] Restoration failed for PID ${pid}:`, error);
+        }
+      }
+
+      // 7. Build result
+      return {
+        success: true,
+        isHollowed,
+        confidence: comparisonResult.confidence,
+        modulePath: diskPath,
+        moduleBase: moduleBaseHex,
+        moduleSizeOfImage: moduleInfoResult.info.SizeOfImage,
+        differences: comparisonResult.differences.map((d) => ({
+          section: d.sectionName,
+          offset: `0x${d.offsetStart.toString(16)}`,
+          size: d.bytesCompared,
+          memoryHash: d.memoryHash.substring(0, 16) + '...', // Truncate for readability
+          diskHash: d.diskHash.substring(0, 16) + '...',
+        })),
+        restored,
+        restoreError,
+        warning: autoRestore
+          ? 'HIGH RISK: Memory restoration attempted. Target process may crash or behave unexpectedly.'
+          : isHollowed
+            ? 'Process appears to be hollowed. Use autoRestore=true to attempt restoration (HIGH RISK).'
+            : undefined,
+      };
+    } finally {
+      CloseHandle(hProcess);
+    }
+  }
+
+  // ── Linux/macOS fallback: IntegrityScanner section hash comparison ──
+
+  private async detectHollowingCrossPlatform(pid: number, platform: string) {
+    let api;
+    try {
+      api = createPlatformProvider();
+    } catch (error) {
+      return {
+        success: false,
+        isHollowed: false,
+        confidence: 0,
+        error: `Cross-platform memory provider unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+
+    let scan;
+    try {
+      scan = await scanIntegrity(api, pid);
+    } catch (error) {
+      return {
+        success: false,
+        isHollowed: false,
+        confidence: 0,
+        error: `Integrity scan failed: ${error instanceof Error ? error.message : String(error)}`,
+        platformNote: `Cross-platform fallback (${platform}): ELF/Mach-O section hash comparison via IntegrityScanner.`,
+      };
+    }
+
+    // A hollowed process has its main executable's code sections overwritten.
+    // IntegrityScanner hashes every executable section of every module and flags
+    // those whose in-memory SHA-256 differs from the on-disk slice. Any modified
+    // executable section is hollowing evidence.
+    const modified = scan.sections.filter((s) => s.isModified);
+    const isHollowed = modified.length > 0;
+    const confidence = isHollowed ? Math.min(95, 80 + modified.length * 5) : 95;
+
+    const differences = modified.map((s: IntegritySectionResult) => ({
+      section: s.sectionName,
+      moduleName: s.moduleName,
+      memoryHash: s.memoryHash.substring(0, 16) + '...',
+      diskHash: s.diskHash.substring(0, 16) + '...',
+    }));
+
+    return {
+      success: true,
+      isHollowed,
+      confidence,
+      platform: platform,
+      differences,
+      scannedSections: scan.stats.scannedSections,
+      skippedSections: scan.stats.skippedSections,
+      timedOut: scan.stats.timedOut,
+      truncated: scan.stats.truncated,
+      restored: false,
+      platformNote:
+        `Cross-platform fallback (${platform}): ELF/Mach-O executable-section SHA-256 ` +
+        `comparison via IntegrityScanner. autoRestore is Win32-only.`,
+      warning: isHollowed
+        ? `${modified.length} executable section(s) differ from disk — consistent with process hollowing (or runtime patching / packing). Inspect differences[].moduleName to identify the affected module.`
+        : undefined,
+    };
   }
 
   /**

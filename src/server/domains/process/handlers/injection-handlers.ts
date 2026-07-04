@@ -4,6 +4,7 @@
 
 import { logger } from '@utils/logger';
 import { connectPlaywrightCdpFallback } from '@modules/collector/playwright-cdp-fallback';
+import { enumerateThreadsByPlatform } from '@native/platform/ThreadEnumerator';
 import type { ProcessHandlerDeps } from './shared-types';
 import type { ProcessManagementHandlers } from './process-management';
 import {
@@ -307,22 +308,16 @@ export class InjectionHandlers {
   async handleProcessEnumThreads(args: Record<string, unknown>) {
     try {
       const pid = validatePid(args.pid);
-      if (this.processMgmt.platformValue !== 'win32') {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                success: false,
-                error: 'process_enum_threads is only available on Windows',
-                platform: this.processMgmt.platformValue,
-              }),
-            },
-          ],
-        };
+      const platform = this.processMgmt.platformValue;
+      // Win32 keeps the synchronous koffi fast path (Toolhelp32Snapshot); Linux
+      // and macOS fall back to ThreadEnumerator (/proc/{pid}/task / `ps -M`).
+      let threadIds: number[];
+      if (platform === 'win32') {
+        const { EnumerateProcessThreads } = await import('@native/Win32Debug');
+        threadIds = EnumerateProcessThreads(pid);
+      } else {
+        threadIds = await enumerateThreadsByPlatform(platform, pid);
       }
-      const { EnumerateProcessThreads } = await import('@native/Win32Debug');
-      const threadIds = EnumerateProcessThreads(pid);
       return {
         content: [
           {
@@ -331,6 +326,7 @@ export class InjectionHandlers {
               {
                 success: true,
                 pid,
+                platform,
                 threadCount: threadIds.length,
                 threadIds,
               },
