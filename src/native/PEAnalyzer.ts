@@ -19,6 +19,7 @@ import {
   GetModuleFileNameEx,
   GetModuleInformation,
 } from '@native/Win32API';
+import { classifyHookPattern, decodeHookTarget } from './platform/HookPatternScanner';
 import type {
   PEHeaders,
   PESection,
@@ -672,68 +673,20 @@ export class PEAnalyzer {
    *   - `padding`     any run of identical bytes (e.g. NOP sled 0x90)
    */
   private classifyHook(memBytes: Buffer): InlineHookDetection['hookType'] {
-    if (memBytes.length === 0) return 'unknown';
-    const b0 = memBytes[0]!;
-    // INT3 breakpoint (single or repeated 0xCC).
-    if (b0 === 0xcc) return 'int3_breakpoint';
-    // Padding: all bytes identical (NOP sled, zero-fill). Excludes 0xCC above.
-    if (memBytes.length >= 2 && memBytes.every((b) => b === b0)) return 'padding';
-    if (b0 === 0xe9) return 'jmp_rel32';
-    if (b0 === 0xe8) return 'call_rel32';
-    if (b0 === 0xeb) return 'short_jmp';
-    if (b0 === 0xff && memBytes[1] === 0x25) return 'jmp_abs64';
-    // MOV r32, imm32 (B8-BF) followed by FF E0-EF (JMP r32) or FF D0-DF (CALL r32).
-    // Layout: [B8-BF][imm32 4 bytes][FF][E0-EF | D0-DF] = 7 bytes minimum.
-    if (b0 >= 0xb8 && b0 <= 0xbf && memBytes.length >= 7) {
-      if (memBytes[5] === 0xff) {
-        const reg = memBytes[6]!;
-        if (reg >= 0xe0 && reg <= 0xef) return 'mov_jmp';
-        if (reg >= 0xd0 && reg <= 0xdf) return 'mov_call';
-      }
-    }
-    if (b0 === 0x68 && memBytes[5] === 0xc3) return 'push_ret';
-    return 'unknown';
+    // Delegate to the shared HookPatternScanner (extracted from this class).
+    // Buffer is a Uint8Array subclass, so it is accepted directly.
+    return classifyHookPattern(memBytes);
   }
 
   /**
    * Decode the jump/call target address for a classified hook.
    *
-   * Returns `'0x0'` when the pattern has no extractable target
-   * (INT3, padding, unknown). For `mov_jmp`/`mov_call` the target is the
-   * immediate loaded by the MOV instruction (the absolute address the hook
-   * redirects to), matching pe-sieve's `parseMovJmp` extraction.
+   * Delegates to the shared HookPatternScanner.decodeHookTarget (extracted
+   * from this class). Returns `'0x0'` when the pattern has no extractable
+   * target. Buffer is a Uint8Array subclass, accepted directly.
    */
   private decodeJumpTarget(memBytes: Buffer, funcAddr: bigint): string {
-    if (memBytes.length === 0) return '0x0';
-    const b0 = memBytes[0]!;
-    // JMP rel32 / CALL rel32 — target = funcAddr + 5 + rel32
-    if (b0 === 0xe9 || b0 === 0xe8) {
-      const rel32 = memBytes.readInt32LE(1);
-      return `0x${(funcAddr + 5n + BigInt(rel32)).toString(16)}`;
-    }
-    // Short JMP rel8 — target = funcAddr + 2 + rel8
-    if (b0 === 0xeb) {
-      const rel8 = memBytes.readInt8(1);
-      return `0x${(funcAddr + 2n + BigInt(rel8)).toString(16)}`;
-    }
-    if (b0 === 0xff && memBytes[1] === 0x25) {
-      // JMP [rip+disp32] — in x64, the 8-byte absolute target follows the 6-byte instruction.
-      if (memBytes.length >= 14) {
-        const target = memBytes.readBigUInt64LE(6);
-        return `0x${target.toString(16)}`;
-      }
-    }
-    // MOV r32, imm32 (B8-BF) — target is the loaded immediate (mov_jmp / mov_call).
-    if (b0 >= 0xb8 && b0 <= 0xbf) {
-      const imm32 = memBytes.readUInt32LE(1);
-      return `0x${imm32.toString(16)}`;
-    }
-    if (b0 === 0x68) {
-      // PUSH imm32; RET — target = pushed immediate
-      const target = memBytes.readUInt32LE(1);
-      return `0x${target.toString(16)}`;
-    }
-    return '0x0';
+    return decodeHookTarget(memBytes, funcAddr);
   }
 
   /**

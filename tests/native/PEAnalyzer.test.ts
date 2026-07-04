@@ -458,6 +458,7 @@ describe('PEAnalyzer', () => {
       const buf = Buffer.alloc(16);
       buf[0] = 0x68;
       buf.writeUInt32LE(0xbadc0de, 1);
+      buf[5] = 0xc3; // RET — completes the push_ret pattern (HookPatternScanner requires it)
       expect(p.decodeJumpTarget(buf, 0x1000n)).toBe('0xbadc0de');
     });
 
