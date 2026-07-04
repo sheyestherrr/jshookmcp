@@ -5,6 +5,11 @@ import {
   storeSnapshot,
   clearSnapshotCache,
 } from '@server/domains/v8-inspector/handlers/heap-snapshot';
+import { ResponseBuilder } from '../../../../src/server/domains/shared/ResponseBuilder';
+
+// Parse a handleSafe() ToolResponse envelope back into its JSON payload so
+// existing `result.<field>` assertions keep working after the handler refactor.
+const parseBody = (res: unknown): any => ResponseBuilder.parse(res as any);
 
 // Mock snapshot data
 function generateMockSnapshot() {
@@ -107,11 +112,13 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
 
   describe('v8_heap_snapshot_analyze with dominator tree', () => {
     it('should include dominator tree when requested', async () => {
-      const result = await handlers.v8_heap_snapshot_analyze({
-        snapshotId: 'test-snapshot',
-        includeDominatorTree: true,
-        depth: 3,
-      });
+      const result = parseBody(
+        await handlers.v8_heap_snapshot_analyze({
+          snapshotId: 'test-snapshot',
+          includeDominatorTree: true,
+          depth: 3,
+        }),
+      );
 
       expect(result.success).toBe(true);
       expect(result.dominatorTree).toBeDefined();
@@ -122,20 +129,24 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
     });
 
     it('should not include dominator tree by default', async () => {
-      const result = await handlers.v8_heap_snapshot_analyze({
-        snapshotId: 'test-snapshot',
-      });
+      const result = parseBody(
+        await handlers.v8_heap_snapshot_analyze({
+          snapshotId: 'test-snapshot',
+        }),
+      );
 
       expect(result.success).toBe(true);
       expect(result.dominatorTree).toBeUndefined();
     });
 
     it('should respect depth parameter', async () => {
-      const result = await handlers.v8_heap_snapshot_analyze({
-        snapshotId: 'test-snapshot',
-        includeDominatorTree: true,
-        depth: 2,
-      });
+      const result = parseBody(
+        await handlers.v8_heap_snapshot_analyze({
+          snapshotId: 'test-snapshot',
+          includeDominatorTree: true,
+          depth: 2,
+        }),
+      );
 
       expect(result.dominatorTree).toBeDefined();
 
@@ -158,11 +169,13 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
 
   describe('v8_heap_snapshot_analyze with leak detection', () => {
     it('should include leak candidates when requested', async () => {
-      const result = await handlers.v8_heap_snapshot_analyze({
-        snapshotId: 'test-snapshot',
-        includeLeakDetection: true,
-        minLeakSize: 0, // Include all potential leaks
-      });
+      const result = parseBody(
+        await handlers.v8_heap_snapshot_analyze({
+          snapshotId: 'test-snapshot',
+          includeLeakDetection: true,
+          minLeakSize: 0, // Include all potential leaks
+        }),
+      );
 
       expect(result.success).toBe(true);
       expect(result.suspectedLeaks).toBeDefined();
@@ -170,20 +183,24 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
     });
 
     it('should not include leak detection by default', async () => {
-      const result = await handlers.v8_heap_snapshot_analyze({
-        snapshotId: 'test-snapshot',
-      });
+      const result = parseBody(
+        await handlers.v8_heap_snapshot_analyze({
+          snapshotId: 'test-snapshot',
+        }),
+      );
 
       expect(result.success).toBe(true);
       expect(result.suspectedLeaks).toBeUndefined();
     });
 
     it('should respect minLeakSize parameter', async () => {
-      const result = await handlers.v8_heap_snapshot_analyze({
-        snapshotId: 'test-snapshot',
-        includeLeakDetection: true,
-        minLeakSize: 10 * 1024 * 1024, // 10MB
-      });
+      const result = parseBody(
+        await handlers.v8_heap_snapshot_analyze({
+          snapshotId: 'test-snapshot',
+          includeLeakDetection: true,
+          minLeakSize: 10 * 1024 * 1024, // 10MB
+        }),
+      );
 
       expect(result.suspectedLeaks).toBeDefined();
       // With our small test snapshot, there should be no leaks above 10MB
@@ -193,10 +210,12 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
 
   describe('v8_heap_find_leaks', () => {
     it('should return leak candidates with confidence scores', async () => {
-      const result = await handlers.v8_heap_find_leaks({
-        snapshotId: 'test-snapshot',
-        minRetainedSize: 0,
-      });
+      const result = parseBody(
+        await handlers.v8_heap_find_leaks({
+          snapshotId: 'test-snapshot',
+          minRetainedSize: 0,
+        }),
+      );
 
       expect(result.success).toBe(true);
       expect(result.snapshotId).toBe('test-snapshot');
@@ -218,20 +237,24 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
     });
 
     it('should respect maxResults parameter', async () => {
-      const result = await handlers.v8_heap_find_leaks({
-        snapshotId: 'test-snapshot',
-        minRetainedSize: 0,
-        maxResults: 5,
-      });
+      const result = parseBody(
+        await handlers.v8_heap_find_leaks({
+          snapshotId: 'test-snapshot',
+          minRetainedSize: 0,
+          maxResults: 5,
+        }),
+      );
 
       expect(result.leakCandidates.length).toBeLessThanOrEqual(5);
     });
 
     it('should sort candidates by confidence', async () => {
-      const result = await handlers.v8_heap_find_leaks({
-        snapshotId: 'test-snapshot',
-        minRetainedSize: 0,
-      });
+      const result = parseBody(
+        await handlers.v8_heap_find_leaks({
+          snapshotId: 'test-snapshot',
+          minRetainedSize: 0,
+        }),
+      );
 
       const candidates = result.leakCandidates;
       for (let i = 1; i < candidates.length; i++) {
@@ -243,10 +266,12 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
     });
 
     it('should include retaining paths', async () => {
-      const result = await handlers.v8_heap_find_leaks({
-        snapshotId: 'test-snapshot',
-        minRetainedSize: 0,
-      });
+      const result = parseBody(
+        await handlers.v8_heap_find_leaks({
+          snapshotId: 'test-snapshot',
+          minRetainedSize: 0,
+        }),
+      );
 
       if (result.leakCandidates.length > 0) {
         const leak = result.leakCandidates[0]!;
@@ -258,15 +283,19 @@ describe('V8InspectorHandlers - heap analysis with dominator tree', () => {
 
   describe('error handling', () => {
     it('should throw when snapshot not found', async () => {
-      await expect(
-        handlers.v8_heap_snapshot_analyze({
+      const body = parseBody(
+        await handlers.v8_heap_snapshot_analyze({
           snapshotId: 'non-existent',
         }),
-      ).rejects.toThrow('not found');
+      );
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/not found/i);
     });
 
     it('should throw when snapshotId is missing', async () => {
-      await expect(handlers.v8_heap_snapshot_analyze({})).rejects.toThrow();
+      const body = parseBody(await handlers.v8_heap_snapshot_analyze({}));
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/snapshotId/i);
     });
   });
 });

@@ -4,6 +4,12 @@ import {
   getSnapshotCache,
   clearSnapshotCache,
 } from '../../../../src/server/domains/v8-inspector/handlers/heap-snapshot';
+import { ResponseBuilder } from '../../../../src/server/domains/shared/ResponseBuilder';
+
+const parseBody = (res: unknown): Record<string, unknown> =>
+  ResponseBuilder.parse<Record<string, unknown>>(
+    res as Parameters<typeof ResponseBuilder.parse>[0],
+  );
 
 describe('v8-inspector manifest', () => {
   it('should have correct domain configuration', async () => {
@@ -106,7 +112,7 @@ describe('v8-inspector manifest', () => {
 
     expect(pageController.getPage).toHaveBeenCalledOnce();
     expect(page.createCDPSession).toHaveBeenCalledOnce();
-    expect(result).toMatchObject({
+    expect(parseBody(result)).toMatchObject({
       success: true,
       simulated: false,
       sizeBytes: Buffer.byteLength(chunk, 'utf8'),

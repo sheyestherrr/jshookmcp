@@ -6,6 +6,12 @@ import {
 } from '@server/domains/v8-inspector/handlers/heap-snapshot';
 import { V8InspectorClient } from '@modules/v8-inspector/V8InspectorClient';
 import type { MCPServerContext } from '@server/MCPServer.context';
+import { ResponseBuilder } from '../../../../src/server/domains/shared/ResponseBuilder';
+
+const parseBody = (res: unknown): Record<string, unknown> =>
+  ResponseBuilder.parse<Record<string, unknown>>(
+    res as Parameters<typeof ResponseBuilder.parse>[0],
+  );
 
 /** Build a minimal but valid heap snapshot chunk with distinct strings per node. */
 function buildChunk(
@@ -80,34 +86,42 @@ describe('v8_object_compare', () => {
 
   describe('input validation', () => {
     it('rejects when objectIds is missing', async () => {
-      await expect(handlers.handle('v8_object_compare', { snapshotId: 's1' })).rejects.toThrow(
-        'objectIds',
-      );
+      const body = parseBody(await handlers.handle('v8_object_compare', { snapshotId: 's1' }));
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/objectIds/i);
     });
 
     it('rejects when objectIds is not an array', async () => {
-      await expect(
-        handlers.handle('v8_object_compare', { snapshotId: 's1', objectIds: 42 }),
-      ).rejects.toThrow('objectIds');
+      const body = parseBody(
+        await handlers.handle('v8_object_compare', { snapshotId: 's1', objectIds: 42 }),
+      );
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/objectIds/i);
     });
 
     it('rejects when objectIds is empty', async () => {
-      await expect(
-        handlers.handle('v8_object_compare', { snapshotId: 's1', objectIds: [] }),
-      ).rejects.toThrow('objectIds');
+      const body = parseBody(
+        await handlers.handle('v8_object_compare', { snapshotId: 's1', objectIds: [] }),
+      );
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/objectIds/i);
     });
 
     it('rejects when objectIds has more than 50 entries', async () => {
       const ids = Array.from({ length: 60 }, (_, i) => i);
-      await expect(
-        handlers.handle('v8_object_compare', { snapshotId: 's1', objectIds: ids }),
-      ).rejects.toThrow('at most 50');
+      const body = parseBody(
+        await handlers.handle('v8_object_compare', { snapshotId: 's1', objectIds: ids }),
+      );
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/at most 50/);
     });
 
     it('rejects when snapshot is not found', async () => {
-      await expect(
-        handlers.handle('v8_object_compare', { snapshotId: 's1', objectIds: [1, 2] }),
-      ).rejects.toThrow('not found');
+      const body = parseBody(
+        await handlers.handle('v8_object_compare', { snapshotId: 's1', objectIds: [1, 2] }),
+      );
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/not found/i);
     });
   });
 
@@ -128,10 +142,12 @@ describe('v8_object_compare', () => {
         sizeBytes: 300,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapId,
-        objectIds: [1, 2],
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapId,
+          objectIds: [1, 2],
+        }),
+      );
       const r = result as any;
 
       expect(r.success).toBe(true);
@@ -157,10 +173,12 @@ describe('v8_object_compare', () => {
         sizeBytes: 200,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapId,
-        objectIds: [1, 2],
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapId,
+          objectIds: [1, 2],
+        }),
+      );
       const r = result as any;
 
       expect(r.pairs[0].classMatch).toBe(false);
@@ -183,10 +201,12 @@ describe('v8_object_compare', () => {
         sizeBytes: 300,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapId,
-        objectIds: [1, 2],
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapId,
+          objectIds: [1, 2],
+        }),
+      );
       const r = result as any;
 
       expect(r.pairs[0].classMatch).toBe(true);
@@ -210,10 +230,12 @@ describe('v8_object_compare', () => {
         sizeBytes: 60,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapId,
-        objectIds: [1, 2, 3],
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapId,
+          objectIds: [1, 2, 3],
+        }),
+      );
       const r = result as any;
 
       // 3 choose 2 = 3 pairs (i<j for multi-object)
@@ -237,10 +259,12 @@ describe('v8_object_compare', () => {
         sizeBytes: 100,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapId,
-        objectIds: [1],
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapId,
+          objectIds: [1],
+        }),
+      );
       const r = result as any;
 
       expect(r.pairs).toHaveLength(1);
@@ -268,12 +292,14 @@ describe('v8_object_compare', () => {
         sizeBytes: 200,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapA,
-        anotherSnapshotId: snapB,
-        objectIds: [1],
-        anotherObjectIds: [2],
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapA,
+          anotherSnapshotId: snapB,
+          objectIds: [1],
+          anotherObjectIds: [2],
+        }),
+      );
       const r = result as any;
 
       expect(r.snapshotId).toBe(snapA);
@@ -284,13 +310,15 @@ describe('v8_object_compare', () => {
     });
 
     it('rejects cross-snapshot without anotherObjectIds', async () => {
-      await expect(
-        handlers.handle('v8_object_compare', {
+      const body = parseBody(
+        await handlers.handle('v8_object_compare', {
           snapshotId: 's1',
           anotherSnapshotId: 's2',
           objectIds: [1],
         }),
-      ).rejects.toThrow('anotherObjectIds');
+      );
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/anotherObjectIds/);
     });
   });
 
@@ -305,10 +333,12 @@ describe('v8_object_compare', () => {
         sizeBytes: 10,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapId,
-        objectIds: [1, 999],
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapId,
+          objectIds: [1, 999],
+        }),
+      );
       const r = result as any;
 
       expect(r.skippedNodes).toContain(999);
@@ -344,10 +374,12 @@ describe('v8_object_compare', () => {
         sizeBytes: 430,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapId,
-        objectIds: [1, 2],
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapId,
+          objectIds: [1, 2],
+        }),
+      );
       const r = result as any;
 
       // Node 1 retains 100 + 50 = 150, Node 2 retains 200 + 80 = 280
@@ -377,11 +409,13 @@ describe('v8_object_compare', () => {
         sizeBytes: 5100,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapId,
-        objectIds: [1, 2],
-        minDeltaBytes: 1024,
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapId,
+          objectIds: [1, 2],
+          minDeltaBytes: 1024,
+        }),
+      );
       const r = result as any;
 
       expect(r.pairs[0].interesting).toBe(true);
@@ -403,11 +437,13 @@ describe('v8_object_compare', () => {
         sizeBytes: 300,
       });
 
-      const result = await handlers.handle('v8_object_compare', {
-        snapshotId: snapId,
-        objectIds: [1, 2],
-        minDeltaBytes: 1024,
-      });
+      const result = parseBody(
+        await handlers.handle('v8_object_compare', {
+          snapshotId: snapId,
+          objectIds: [1, 2],
+          minDeltaBytes: 1024,
+        }),
+      );
       const r = result as any;
 
       expect(r.pairs[0].interesting).toBe(false);

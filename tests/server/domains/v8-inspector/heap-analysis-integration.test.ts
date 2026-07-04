@@ -4,6 +4,10 @@ import {
   clearSnapshotCache,
   storeSnapshot,
 } from '@server/domains/v8-inspector/handlers/heap-snapshot';
+import { ResponseBuilder } from '../../../../src/server/domains/shared/ResponseBuilder';
+
+const parseBody = (res: unknown): Record<string, unknown> =>
+  ResponseBuilder.parse<Record<string, unknown>>(res as any);
 
 /**
  * Integration tests for v8_heap_snapshot_analyze with class histogram.
@@ -68,7 +72,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
 
       // Call analyze
       const args: ToolArgs = { snapshotId };
-      const result = await handlers.handle('v8_heap_snapshot_analyze', args);
+      const result = parseBody(await handlers.handle('v8_heap_snapshot_analyze', args));
 
       // Verify result structure
       expect(result).toHaveProperty('success', true);
@@ -114,7 +118,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
 
       // Call analyze with topN=2
       const args: ToolArgs = { snapshotId, topN: 2 };
-      const result = await handlers.handle('v8_heap_snapshot_analyze', args);
+      const result = parseBody(await handlers.handle('v8_heap_snapshot_analyze', args));
 
       const histogram = (result as any).classHistogram;
       expect(histogram.length).toBeLessThanOrEqual(2);
@@ -160,7 +164,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
       const handlers = new V8InspectorHandlers({ ctx: mockCtx, client: mockClient });
 
       const args: ToolArgs = { snapshotId };
-      const result = await handlers.handle('v8_heap_snapshot_analyze', args);
+      const result = parseBody(await handlers.handle('v8_heap_snapshot_analyze', args));
 
       const summary = (result as any).summary;
       expect(summary.detachedDOMNodes).toBeGreaterThan(0);
@@ -175,9 +179,9 @@ describe('v8-inspector handlers - heap analysis integration', () => {
 
       const args: ToolArgs = { snapshotId: 'non-existent' };
 
-      await expect(handlers.handle('v8_heap_snapshot_analyze', args)).rejects.toThrow(
-        'Snapshot non-existent not found',
-      );
+      const body = parseBody(await handlers.handle('v8_heap_snapshot_analyze', args));
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/Snapshot non-existent not found/);
     });
 
     it('should throw error for missing snapshotId', async () => {
@@ -189,9 +193,9 @@ describe('v8-inspector handlers - heap analysis integration', () => {
 
       const args: ToolArgs = {};
 
-      await expect(handlers.handle('v8_heap_snapshot_analyze', args)).rejects.toThrow(
-        'snapshotId is required',
-      );
+      const body = parseBody(await handlers.handle('v8_heap_snapshot_analyze', args));
+      expect(body.success).toBe(false);
+      expect(String(body.error)).toMatch(/snapshotId/i);
     });
 
     it('should handle large snapshots efficiently', async () => {
@@ -244,7 +248,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
 
       const startTime = Date.now();
       const args: ToolArgs = { snapshotId };
-      const result = await handlers.handle('v8_heap_snapshot_analyze', args);
+      const result = parseBody(await handlers.handle('v8_heap_snapshot_analyze', args));
       const elapsedMs = Date.now() - startTime;
 
       // Should complete quickly
@@ -274,7 +278,7 @@ describe('v8-inspector handlers - heap analysis integration', () => {
       const handlers = new V8InspectorHandlers({ ctx: mockCtx, client: mockClient });
 
       const args: ToolArgs = { snapshotId };
-      const result = await handlers.handle('v8_heap_snapshot_analyze', args);
+      const result = parseBody(await handlers.handle('v8_heap_snapshot_analyze', args));
 
       const histogram = (result as any).classHistogram;
 

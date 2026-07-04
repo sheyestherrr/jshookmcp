@@ -3,7 +3,15 @@ import {
   V8InspectorHandlers,
   type V8InspectorDomainDependencies,
 } from '../../../../src/server/domains/v8-inspector/handlers/impl';
+import { ResponseBuilder } from '../../../../src/server/domains/shared/ResponseBuilder';
 import { clearSnapshotCache } from '../../../../src/server/domains/v8-inspector/handlers/heap-snapshot';
+
+// In-impl handlers now return a ToolResponse envelope (handleSafe wrap).
+// Unwrap the JSON body for assertions.
+const parseBody = (res: unknown): Record<string, unknown> =>
+  ResponseBuilder.parse<Record<string, unknown>>(
+    res as Parameters<typeof ResponseBuilder.parse>[0],
+  );
 
 function createMockDeps(
   overrides?: Partial<V8InspectorDomainDependencies>,
@@ -40,8 +48,11 @@ describe('V8InspectorHandlers', () => {
   describe('handle() routing', () => {
     it('should route to known tool', async () => {
       const handlers = new V8InspectorHandlers(createMockDeps());
-      // Should not throw for a known tool name (even if underlying CDP fails)
-      await expect(handlers.handle('v8_heap_stats', {})).rejects.toThrow();
+      // Should not throw for a known tool name (even if underlying CDP fails).
+      // The handler returns a ToolResponse with success:false when the browser
+      // is not connected — previously this threw via requirePageController.
+      const body = parseBody(await handlers.handle('v8_heap_stats', {}));
+      expect(body.success).toBe(false);
     });
 
     it('should throw for unknown tool', async () => {
@@ -53,42 +64,51 @@ describe('V8InspectorHandlers', () => {
   });
 
   describe('v8_heap_snapshot_capture', () => {
-    it('should throw without browser connection', async () => {
+    it('should fail gracefully without browser connection', async () => {
       const handlers = new V8InspectorHandlers(createMockDeps());
-      await expect(handlers.v8_heap_snapshot_capture({})).rejects.toThrow();
+      const body = parseBody(await handlers.v8_heap_snapshot_capture({}));
+      expect(body.success).toBe(false);
     });
   });
 
   describe('v8_heap_snapshot_analyze', () => {
-    it('should throw if snapshotId is missing', async () => {
+    it('should fail if snapshotId is missing', async () => {
       const handlers = new V8InspectorHandlers(createMockDeps());
-      await expect(handlers.v8_heap_snapshot_analyze({})).rejects.toThrow('snapshotId is required');
+      const body = parseBody(await handlers.v8_heap_snapshot_analyze({}));
+      expect(body).toMatchObject({
+        success: false,
+        error: 'Missing required string argument: "snapshotId"',
+      });
     });
 
-    it('should throw if snapshot not found', async () => {
+    it('should fail if snapshot not found', async () => {
       const handlers = new V8InspectorHandlers(createMockDeps());
-      await expect(
-        handlers.v8_heap_snapshot_analyze({ snapshotId: 'nonexistent' }),
-      ).rejects.toThrow('Snapshot nonexistent not found');
+      const body = parseBody(
+        await handlers.v8_heap_snapshot_analyze({ snapshotId: 'nonexistent' }),
+      );
+      expect(body).toMatchObject({ success: false, error: 'Snapshot nonexistent not found' });
     });
   });
 
   describe('v8_heap_diff', () => {
-    it('should throw if snapshot IDs are missing', async () => {
+    it('should fail if snapshot IDs are missing', async () => {
       const handlers = new V8InspectorHandlers(createMockDeps());
-      await expect(handlers.v8_heap_diff({})).rejects.toThrow(
-        'Both beforeSnapshotId and afterSnapshotId are required',
-      );
+      const body = parseBody(await handlers.v8_heap_diff({}));
+      expect(body).toMatchObject({
+        success: false,
+        error: 'Both beforeSnapshotId and afterSnapshotId are required',
+      });
     });
 
-    it('should throw if before snapshot not found', async () => {
+    it('should fail if before snapshot not found', async () => {
       const handlers = new V8InspectorHandlers(createMockDeps());
-      await expect(
-        handlers.v8_heap_diff({
+      const body = parseBody(
+        await handlers.v8_heap_diff({
           beforeSnapshotId: 'missing',
           afterSnapshotId: 'also-missing',
         }),
-      ).rejects.toThrow('Snapshot missing not found');
+      );
+      expect(body).toMatchObject({ success: false, error: 'Snapshot missing not found' });
     });
   });
 });

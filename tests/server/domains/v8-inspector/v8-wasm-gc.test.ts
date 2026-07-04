@@ -2,6 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { V8InspectorHandlers } from '@server/domains/v8-inspector/index';
 import { V8InspectorClient } from '@modules/v8-inspector/V8InspectorClient';
 import type { MCPServerContext } from '@server/MCPServer.context';
+import { ResponseBuilder } from '../../../../src/server/domains/shared/ResponseBuilder';
+
+const parseBody = (res: unknown): Record<string, unknown> =>
+  ResponseBuilder.parse<Record<string, unknown>>(
+    res as Parameters<typeof ResponseBuilder.parse>[0],
+  );
 
 describe('v8_wasm_inspect', () => {
   let handlers: V8InspectorHandlers;
@@ -57,7 +63,7 @@ describe('v8_wasm_inspect', () => {
       };
       mockPage.createCDPSession.mockResolvedValue(mockSession);
 
-      const result = await handlers.handle('v8_wasm_inspect', {});
+      const result = parseBody(await handlers.handle('v8_wasm_inspect', {}));
       expect(result).toHaveProperty('success', true);
       expect(result).toHaveProperty('wasmGcAvailable', false);
     });
@@ -80,7 +86,9 @@ describe('v8_wasm_inspect', () => {
       };
       mockPage.createCDPSession.mockResolvedValue(mockSession);
 
-      const result = await handlers.handle('v8_wasm_inspect', { scriptId: 'wasm://123' });
+      const result = parseBody(
+        await handlers.handle('v8_wasm_inspect', { scriptId: 'wasm://123' }),
+      );
       expect(result).toHaveProperty('success', true);
     });
 
@@ -102,7 +110,7 @@ describe('v8_wasm_inspect', () => {
       };
       mockPage.createCDPSession.mockResolvedValue(mockSession);
 
-      const result = await handlers.handle('v8_wasm_inspect', { includeStructs: false });
+      const result = parseBody(await handlers.handle('v8_wasm_inspect', { includeStructs: false }));
       expect(result).toHaveProperty('success', true);
       const r = result as any;
       expect(r.structs).toBeUndefined();
@@ -128,7 +136,7 @@ describe('v8_wasm_inspect', () => {
       };
       mockPage.createCDPSession.mockResolvedValue(mockSession);
 
-      const result = await handlers.handle('v8_wasm_inspect', {});
+      const result = parseBody(await handlers.handle('v8_wasm_inspect', {}));
       const r = result as any;
       expect(r.wasmGcAvailable).toBe(true);
       expect(r.summary.hasGcFeature).toBe(true);
@@ -154,7 +162,7 @@ describe('v8_wasm_inspect', () => {
       };
       mockPage.createCDPSession.mockResolvedValue(mockSession);
 
-      const result = await handlers.handle('v8_wasm_inspect', {});
+      const result = parseBody(await handlers.handle('v8_wasm_inspect', {}));
       const r = result as any;
       expect(r.wasmGcAvailable).toBe(false);
       expect(r.summary.gcModules).toBe(0);
@@ -165,7 +173,7 @@ describe('v8_wasm_inspect', () => {
   describe('graceful degradation', () => {
     it('returns empty result when pageController missing', async () => {
       mockCtx.pageController = undefined;
-      const result = await handlers.handle('v8_wasm_inspect', {});
+      const result = parseBody(await handlers.handle('v8_wasm_inspect', {}));
       const r = result as any;
       expect(r.wasmGcAvailable).toBe(false);
       expect(r.totalModules).toBe(0);

@@ -73,6 +73,12 @@ import {
   V8InspectorHandlers,
   type V8InspectorDomainDependencies,
 } from '../../../../src/server/domains/v8-inspector/handlers/impl';
+import { ResponseBuilder } from '../../../../src/server/domains/shared/ResponseBuilder';
+
+const parseBody = (res: unknown): Record<string, unknown> =>
+  ResponseBuilder.parse<Record<string, unknown>>(
+    res as Parameters<typeof ResponseBuilder.parse>[0],
+  );
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -616,7 +622,7 @@ describe('v8-inspector handler coverage', () => {
           jsHeapSizeLimit: 300,
         });
         const handlers = new V8InspectorHandlers(createMockDeps());
-        const result = await handlers.handle('v8_heap_stats', {});
+        const result = parseBody(await handlers.handle('v8_heap_stats', {}));
         expect(result).toMatchObject({
           success: true,
           snapshotCount: 0,
@@ -629,7 +635,7 @@ describe('v8-inspector handler coverage', () => {
       it('should throw without pageController', async () => {
         const deps = createMockDepsWithoutPage();
         const handlers = new V8InspectorHandlers(deps);
-        await expect(handlers.v8_heap_snapshot_capture({})).rejects.toThrow();
+        expect(parseBody(await handlers.v8_heap_snapshot_capture({})).success).toBe(false);
       });
 
       it('should capture snapshot and emit event on success', async () => {
@@ -640,7 +646,7 @@ describe('v8-inspector handler coverage', () => {
         const deps = createMockDeps();
         const handlers = new V8InspectorHandlers(deps);
 
-        const result = await handlers.v8_heap_snapshot_capture({});
+        const result = parseBody(await handlers.v8_heap_snapshot_capture({}));
 
         expect(result.success).toBe(true);
         expect(result.simulated).toBe(false);
@@ -686,7 +692,7 @@ describe('v8-inspector handler coverage', () => {
           }),
         );
 
-        const result = await handlers.v8_heap_snapshot_capture({});
+        const result = parseBody(await handlers.v8_heap_snapshot_capture({}));
 
         expect(result).toMatchObject({
           // verify minimum result shape; internal call counts may vary
@@ -702,16 +708,18 @@ describe('v8-inspector handler coverage', () => {
     describe('v8_heap_snapshot_analyze', () => {
       it('should throw if snapshotId is missing', async () => {
         const handlers = new V8InspectorHandlers(createMockDeps());
-        await expect(handlers.v8_heap_snapshot_analyze({})).rejects.toThrow(
-          'snapshotId is required',
-        );
+        const body = parseBody(await handlers.v8_heap_snapshot_analyze({}));
+        expect(body.success).toBe(false);
+        expect(String(body.error)).toMatch(/snapshotId/i);
       });
 
       it('should throw if snapshot not found in cache', async () => {
         const handlers = new V8InspectorHandlers(createMockDeps());
-        await expect(
-          handlers.v8_heap_snapshot_analyze({ snapshotId: 'no-such-snap' }),
-        ).rejects.toThrow('Snapshot no-such-snap not found');
+        const body = parseBody(
+          await handlers.v8_heap_snapshot_analyze({ snapshotId: 'no-such-snap' }),
+        );
+        expect(body.success).toBe(false);
+        expect(String(body.error)).toMatch(/Snapshot no-such-snap not found/);
       });
 
       it('should return analysis for a stored snapshot', async () => {
@@ -745,7 +753,9 @@ describe('v8-inspector handler coverage', () => {
         });
         const handlers = new V8InspectorHandlers(createMockDeps());
 
-        const result = await handlers.v8_heap_snapshot_analyze({ snapshotId: 'snap-analyze' });
+        const result = parseBody(
+          await handlers.v8_heap_snapshot_analyze({ snapshotId: 'snap-analyze' }),
+        );
 
         expect(result).toHaveProperty('success', true);
         expect(result).toHaveProperty('snapshotId', 'snap-analyze');
@@ -761,41 +771,56 @@ describe('v8-inspector handler coverage', () => {
     describe('v8_heap_diff', () => {
       it('should throw if beforeSnapshotId is missing', async () => {
         const handlers = new V8InspectorHandlers(createMockDeps());
-        await expect(handlers.v8_heap_diff({ afterSnapshotId: 'snap-after' })).rejects.toThrow(
-          'Both beforeSnapshotId and afterSnapshotId are required',
+        const body = parseBody(await handlers.v8_heap_diff({ afterSnapshotId: 'snap-after' }));
+        expect(body.success).toBe(false);
+        expect(String(body.error)).toMatch(
+          /Both beforeSnapshotId and afterSnapshotId are required/,
         );
       });
 
       it('should throw if afterSnapshotId is missing', async () => {
         const handlers = new V8InspectorHandlers(createMockDeps());
-        await expect(handlers.v8_heap_diff({ beforeSnapshotId: 'snap-before' })).rejects.toThrow(
-          'Both beforeSnapshotId and afterSnapshotId are required',
+        const body = parseBody(await handlers.v8_heap_diff({ beforeSnapshotId: 'snap-before' }));
+        expect(body.success).toBe(false);
+        expect(String(body.error)).toMatch(
+          /Both beforeSnapshotId and afterSnapshotId are required/,
         );
       });
 
       it('should throw if both snapshot IDs are non-string', async () => {
         const handlers = new V8InspectorHandlers(createMockDeps());
-        await expect(
-          handlers.v8_heap_diff({ beforeSnapshotId: 123, afterSnapshotId: 456 }),
-        ).rejects.toThrow('Both beforeSnapshotId and afterSnapshotId are required');
+        const body = parseBody(
+          await handlers.v8_heap_diff({ beforeSnapshotId: 123, afterSnapshotId: 456 }),
+        );
+        expect(body.success).toBe(false);
+        expect(String(body.error)).toMatch(
+          /Both beforeSnapshotId and afterSnapshotId are required/,
+        );
       });
 
       it('should throw if before snapshot not found', async () => {
         const handlers = new V8InspectorHandlers(createMockDeps());
-        await expect(
-          handlers.v8_heap_diff({ beforeSnapshotId: 'missing', afterSnapshotId: 'also-missing' }),
-        ).rejects.toThrow('Snapshot missing not found');
+        const body = parseBody(
+          await handlers.v8_heap_diff({
+            beforeSnapshotId: 'missing',
+            afterSnapshotId: 'also-missing',
+          }),
+        );
+        expect(body.success).toBe(false);
+        expect(String(body.error)).toMatch(/Snapshot missing not found/);
       });
 
       it('should throw if after snapshot not found', async () => {
         storeSnapshot({ id: 'snap-before', chunks: ['a'], capturedAt: 't', sizeBytes: 100 });
         const handlers = new V8InspectorHandlers(createMockDeps());
-        await expect(
-          handlers.v8_heap_diff({
+        const body = parseBody(
+          await handlers.v8_heap_diff({
             beforeSnapshotId: 'snap-before',
             afterSnapshotId: 'missing-after',
           }),
-        ).rejects.toThrow('Snapshot missing-after not found');
+        );
+        expect(body.success).toBe(false);
+        expect(String(body.error)).toMatch(/Snapshot missing-after not found/);
       });
 
       it('should return size delta for two stored snapshots', async () => {
@@ -808,10 +833,12 @@ describe('v8-inspector handler coverage', () => {
         });
         const handlers = new V8InspectorHandlers(createMockDeps());
 
-        const result = await handlers.v8_heap_diff({
-          beforeSnapshotId: 'snap-diff-before',
-          afterSnapshotId: 'snap-diff-after',
-        });
+        const result = parseBody(
+          await handlers.v8_heap_diff({
+            beforeSnapshotId: 'snap-diff-before',
+            afterSnapshotId: 'snap-diff-after',
+          }),
+        );
 
         expect(result).toMatchObject({
           success: true,
@@ -826,10 +853,12 @@ describe('v8-inspector handler coverage', () => {
         storeSnapshot({ id: 'snap-small', chunks: ['y'], capturedAt: 't2', sizeBytes: 400 });
         const handlers = new V8InspectorHandlers(createMockDeps());
 
-        const result = await handlers.v8_heap_diff({
-          beforeSnapshotId: 'snap-big',
-          afterSnapshotId: 'snap-small',
-        });
+        const result = parseBody(
+          await handlers.v8_heap_diff({
+            beforeSnapshotId: 'snap-big',
+            afterSnapshotId: 'snap-small',
+          }),
+        );
 
         expect(result.sizeDeltaBytes).toBe(-600);
       });
@@ -838,7 +867,9 @@ describe('v8-inspector handler coverage', () => {
     describe('v8_object_inspect', () => {
       it('should throw if address is missing', async () => {
         const handlers = new V8InspectorHandlers(createMockDeps());
-        await expect(handlers.v8_object_inspect({})).rejects.toThrow('address is required');
+        const body = parseBody(await handlers.v8_object_inspect({}));
+        expect(body.success).toBe(false);
+        expect(String(body.error)).toMatch(/address/i);
       });
 
       it('should prefer debugger manager object inspection when available', async () => {
@@ -865,7 +896,9 @@ describe('v8-inspector handler coverage', () => {
           }),
         );
 
-        const result = await handlers.v8_object_inspect({ address: 'debugger-object-id' });
+        const result = parseBody(
+          await handlers.v8_object_inspect({ address: 'debugger-object-id' }),
+        );
 
         expect(debuggerManager.getObjectPropertiesById).toHaveBeenCalledWith('debugger-object-id');
         expect(mockGetObjectByObjectId).not.toHaveBeenCalled();
@@ -891,7 +924,7 @@ describe('v8-inspector handler coverage', () => {
         mockGetObjectByObjectId.mockResolvedValueOnce({ type: 'object', className: 'Object' });
         const handlers = new V8InspectorHandlers(createMockDeps());
 
-        const result = await handlers.v8_object_inspect({ address: '1:42' });
+        const result = parseBody(await handlers.v8_object_inspect({ address: '1:42' }));
 
         expect(result).toMatchObject({
           success: true,
@@ -919,7 +952,7 @@ describe('v8-inspector handler coverage', () => {
           }),
         );
 
-        const result = await handlers.v8_object_inspect({ address: '1:77' });
+        const result = parseBody(await handlers.v8_object_inspect({ address: '1:77' }));
 
         expect(debuggerManager.getObjectPropertiesById).toHaveBeenCalledWith('1:77');
         expect(mockGetObjectByObjectId).toHaveBeenCalledWith('1:77');
@@ -934,18 +967,18 @@ describe('v8-inspector handler coverage', () => {
         mockGetObjectByObjectId.mockResolvedValueOnce(null);
         const handlers = new V8InspectorHandlers(createMockDeps());
 
-        const result = await handlers.v8_object_inspect({ address: '1:99' });
+        const result = parseBody(await handlers.v8_object_inspect({ address: '1:99' }));
 
-        expect(result).toMatchObject({ success: true, address: '1:99' });
+        expect(result.success).toBe(false);
       });
 
       it('should handle client error gracefully', async () => {
         mockGetObjectByObjectId.mockRejectedValueOnce(new Error('CDP error'));
         const handlers = new V8InspectorHandlers(createMockDeps());
 
-        const result = await handlers.v8_object_inspect({ address: '1:0' });
+        const result = parseBody(await handlers.v8_object_inspect({ address: '1:0' }));
 
-        expect(result).toMatchObject({ success: true, address: '1:0' });
+        expect(result.success).toBe(false);
       });
     });
 
@@ -953,7 +986,7 @@ describe('v8-inspector handler coverage', () => {
       it('should throw without pageController', async () => {
         const deps = createMockDepsWithoutPage();
         const handlers = new V8InspectorHandlers(deps);
-        await expect(handlers.v8_heap_stats({})).rejects.toThrow();
+        expect(parseBody(await handlers.v8_heap_stats({})).success).toBe(false);
       });
 
       it('should return stats with heapUsage when client succeeds', async () => {
@@ -964,7 +997,7 @@ describe('v8-inspector handler coverage', () => {
         });
         const handlers = new V8InspectorHandlers(createMockDeps());
 
-        const result = await handlers.v8_heap_stats({});
+        const result = parseBody(await handlers.v8_heap_stats({}));
 
         expect(result).toMatchObject({
           success: true,
@@ -977,7 +1010,7 @@ describe('v8-inspector handler coverage', () => {
         mockGetHeapUsage.mockRejectedValueOnce(new Error('no session'));
         const handlers = new V8InspectorHandlers(createMockDeps());
 
-        const result = await handlers.v8_heap_stats({});
+        const result = parseBody(await handlers.v8_heap_stats({}));
 
         expect(result).toMatchObject({
           success: true,
@@ -991,7 +1024,7 @@ describe('v8-inspector handler coverage', () => {
         mockGetHeapUsage.mockRejectedValueOnce(new Error('skip'));
         const handlers = new V8InspectorHandlers(createMockDeps());
 
-        const result = await handlers.v8_heap_stats({});
+        const result = parseBody(await handlers.v8_heap_stats({}));
 
         expect(result.snapshotCount).toBe(2);
       });
@@ -1044,14 +1077,10 @@ describe('v8-inspector handler coverage', () => {
         const deps = createMockDepsWithoutPage();
         const handlers = new V8InspectorHandlers(deps);
 
-        const result = await handlers.v8_version_detect({});
+        const result = parseBody(await handlers.v8_version_detect({}));
 
-        expect(result).toMatchObject({
-          success: false,
-          error: 'v8_version_detect: PageController not available',
-          capability: 'page-controller',
-          fix: 'Call browser_launch or browser_attach first, and select a tab that exposes a stable Page handle.',
-        });
+        expect(result.success).toBe(false);
+        expect(String(result.error)).toMatch(/PageController/i);
       });
 
       it('should detect version with pageController', async () => {
@@ -1064,7 +1093,7 @@ describe('v8-inspector handler coverage', () => {
         const deps = createMockDeps();
         const handlers = new V8InspectorHandlers(deps);
 
-        const result = await handlers.v8_version_detect({});
+        const result = parseBody(await handlers.v8_version_detect({}));
         const getPage = versionDetectorGetPages.at(-1);
 
         expect(result).toMatchObject({

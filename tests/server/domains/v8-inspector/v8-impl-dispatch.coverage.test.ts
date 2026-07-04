@@ -28,7 +28,7 @@ describe('V8InspectorHandlers.handle — dispatch', () => {
     expect(r).toBeDefined();
   });
 
-  it('routes v8_function_retained (missing snapshotId → throws, caught)', async () => {
+  it('routes v8_function_retained (missing snapshotId → ToolResponse with success:false)', async () => {
     const r = await tryDispatch('v8_function_retained', {});
     expect(r).toBeDefined();
   });
@@ -48,7 +48,7 @@ describe('V8InspectorHandlers.handle — dispatch', () => {
     expect(r).toBeDefined();
   });
 
-  it('routes v8_heap_snapshot_analyze (missing snapshotId → throws, caught)', async () => {
+  it('routes v8_heap_snapshot_analyze (missing snapshotId → ToolResponse with success:false)', async () => {
     const r = await tryDispatch('v8_heap_snapshot_analyze', {});
     expect(r).toBeDefined();
   });
