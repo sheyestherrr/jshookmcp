@@ -21,7 +21,10 @@ vi.mock('@native/platform/factory', () => ({
 // called on the cross-platform path — stub them so the import resolves cleanly.
 vi.mock('@native/PEAnalyzer', () => ({
   PEAnalyzer: class MockPEAnalyzer {
-    private readonly _stub = true;
+    // no-op stub — the cross-platform path never instantiates PEAnalyzer
+    // methods. Member present to satisfy oxlint(no-extraneous-class); public
+    // so tsc does not flag it as an unused private field.
+    readonly stub = true;
   },
 }));
 vi.mock('@native/Win32API', () => ({
