@@ -29,5 +29,5 @@
 | `seek_to_timestamp` | 将跟踪回放跳转到指定时间戳，返回该时刻的快照上下文。 |
 | `trace_get_network_flow` | 读取 trace 中按请求聚合的网络流。 |
 | `diff_heap_snapshots` | 对比两个堆快照的差异，找出新增、删除和大小变化的对象。 |
-| `export_trace` | 将跟踪数据导出为标准格式文件，便于外部工具分析或团队共享。 |
+| `export_trace` | 将 trace 数据导出为 Chrome Trace Event JSON，并按事件类别生成独立线程轨道和 thread_name 元数据，便于在 chrome://tracing 或 Perfetto 中分析。 |
 | `summarize_trace` | 为跟踪数据库生成紧凑的、适用于大语言模型的摘要报告。 |

@@ -135,7 +135,9 @@ export const TRACE_TOOLS: Tool[] = [
   ),
   tool('export_trace', (t) =>
     t
-      .desc('Export a trace database to Chrome Trace Event JSON.')
+      .desc(
+        'Export a trace database to Chrome Trace Event JSON with per-category thread tracks and thread_name metadata.',
+      )
       .string('dbPath', 'Path to trace DB file. Uses the active recording if omitted.')
       .string('outputPath', 'Output JSON file path. Auto-generated if omitted.')
       .idempotent(),

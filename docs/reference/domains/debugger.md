@@ -29,7 +29,7 @@
 | `debugger_pause` | 在下一条语句处暂停执行。 |
 | `debugger_resume` | 恢复执行。 |
 | `debugger_step` | 单步执行代码（进入/跳过/跳出）。 |
-| `breakpoint` | 管理断点：代码断点（行号/脚本）、XHR 断点（URL 模式）、事件监听断点、事件类别断点和异常断点。 |
+| `breakpoint` | 管理断点：代码断点（行号/脚本）、函数名断点、XHR 断点（URL 模式）、事件监听断点、事件类别断点和异常断点。 |
 | `get_call_stack` | 获取当前调用栈（仅在断点暂停时可用）。 |
 | `debugger_evaluate` | 在特定上下文（当前调用帧或全局）中求值表达式。 |
 | `debugger_wait_for_paused` | 等待调试器进入暂停状态。 |

@@ -27,7 +27,7 @@
 | `syscall_stop_monitor` | 停止系统调用监控。 |
 | `syscall_capture_events` | 从活跃或上一次监控会话中捕获系统调用事件。 |
 | `syscall_correlate_js` | 将捕获的系统调用与可能的 JavaScript 函数关联。 |
-| `syscall_filter` | 按系统调用名称过滤已捕获的系统调用事件。 |
+| `syscall_filter` | 按系统调用名称、PID 或返回值范围过滤已捕获的系统调用事件，可用 errorOnly 仅保留返回错误码的调用。 |
 | `syscall_get_stats` | 获取系统调用监控统计。 |
 | `syscall_ebpf_trace` | 通过 Linux eBPF/bpftrace 追踪系统调用。需要 root 或 CAP_BPF。 |
 | `syscall_resolve_ssn` | 从磁盘 ntdll.dll 解析 NT 系统调用服务号（SSN）。解析导出表提取 Zw* → SSN 映射，并定位 syscall;ret gadget 用于直接调用桩。仅 Win32。 |

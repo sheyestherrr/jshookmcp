@@ -29,5 +29,5 @@ Time-travel debugging domain that records CDP events into SQLite for SQL-based q
 | `seek_to_timestamp` | Reconstruct trace state at a specific timestamp. |
 | `trace_get_network_flow` | Get a recorded request-scoped network flow from a trace. |
 | `diff_heap_snapshots` | Compare two heap snapshots from a trace. |
-| `export_trace` | Export a trace database to Chrome Trace Event JSON. |
+| `export_trace` | Export a trace database to Chrome Trace Event JSON with per-category thread tracks and thread_name metadata. |
 | `summarize_trace` | Generate a compact summary of a trace database. |
