@@ -47,6 +47,37 @@ import {
   type MemoryDelta,
 } from '@server/domains/trace/TraceSummarizer';
 
+/**
+ * Maps a trace event category to a Chrome Trace Event thread id (tid) so that
+ * different work streams (debugger pauses, network requests, memory deltas, ...)
+ * land on separate tracks in chrome://tracing and ui.perfetto.dev instead of
+ * collapsing onto a single track. `pid` stays 1 (single browser process); only
+ * `tid` varies per category.
+ */
+const TRACE_TID_BY_CATEGORY: Record<string, number> = {
+  debugger: 2,
+  network: 3,
+  memory: 4,
+  runtime: 5,
+  page: 6,
+  browser: 7,
+};
+const DEFAULT_TRACE_TID = 1;
+const TRACE_THREAD_NAMES: Record<number, string> = {
+  1: 'Other',
+  2: 'Debugger',
+  3: 'Network',
+  4: 'Memory',
+  5: 'Runtime',
+  6: 'Page',
+  7: 'Browser',
+};
+
+function deriveTraceTid(category: string | undefined | null): number {
+  if (!category) return DEFAULT_TRACE_TID;
+  return TRACE_TID_BY_CATEGORY[category] ?? DEFAULT_TRACE_TID;
+}
+
 export class TraceToolHandlers {
   constructor(
     private readonly recorder: TraceRecorder,
@@ -533,11 +564,26 @@ export class TraceToolHandlers {
           ph,
           ts,
           pid: 1,
-          tid: 1,
+          tid: deriveTraceTid(cat),
           args: safeParseJSON(dataStr),
           ...(ph === 'i' ? { s: 'g' } : {}),
         };
       });
+
+      // Prepend thread_name metadata events so chrome://tracing renders friendly
+      // track labels (e.g. "Debugger", "Network") instead of bare "Thread N".
+      const usedTids = new Set<number>(traceEvents.map((e) => e.tid));
+      const threadNameEvents = [...usedTids]
+        .toSorted((a, b) => a - b)
+        .map((tid) => ({
+          name: 'thread_name',
+          cat: '__metadata',
+          ph: 'M',
+          pid: 1,
+          tid,
+          args: { name: TRACE_THREAD_NAMES[tid] ?? 'Other' },
+        }));
+      const outputEvents = [...threadNameEvents, ...traceEvents];
 
       const allowedRoots = [getProjectRoot(), ...getSystemTempRoots()];
       const finalOutputPath = outputPath
@@ -553,7 +599,7 @@ export class TraceToolHandlers {
             })
           ).absolutePath;
 
-      await writeTextFileAtomically(finalOutputPath, JSON.stringify(traceEvents, null, 2), {
+      await writeTextFileAtomically(finalOutputPath, JSON.stringify(outputEvents, null, 2), {
         allowedRoots: outputPath ? allowedRoots : undefined,
       });
 
@@ -561,10 +607,11 @@ export class TraceToolHandlers {
         .merge({
           exportedPath: finalOutputPath,
           eventCount: traceEvents.length,
+          threadCount: usedTids.size,
           format: 'Chrome Trace Event JSON',
           message:
-            `Exported ${traceEvents.length} events to ${finalOutputPath}. Open in chrome://tracing` +
-            ` or ui.perfetto.dev`,
+            `Exported ${traceEvents.length} events across ${usedTids.size} thread(s) to ` +
+            `${finalOutputPath}. Open in chrome://tracing or ui.perfetto.dev`,
         })
         .json();
     } finally {

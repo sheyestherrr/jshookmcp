@@ -728,6 +728,7 @@ describe('TraceToolHandlers', () => {
 
       const result = parseToolResponse<{
         eventCount: number;
+        threadCount: number;
         format: string;
         exportedPath: string;
       }>(
@@ -738,6 +739,7 @@ describe('TraceToolHandlers', () => {
       );
 
       expect(result.eventCount).toBe(3);
+      expect(result.threadCount).toBe(2);
       expect(result.format).toBe('Chrome Trace Event JSON');
       expect(existsSync(outputPath)).toBe(true);
 
@@ -751,24 +753,128 @@ describe('TraceToolHandlers', () => {
         pid: number;
         tid: number;
         s?: string;
+        args?: { name?: string };
       }>;
-      expect(exported).toHaveLength(3);
+      // Metadata thread_name events are prepended (one per used tid).
+      const metadataEvents = exported.filter((e) => e.ph === 'M');
+      const realEvents = exported.filter((e) => e.ph !== 'M');
+      expect(metadataEvents).toHaveLength(2);
+      expect(realEvents).toHaveLength(3);
 
-      // Debugger.paused should be 'B' (begin)
-      expect(exported[0]!.ph).toBe('B');
-      expect(exported[0]!.name).toBe('Debugger.paused');
-      expect(exported[0]!.cat).toBe('debugger');
-      expect(exported[0]!.pid).toBe(1);
-      expect(exported[0]!.tid).toBe(1);
+      // Thread metadata should expose friendly names for each track.
+      const threadNames = metadataEvents.map((e) => e.args?.name);
+      expect(threadNames).toContain('Debugger');
+      expect(threadNames).toContain('Network');
+
+      // Debugger.paused should be 'B' (begin) on the debugger thread (tid 2)
+      expect(realEvents[0]!.ph).toBe('B');
+      expect(realEvents[0]!.name).toBe('Debugger.paused');
+      expect(realEvents[0]!.cat).toBe('debugger');
+      expect(realEvents[0]!.pid).toBe(1);
+      expect(realEvents[0]!.tid).toBe(2);
       // Timestamp should be in microseconds (1000ms * 1000 = 1000000µs)
-      expect(exported[0]!.ts).toBe(1000000);
+      expect(realEvents[0]!.ts).toBe(1000000);
 
-      // Debugger.resumed should be 'E' (end)
-      expect(exported[1]!.ph).toBe('E');
+      // Debugger.resumed should be 'E' (end) on the same debugger thread
+      expect(realEvents[1]!.ph).toBe('E');
+      expect(realEvents[1]!.tid).toBe(2);
 
-      // Instant event
-      expect(exported[2]!.ph).toBe('i');
-      expect(exported[2]!.s).toBe('g');
+      // Network instant event should land on a separate thread (tid 3)
+      expect(realEvents[2]!.ph).toBe('i');
+      expect(realEvents[2]!.s).toBe('g');
+      expect(realEvents[2]!.tid).toBe(3);
+      expect(realEvents[2]!.cat).toBe('network');
+    });
+
+    it('maps each event category to a distinct Chrome Trace Event thread id', async () => {
+      // @ts-expect-error — auto-suppressed [TS18047]
+      db.insertEvent({
+        timestamp: 1000,
+        category: 'debugger',
+        eventType: 'Debugger.paused',
+        data: '{}',
+        scriptId: '1',
+        lineNumber: 1,
+      });
+      // @ts-expect-error
+      db.insertEvent({
+        timestamp: 2000,
+        category: 'network',
+        eventType: 'Network.requestWillBeSent',
+        data: '{}',
+        scriptId: null,
+        lineNumber: null,
+      });
+      // @ts-expect-error
+      db.insertEvent({
+        timestamp: 3000,
+        category: 'runtime',
+        eventType: 'Runtime.consoleAPICalled',
+        data: '{}',
+        scriptId: null,
+        lineNumber: null,
+      });
+      // @ts-expect-error
+      db.insertEvent({
+        timestamp: 4000,
+        category: 'page',
+        eventType: 'Page.frameNavigated',
+        data: '{}',
+        scriptId: null,
+        lineNumber: null,
+      });
+      // @ts-expect-error
+      db.insertEvent({
+        timestamp: 5000,
+        category: 'unknown-category',
+        eventType: 'Something.else',
+        data: '{}',
+        scriptId: null,
+        lineNumber: null,
+      });
+      // @ts-expect-error — auto-suppressed [TS18047]
+      db.flush();
+      // @ts-expect-error — auto-suppressed [TS18047]
+      db.close();
+
+      const recorder = new TraceRecorder();
+      const ctx = createMockContext() as MCPServerContext;
+      const handler = new TraceToolHandlers(recorder, ctx);
+
+      const outputPath = join(tmpdir(), `test-export-tids-${Date.now()}.json`);
+      cleanupPaths.push(outputPath);
+
+      const result = parseToolResponse<{ eventCount: number; threadCount: number }>(
+        await handler.handleExportTrace({
+          dbPath,
+          outputPath,
+        }),
+      );
+
+      expect(result.eventCount).toBe(5);
+      // 4 known categories (debugger/network/runtime/page) + 1 default tid for unknown
+      expect(result.threadCount).toBe(5);
+
+      const { readFileSync } = await import('node:fs');
+      const exported = JSON.parse(readFileSync(outputPath, 'utf-8')) as Array<{
+        cat: string;
+        ph: string;
+        tid: number;
+      }>;
+      const tidByCat = new Map<string, number>();
+      for (const e of exported) {
+        if (e.ph === 'M') continue;
+        tidByCat.set(e.cat, e.tid);
+      }
+      expect(tidByCat.get('debugger')).toBe(2);
+      expect(tidByCat.get('network')).toBe(3);
+      expect(tidByCat.get('runtime')).toBe(5);
+      expect(tidByCat.get('page')).toBe(6);
+      // Unknown categories fall back to the default tid (1)
+      expect(tidByCat.get('unknown-category')).toBe(1);
+      // All mapped tids are distinct — no two categories collapse onto one track
+      const distinctTids = new Set(tidByCat.values());
+      expect(distinctTids.size).toBe(tidByCat.size);
     });
 
     it('exports using automatically resolved artifact path when outputPath is omitted', async () => {
