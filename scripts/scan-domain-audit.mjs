@@ -12,13 +12,17 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const DOMAIN_DIR = 'src/server/domains';
+const OUTPUT_PATH = 'scripts/domain-audit.json';
 const domains = fs.readdirSync(DOMAIN_DIR).filter((d) => {
-  return (
-    fs.existsSync(path.join(DOMAIN_DIR, d, 'manifest.ts')) ||
-    fs.existsSync(path.join(DOMAIN_DIR, d, 'manifest.js'))
-  );
+  const dir = path.join(DOMAIN_DIR, d);
+  const hasManifest =
+    fs.existsSync(path.join(dir, 'manifest.ts')) || fs.existsSync(path.join(dir, 'manifest.js'));
+  const hasLegacyToolSurface =
+    fs.existsSync(path.join(dir, 'definitions.ts')) && fs.existsSync(path.join(dir, 'index.ts'));
+  return hasManifest || hasLegacyToolSurface;
 });
 
 const vitestConfig = fs.readFileSync('vitest.config.ts', 'utf8');
@@ -58,21 +62,53 @@ function countTestFiles(domain) {
   return n;
 }
 
+function countMatches(content, pattern) {
+  return (content.match(pattern) || []).length;
+}
+
+function isDefinitionScope(file) {
+  const normalized = file.split(path.sep).join('/');
+  return (
+    path.basename(file) === 'definitions.ts' ||
+    normalized.includes('/definitions/') ||
+    normalized.endsWith('/definitions/index.ts')
+  );
+}
+
+function countToolDefinitions(files) {
+  let n = 0;
+  for (const f of files) {
+    const content = fs.readFileSync(f, 'utf8');
+
+    // Tool definitions use several local styles:
+    // - registry builder: tool('name', ...)
+    // - BoringSSL object wrapper: objectTool('name', ...)
+    // - raw MCP Tool objects in definitions files: { name: 'name', ... }
+    n += countMatches(content, /\btool\(\s*['"`]/g);
+    n += countMatches(content, /\bobjectTool\(\s*['"`]/g);
+    if (isDefinitionScope(f)) {
+      n += countMatches(content, /\bname\s*:\s*['"`][a-zA-Z0-9_.:-]+['"`]/g);
+    }
+  }
+  return n;
+}
+
+function formatGeneratedJson(file) {
+  const result = spawnSync('pnpm', ['exec', 'oxfmt', file], { shell: true, stdio: 'ignore' });
+  if (result.error || result.status !== 0) {
+    console.warn(`[audit] warning: generated ${file}, but oxfmt formatting was unavailable`);
+  }
+}
+
 const audit = {};
 
 for (const domain of domains.toSorted()) {
   const dir = path.join(DOMAIN_DIR, domain);
   const entry = { domain, dims: {} };
 
-  // D1 tool count — count tool('name', ...) occurrences across all .ts in domain
+  // D1 tool count — count supported definition styles across domain source.
   const srcTsFiles = listTs(dir);
-  let toolCount = 0;
-  for (const f of srcTsFiles) {
-    if (!path.basename(f).includes('definitions')) continue;
-    const c = fs.readFileSync(f, 'utf8');
-    toolCount += (c.match(/\btool\(\s*['"]/g) || []).length;
-  }
-  entry.dims.d1_toolCount = toolCount;
+  entry.dims.d1_toolCount = countToolDefinitions(srcTsFiles);
 
   // D2 test files
   entry.dims.d2_testFiles = countTestFiles(domain);
@@ -116,8 +152,9 @@ for (const domain of domains.toSorted()) {
   audit[domain] = entry;
 }
 
-fs.writeFileSync('scripts/domain-audit.json', JSON.stringify(audit, null, 2));
-console.log(`Audited ${domains.length} domains → scripts/domain-audit.json`);
+fs.writeFileSync(OUTPUT_PATH, JSON.stringify(audit, null, 2) + '\n');
+formatGeneratedJson(OUTPUT_PATH);
+console.log(`Audited ${domains.length} domains → ${OUTPUT_PATH}`);
 for (const [d, e] of Object.entries(audit)) {
   const doc = e.dims.d6_doc;
   console.log(
