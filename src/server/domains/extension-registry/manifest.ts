@@ -48,12 +48,12 @@ const manifest = {
   registrations,
   workflowRule: {
     patterns: [
-      /\b(extension|plugin|addon|webhook|c2|bluetooth|ble|hid|serial|esp32|registry)\b/i,
+      /\b(extension|plugin|addon|webhook|c2|registry)\b/i,
       /(install|uninstall|reload).*(extension|plugin)/i,
     ],
     priority: 70,
-    tools: ['install_extension', 'extension_list_installed', 'webhook'],
-    hint: 'Plugin + webhook C2 + BLE HID + serial flashing pipeline.',
+    tools: ['extension_list_installed', 'webhook', 'extension_execute_in_context'],
+    hint: 'Plugin lifecycle (list/execute/reload/uninstall) + webhook C2 endpoint management.',
   },
   prerequisites: {
     webhook: [
