@@ -11,6 +11,7 @@
  */
 
 import type { CodeCollector } from '@server/domains/shared/modules/collector';
+import { handleSafe, type ToolResponse } from '@server/domains/shared/ResponseBuilder';
 
 import { CallGraphHandlers } from '@server/domains/graphql/handlers/callgraph';
 import { ScriptReplaceHandlers } from '@server/domains/graphql/handlers/script-replace';
@@ -49,28 +50,52 @@ export class GraphQLToolHandlers {
   }
 
   // ── Call Graph ──
+  async handleCallGraphAnalyzeTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleCallGraphAnalyze(args));
+  }
+
   async handleCallGraphAnalyze(args: Record<string, unknown>) {
     return this.callGraph.handleCallGraphAnalyze(args);
   }
 
   // ── Script Replace ──
+  async handleScriptReplacePersistTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleScriptReplacePersist(args));
+  }
+
   async handleScriptReplacePersist(args: Record<string, unknown>) {
     return this.scriptReplace.handleScriptReplacePersist(args);
   }
 
   // ── Introspection ──
+  async handleGraphqlIntrospectTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleGraphqlIntrospect(args));
+  }
+
   async handleGraphqlIntrospect(args: Record<string, unknown>) {
     return this.introspection.handleGraphqlIntrospect(args);
   }
 
   // ── Extract ──
+  async handleGraphqlExtractQueriesTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleGraphqlExtractQueries(args));
+  }
+
   async handleGraphqlExtractQueries(args: Record<string, unknown>) {
     return this.extract.handleGraphqlExtractQueries(args);
   }
 
   // ── Replay ──
+  async handleGraphqlReplayTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleGraphqlReplay(args));
+  }
+
   async handleGraphqlReplay(args: Record<string, unknown>) {
     return this.replay.handleGraphqlReplay(args);
+  }
+
+  async handleGraphqlEnumSchemaTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleGraphqlEnumSchema(args));
   }
 
   async handleGraphqlEnumSchema(args: Record<string, unknown>) {

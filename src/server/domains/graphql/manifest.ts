@@ -12,12 +12,12 @@ const registrations = defineMethodRegistrations<H, (typeof graphqlTools)[number]
   depKey: DEP_KEY,
   lookup: t,
   entries: [
-    { tool: 'call_graph_analyze', method: 'handleCallGraphAnalyze' },
-    { tool: 'script_replace_persist', method: 'handleScriptReplacePersist' },
-    { tool: 'graphql_introspect', method: 'handleGraphqlIntrospect' },
-    { tool: 'graphql_extract_queries', method: 'handleGraphqlExtractQueries' },
-    { tool: 'graphql_replay', method: 'handleGraphqlReplay' },
-    { tool: 'graphql_enum_schema', method: 'handleGraphqlEnumSchema' },
+    { tool: 'call_graph_analyze', method: 'handleCallGraphAnalyzeTool' },
+    { tool: 'script_replace_persist', method: 'handleScriptReplacePersistTool' },
+    { tool: 'graphql_introspect', method: 'handleGraphqlIntrospectTool' },
+    { tool: 'graphql_extract_queries', method: 'handleGraphqlExtractQueriesTool' },
+    { tool: 'graphql_replay', method: 'handleGraphqlReplayTool' },
+    { tool: 'graphql_enum_schema', method: 'handleGraphqlEnumSchemaTool' },
   ],
 });
 

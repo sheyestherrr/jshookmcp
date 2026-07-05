@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ResponseBuilder } from '@server/domains/shared/ResponseBuilder';
 
 const mocks = vi.hoisted(() => ({
   miniapp: {
@@ -104,6 +105,29 @@ describe('PlatformToolHandlers', () => {
       args,
     });
     expect(mocks.miniapp.handleMiniappPkgScan).toHaveBeenCalledWith(args);
+  });
+
+  it('wraps platform facade output in MCP ToolResponse', async () => {
+    const handlers = new PlatformToolHandlers(collector);
+    const result = await handlers.handlePlatformCapabilitiesTool();
+    const body = ResponseBuilder.parse<Record<string, unknown>>(result);
+    expect(body).toMatchObject({
+      success: true,
+      kind: 'platform_capabilities',
+    });
+    expect(body.content).toBeUndefined();
+  });
+
+  it('turns platform wrapper failures into structured errors', async () => {
+    mocks.miniapp.handleMiniappPkgScan.mockRejectedValueOnce(new Error('scan failed'));
+    const handlers = new PlatformToolHandlers(collector);
+    const result = await handlers.handleMiniappPkgScanTool({ path: 'a' });
+    const body = ResponseBuilder.parse<Record<string, unknown>>(result);
+    expect(body).toMatchObject({
+      success: false,
+      error: 'scan failed',
+      message: 'scan failed',
+    });
   });
 
   it('delegates miniapp package unpack and analyze', async () => {

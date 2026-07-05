@@ -1,6 +1,7 @@
 // @ts-expect-error — auto-suppressed [TS1484]
 import { parseJson, ProcessFindResponse } from '@tests/server/domains/shared/mock-factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ResponseBuilder } from '@server/domains/shared/ResponseBuilder';
 
 const pm = {
   getPlatform: vi.fn(() => 'win32'),
@@ -49,6 +50,28 @@ describe('ProcessToolHandlers', () => {
     expect(body.debugPort).toBe(9333);
     expect(body.canAttach).toBe(true);
     expect(body.attachUrl).toBe('http://localhost:9333');
+  });
+
+  it('keeps process wrapper responses un-nested', async () => {
+    pm.checkDebugPort.mockResolvedValue(9333);
+
+    const body = parseJson<ProcessFindResponse & { content?: unknown }>(
+      await handlers.handleProcessCheckDebugPortTool({ pid: 77 }),
+    );
+    expect(body.success).toBe(true);
+    expect(body.debugPort).toBe(9333);
+    expect(body.content).toBeUndefined();
+  });
+
+  it('turns process wrapper failures into structured errors', async () => {
+    (handlers as any).handleProcessFind = vi.fn().mockRejectedValue(new Error('find failed'));
+    const result = await handlers.handleProcessFindTool({});
+    const body = ResponseBuilder.parse<Record<string, unknown>>(result);
+    expect(body).toMatchObject({
+      success: false,
+      error: 'find failed',
+      message: 'find failed',
+    });
   });
 
   it('returns check_debug_port results through the injection facade', async () => {

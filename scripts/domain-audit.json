@@ -245,7 +245,7 @@
         "src/server/domains/graphql/handlers.impl.core.runtime.replay.ts"
       ],
       "d4_bareCatch": 19,
-      "d5_handleSafeRefs": 0,
+      "d5_handleSafeRefs": 7,
       "d6_doc": {
         "hasClaude": true,
         "hasScore": true,
@@ -387,7 +387,7 @@
       "d2_testFiles": 18,
       "d3_coverageExcluded": [],
       "d4_bareCatch": 22,
-      "d5_handleSafeRefs": 14,
+      "d5_handleSafeRefs": 31,
       "d6_doc": {
         "hasClaude": true,
         "hasScore": true,
@@ -412,7 +412,7 @@
         "src/server/domains/process/handlers.base.process.ts"
       ],
       "d4_bareCatch": 10,
-      "d5_handleSafeRefs": 0,
+      "d5_handleSafeRefs": 27,
       "d6_doc": {
         "hasClaude": true,
         "hasScore": true,
@@ -463,7 +463,7 @@
       "d2_testFiles": 10,
       "d3_coverageExcluded": ["src/server/domains/sourcemap/handlers.ts"],
       "d4_bareCatch": 20,
-      "d5_handleSafeRefs": 0,
+      "d5_handleSafeRefs": 9,
       "d6_doc": {
         "hasClaude": true,
         "hasScore": true,

@@ -35,6 +35,14 @@ describe('GraphQLToolHandlers', () => {
     expect(body.error).toContain('Invalid filterPattern regex');
   });
 
+  it('keeps wrapper error responses un-nested', async () => {
+    const response = await handlers.handleCallGraphAnalyzeTool({ filterPattern: '[' });
+    const body = parseJson<any>(response);
+    expect((response as any).isError).toBe(true);
+    expect(body.error).toContain('Invalid filterPattern regex');
+    expect(body.content).toBeUndefined();
+  });
+
   it('validates required arguments for script_replace_persist', async () => {
     const response = await handlers.handleScriptReplacePersist({ replacement: 'x' });
     const body = parseJson<any>(response);
@@ -100,6 +108,28 @@ describe('GraphQLToolHandlers', () => {
     expect(body.success).toBe(true);
     expect(body.status).toBe(200);
     expect(body.schema).toEqual({ __schema: { queryType: { name: 'Query' } } });
+  });
+
+  it('keeps wrapper success responses un-nested', async () => {
+    page.evaluate.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      responseHeaders: { 'content-type': 'application/json' },
+      totalLength: 32,
+      preview: '',
+      truncated: false,
+      json: { data: { __schema: { queryType: { name: 'Query' } } } },
+    });
+
+    const body = parseJson<any>(
+      await handlers.handleGraphqlIntrospectTool({
+        endpoint: withPath(TEST_URLS.root, 'api/graphql'),
+      }),
+    );
+
+    expect(body.success).toBe(true);
+    expect(body.content).toBeUndefined();
   });
 
   it('replays graphql query and returns response metadata', async () => {

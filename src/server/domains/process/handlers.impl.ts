@@ -8,6 +8,7 @@
  */
 
 import { UnifiedProcessManager, MemoryManager } from '@server/domains/shared/modules/native';
+import { handleSafe, type ToolResponse } from '@server/domains/shared/ResponseBuilder';
 import { MemoryAuditTrail } from '@modules/process/memory/AuditTrail';
 import { logger } from '@utils/logger';
 import type { ProcessHandlerDeps } from './handlers/shared-types';
@@ -80,24 +81,48 @@ export class ProcessHandlersBase {
 
   // ── Process Management ──
 
+  async handleProcessFindTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessFind(args));
+  }
+
   async handleProcessFind(args: Record<string, unknown>) {
     return this.processMgmt.handleProcessFind(args);
+  }
+
+  async handleProcessGetTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessGet(args));
   }
 
   async handleProcessGet(args: Record<string, unknown>) {
     return this.processMgmt.handleProcessGet(args);
   }
 
+  async handleProcessKillTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessKill(args));
+  }
+
   async handleProcessKill(args: Record<string, unknown>) {
     return this.processMgmt.handleProcessKill(args);
+  }
+
+  async handleProcessWindowsTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessWindows(args));
   }
 
   async handleProcessWindows(args: Record<string, unknown>) {
     return this.processMgmt.handleProcessWindows(args);
   }
 
+  async handleProcessCheckDebugPortTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessCheckDebugPort(args));
+  }
+
   async handleProcessCheckDebugPort(args: Record<string, unknown>) {
     return this.processMgmt.handleProcessCheckDebugPort(args);
+  }
+
+  async handleProcessLaunchDebugTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessLaunchDebug(args));
   }
 
   async handleProcessLaunchDebug(args: Record<string, unknown>) {
@@ -106,36 +131,72 @@ export class ProcessHandlersBase {
 
   // ── Memory Operations ──
 
+  async handleMemoryReadTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleMemoryRead(args));
+  }
+
   async handleMemoryRead(args: Record<string, unknown>) {
     return this.memoryOps.handleMemoryRead(args);
+  }
+
+  async handleMemoryWriteTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleMemoryWrite(args));
   }
 
   async handleMemoryWrite(args: Record<string, unknown>) {
     return this.memoryOps.handleMemoryWrite(args);
   }
 
+  async handleMemoryScanTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleMemoryScan(args));
+  }
+
   async handleMemoryScan(args: Record<string, unknown>) {
     return this.memoryOps.handleMemoryScan(args);
+  }
+
+  async handleMemoryAuditExportTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleMemoryAuditExport(args));
   }
 
   async handleMemoryAuditExport(args: Record<string, unknown>) {
     return this.memoryOps.handleMemoryAuditExport(args);
   }
 
+  async handleMemoryCheckProtectionTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleMemoryCheckProtection(args));
+  }
+
   async handleMemoryCheckProtection(args: Record<string, unknown>) {
     return this.memoryOps.handleMemoryCheckProtection(args);
+  }
+
+  async handleMemoryScanFilteredTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleMemoryScanFiltered(args));
   }
 
   async handleMemoryScanFiltered(args: Record<string, unknown>) {
     return this.memoryOps.handleMemoryScanFiltered(args);
   }
 
+  async handleMemoryBatchWriteTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleMemoryBatchWrite(args));
+  }
+
   async handleMemoryBatchWrite(args: Record<string, unknown>) {
     return this.memoryOps.handleMemoryBatchWrite(args);
   }
 
+  async handleMemoryDumpRegionTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleMemoryDumpRegion(args));
+  }
+
   async handleMemoryDumpRegion(args: Record<string, unknown>) {
     return this.memoryOps.handleMemoryDumpRegion(args);
+  }
+
+  async handleMemoryListRegionsTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleMemoryListRegions(args));
   }
 
   async handleMemoryListRegions(args: Record<string, unknown>) {
@@ -166,24 +227,48 @@ export class ProcessToolHandlers extends ProcessHandlersBase {
 
   // ── Injection Handlers ──
 
+  async handleInjectDllTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleInjectDll(args));
+  }
+
   async handleInjectDll(args: Record<string, unknown>) {
     return this.injection.handleInjectDll(args);
+  }
+
+  async handleInjectShellcodeTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleInjectShellcode(args));
   }
 
   async handleInjectShellcode(args: Record<string, unknown>) {
     return this.injection.handleInjectShellcode(args);
   }
 
+  async handleCheckDebugPortTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleCheckDebugPort(args));
+  }
+
   async handleCheckDebugPort(args: Record<string, unknown>) {
     return this.injection.handleCheckDebugPort(args);
+  }
+
+  async handleEnumerateModulesTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleEnumerateModules(args));
   }
 
   async handleEnumerateModules(args: Record<string, unknown>) {
     return this.injection.handleEnumerateModules(args);
   }
 
+  async handleProcessEnumThreadsTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessEnumThreads(args));
+  }
+
   async handleProcessEnumThreads(args: Record<string, unknown>) {
     return this.injection.handleProcessEnumThreads(args);
+  }
+
+  async handleElectronAttachTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleElectronAttach(args));
   }
 
   async handleElectronAttach(args: Record<string, unknown>) {
@@ -192,11 +277,19 @@ export class ProcessToolHandlers extends ProcessHandlersBase {
 
   // ── Hollowing Detection ──
 
+  async handleDetectHollowingTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleDetectHollowing(args));
+  }
+
   async handleDetectHollowing(args: Record<string, unknown>) {
     return this.hollowing.handleDetectHollowing(args);
   }
 
   // ── Handle Enumeration ──
+
+  async handleProcessEnumHandlesTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessEnumHandles(args));
+  }
 
   async handleProcessEnumHandles(args: Record<string, unknown>) {
     return this.handleEnum.handleProcessEnumHandles(args);
@@ -204,14 +297,26 @@ export class ProcessToolHandlers extends ProcessHandlersBase {
 
   // ── APC Detection ──
 
+  async handleProcessDetectApcTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessDetectApc(args));
+  }
+
   async handleProcessDetectApc(args: Record<string, unknown>) {
     return this.apcDetection.handleProcessDetectApc(args);
   }
 
   // ── Process Suspend/Resume ──
 
+  async handleProcessSuspendTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessSuspend(args));
+  }
+
   async handleProcessSuspend(args: Record<string, unknown>) {
     return this.processSuspend.handleProcessSuspend(args);
+  }
+
+  async handleProcessResumeTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcessResume(args));
   }
 
   async handleProcessResume(args: Record<string, unknown>) {

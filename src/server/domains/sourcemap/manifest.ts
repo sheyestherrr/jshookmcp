@@ -12,12 +12,12 @@ const registrations = defineMethodRegistrations<H, (typeof sourcemapTools)[numbe
   depKey: DEP_KEY,
   lookup: t,
   entries: [
-    { tool: 'sourcemap_discover', method: 'handleSourcemapDiscover' },
-    { tool: 'sourcemap_fetch_and_parse', method: 'handleSourcemapFetchAndParse' },
-    { tool: 'sourcemap_coverage', method: 'handleSourcemapCoverage' },
-    { tool: 'sourcemap_lookup', method: 'handleSourcemapLookup' },
-    { tool: 'sourcemap_reconstruct_tree', method: 'handleSourcemapReconstructTree' },
-    { tool: 'sourcemap_parse_v4', method: 'handleSourcemapParseV4' },
+    { tool: 'sourcemap_discover', method: 'handleSourcemapDiscoverTool' },
+    { tool: 'sourcemap_fetch_and_parse', method: 'handleSourcemapFetchAndParseTool' },
+    { tool: 'sourcemap_coverage', method: 'handleSourcemapCoverageTool' },
+    { tool: 'sourcemap_lookup', method: 'handleSourcemapLookupTool' },
+    { tool: 'sourcemap_reconstruct_tree', method: 'handleSourcemapReconstructTreeTool' },
+    { tool: 'sourcemap_parse_v4', method: 'handleSourcemapParseV4Tool' },
   ],
 });
 

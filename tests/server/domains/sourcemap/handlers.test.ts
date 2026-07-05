@@ -6,6 +6,7 @@ import * as fsPromises from 'node:fs/promises';
 
 import { resolveArtifactPath } from '@utils/artifacts';
 import { TEST_HTTP_URLS, withPath } from '@tests/shared/test-urls';
+import { ResponseBuilder } from '@server/domains/shared/ResponseBuilder';
 
 function getText(res: { content: Array<{ type: string; text?: string }> }): string {
   const block = res.content[0];
@@ -127,6 +128,24 @@ describe('SourcemapToolHandlers', () => {
     it('returns empty array if no maps found returning fast path', async () => {
       const res = await handlers.handleSourcemapDiscover({});
       expect(getText(res)).toContain('[]');
+    });
+
+    it('keeps discover wrapper responses un-nested', async () => {
+      const res = await handlers.handleSourcemapDiscoverTool({});
+      const body = JSON.parse(getText(res));
+      expect(body).toEqual([]);
+      expect(body.content).toBeUndefined();
+    });
+
+    it('turns wrapper discovery failures into structured errors', async () => {
+      collectorMock.getActivePage.mockRejectedValueOnce(new Error('no page'));
+      const res = await handlers.handleSourcemapDiscoverTool({});
+      const body = ResponseBuilder.parse<Record<string, unknown>>(res);
+      expect(body).toMatchObject({
+        success: false,
+        error: 'no page',
+        message: 'no page',
+      });
     });
 
     it('handles session communication errors globally', async () => {
