@@ -20,7 +20,7 @@ const SCORES = {
   'cross-domain': [8.6, '6 tools, Phase 2 MCP-safe wrappers'],
   'dart-inspector': [9.0, '12 tools, 17 tests, handleSafe pattern reference'],
   debugger: [8.5, '18 tools, 50 tests, Phase 1 function breakpoints'],
-  encoding: [9.1, '5 tools, Phase 2 MCP-safe wrappers, well-scoped'],
+  encoding: [9.6, '5 tools, Phase 3 magic signatures + base32/base58/base85/compression codecs'],
   'exploit-dev': [9.3, '20 tools, Phase 0 capstone x64 one-gadget scan, CLAUDE.md created'],
   'extension-registry': [8.8, '5 tools, Phase 1 routing/doc stale fix + Phase 2 MCP-safe wrappers'],
   graphql: [9.1, '6 tools, Phase 2 MCP-safe wrappers'],

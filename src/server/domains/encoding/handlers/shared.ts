@@ -10,15 +10,42 @@ import type { CodeCollector } from '@server/domains/shared/modules/collector';
 
 export type DetectSource = 'base64' | 'hex' | 'file' | 'raw';
 export type EntropySource = 'base64' | 'hex' | 'raw' | 'file';
-export type DecodeEncoding = 'base64' | 'hex' | 'url' | 'protobuf' | 'msgpack';
+export type DecodeEncoding =
+  | 'base64'
+  | 'base32'
+  | 'base32hex'
+  | 'base32-crockford'
+  | 'base58'
+  | 'base85'
+  | 'hex'
+  | 'url'
+  | 'gzip'
+  | 'zlib'
+  | 'deflate'
+  | 'brotli'
+  | 'protobuf'
+  | 'msgpack';
 export type OutputFormat = 'hex' | 'utf8' | 'json';
 export type InputFormat = 'utf8' | 'hex' | 'json';
-export type OutputEncoding = 'base64' | 'hex' | 'url';
+export type OutputEncoding =
+  | 'base64'
+  | 'base32'
+  | 'base32hex'
+  | 'base32-crockford'
+  | 'base58'
+  | 'base85'
+  | 'hex'
+  | 'url'
+  | 'gzip'
+  | 'zlib'
+  | 'deflate'
+  | 'brotli';
 export type EntropyAssessment = 'plaintext' | 'encoded' | 'compressed' | 'encrypted' | 'random';
 
 export interface MagicSignature {
   readonly format: string;
   readonly bytes: readonly number[];
+  readonly offset?: number;
 }
 export interface ByteFrequencyEntry {
   byte: string;
@@ -33,6 +60,17 @@ export const MAGIC_SIGNATURES = [
   { format: 'wasm', bytes: [0x00, 0x61, 0x73, 0x6d] },
   { format: 'zip/apk', bytes: [0x50, 0x4b, 0x03, 0x04] },
   { format: 'pdf', bytes: [0x25, 0x50, 0x44, 0x46] },
+  { format: 'gzip', bytes: [0x1f, 0x8b] },
+  { format: 'elf', bytes: [0x7f, 0x45, 0x4c, 0x46] },
+  { format: 'pe/dos', bytes: [0x4d, 0x5a] },
+  { format: 'mach-o-32be', bytes: [0xfe, 0xed, 0xfa, 0xce] },
+  { format: 'mach-o-32le', bytes: [0xce, 0xfa, 0xed, 0xfe] },
+  { format: 'mach-o-64be', bytes: [0xfe, 0xed, 0xfa, 0xcf] },
+  { format: 'mach-o-64le', bytes: [0xcf, 0xfa, 0xed, 0xfe] },
+  { format: 'bmp', bytes: [0x42, 0x4d] },
+  { format: 'webp', bytes: [0x57, 0x45, 0x42, 0x50], offset: 8 },
+  { format: 'zstd', bytes: [0x28, 0xb5, 0x2f, 0xfd] },
+  { format: 'cbor-self-described', bytes: [0xd9, 0xd9, 0xf7] },
 ] satisfies ReadonlyArray<MagicSignature>;
 
 export const DETECT_SOURCE_SET: ReadonlySet<DetectSource> = new Set([
@@ -49,14 +87,36 @@ export const ENTROPY_SOURCE_SET: ReadonlySet<EntropySource> = new Set([
 ]);
 export const DECODE_ENCODING_SET: ReadonlySet<DecodeEncoding> = new Set([
   'base64',
+  'base32',
+  'base32hex',
+  'base32-crockford',
+  'base58',
+  'base85',
   'hex',
   'url',
+  'gzip',
+  'zlib',
+  'deflate',
+  'brotli',
   'protobuf',
   'msgpack',
 ]);
 export const OUTPUT_FORMAT_SET: ReadonlySet<OutputFormat> = new Set(['hex', 'utf8', 'json']);
 export const INPUT_FORMAT_SET: ReadonlySet<InputFormat> = new Set(['utf8', 'hex', 'json']);
-export const OUTPUT_ENCODING_SET: ReadonlySet<OutputEncoding> = new Set(['base64', 'hex', 'url']);
+export const OUTPUT_ENCODING_SET: ReadonlySet<OutputEncoding> = new Set([
+  'base64',
+  'base32',
+  'base32hex',
+  'base32-crockford',
+  'base58',
+  'base85',
+  'hex',
+  'url',
+  'gzip',
+  'zlib',
+  'deflate',
+  'brotli',
+]);
 
 // ── Response helpers ──
 
@@ -142,6 +202,173 @@ export function encodeUrlBytes(buffer: Buffer): string {
         : `%${value.toString(16).toUpperCase().padStart(2, '0')}`;
   }
   return encoded;
+}
+
+const BASE32_ALPHABETS = {
+  base32: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567',
+  base32hex: '0123456789ABCDEFGHIJKLMNOPQRSTUV',
+  'base32-crockford': '0123456789ABCDEFGHJKMNPQRSTVWXYZ',
+} as const;
+
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const ASCII85_OFFSET = 33;
+const ASCII85_BASE = 85;
+
+export function encodeBase32Bytes(
+  buffer: Buffer,
+  variant: 'base32' | 'base32hex' | 'base32-crockford' = 'base32',
+): string {
+  const alphabet = BASE32_ALPHABETS[variant];
+  if (buffer.length === 0) return '';
+  let output = '';
+  let value = 0;
+  let bits = 0;
+  for (const byte of buffer.values()) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      output += alphabet[(value >>> (bits - 5)) & 0x1f];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) output += alphabet[(value << (5 - bits)) & 0x1f];
+  if (variant !== 'base32-crockford') {
+    while (output.length % 8 !== 0) output += '=';
+  }
+  return output;
+}
+
+export function decodeBase32String(
+  input: string,
+  variant: 'base32' | 'base32hex' | 'base32-crockford' = 'base32',
+): Buffer {
+  const alphabet = BASE32_ALPHABETS[variant];
+  const lookup = new Map<string, number>();
+  for (let index = 0; index < alphabet.length; index += 1) {
+    lookup.set(alphabet[index]!, index);
+  }
+
+  let normalized = input.trim().replace(/[\s-]/g, '').replace(/=+$/g, '').toUpperCase();
+  if (variant === 'base32-crockford') {
+    normalized = normalized.replace(/[IL]/g, '1').replace(/O/g, '0');
+  }
+  if (normalized.length === 0) return Buffer.alloc(0);
+
+  const bytes: number[] = [];
+  let value = 0;
+  let bits = 0;
+  for (const char of normalized) {
+    const decoded = lookup.get(char);
+    if (decoded === undefined) throw new Error(`Invalid ${variant} character: ${char}`);
+    value = (value << 5) | decoded;
+    bits += 5;
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+      value &= (1 << bits) - 1;
+    }
+  }
+  if (bits > 0 && value !== 0) throw new Error(`Invalid ${variant} padding bits`);
+  return Buffer.from(bytes);
+}
+
+export function encodeBase58Bytes(buffer: Buffer): string {
+  if (buffer.length === 0) return '';
+  let zeroes = 0;
+  while (zeroes < buffer.length && buffer[zeroes] === 0) zeroes += 1;
+
+  let value = 0n;
+  for (const byte of buffer.values()) value = (value << 8n) | BigInt(byte);
+
+  let output = '';
+  while (value > 0n) {
+    const mod = Number(value % 58n);
+    output = BASE58_ALPHABET[mod]! + output;
+    value /= 58n;
+  }
+  return `${'1'.repeat(zeroes)}${output}`;
+}
+
+export function decodeBase58String(input: string): Buffer {
+  const normalized = input.trim();
+  if (normalized.length === 0) return Buffer.alloc(0);
+
+  let value = 0n;
+  for (const char of normalized) {
+    const digit = BASE58_ALPHABET.indexOf(char);
+    if (digit === -1) throw new Error(`Invalid base58 character: ${char}`);
+    value = value * 58n + BigInt(digit);
+  }
+
+  const bytes: number[] = [];
+  while (value > 0n) {
+    bytes.unshift(Number(value & 0xffn));
+    value >>= 8n;
+  }
+
+  let leadingZeroes = 0;
+  while (leadingZeroes < normalized.length && normalized[leadingZeroes] === '1') {
+    leadingZeroes += 1;
+  }
+  return Buffer.from([...Array.from({ length: leadingZeroes }, () => 0), ...bytes]);
+}
+
+export function encodeAscii85Bytes(buffer: Buffer): string {
+  if (buffer.length === 0) return '';
+  let output = '';
+  for (let offset = 0; offset < buffer.length; offset += 4) {
+    const chunk = buffer.subarray(offset, offset + 4);
+    const padded = Buffer.alloc(4);
+    chunk.copy(padded);
+    const value = padded.readUInt32BE(0);
+    if (chunk.length === 4 && value === 0) {
+      output += 'z';
+      continue;
+    }
+
+    const chars = Array.from({ length: 5 }, () => 0);
+    let remaining = value;
+    for (let index = 4; index >= 0; index -= 1) {
+      chars[index] = (remaining % ASCII85_BASE) + ASCII85_OFFSET;
+      remaining = Math.floor(remaining / ASCII85_BASE);
+    }
+    output += String.fromCharCode(...chars.slice(0, chunk.length + 1));
+  }
+  return output;
+}
+
+export function decodeAscii85String(input: string): Buffer {
+  const normalized = input.trim().replace(/^<~/, '').replace(/~>$/, '').replace(/\s+/g, '');
+  if (normalized.length === 0) return Buffer.alloc(0);
+
+  const bytes: number[] = [];
+  let tuple: number[] = [];
+  const flush = (final = false): void => {
+    if (tuple.length === 0) return;
+    if (tuple.length === 1) throw new Error('Invalid base85 tuple length');
+    const originalLength = tuple.length;
+    while (tuple.length < 5) tuple.push(84);
+    let value = 0;
+    for (const digit of tuple) value = value * ASCII85_BASE + digit;
+    const chunk = Buffer.alloc(4);
+    chunk.writeUInt32BE(value >>> 0, 0);
+    bytes.push(...chunk.subarray(0, final ? originalLength - 1 : 4));
+    tuple = [];
+  };
+
+  for (const char of normalized) {
+    if (char === 'z') {
+      if (tuple.length !== 0) throw new Error('Invalid base85 zero tuple position');
+      bytes.push(0, 0, 0, 0);
+      continue;
+    }
+    const code = char.charCodeAt(0);
+    if (code < 33 || code > 117) throw new Error(`Invalid base85 character: ${char}`);
+    tuple.push(code - ASCII85_OFFSET);
+    if (tuple.length === 5) flush(false);
+  }
+  flush(true);
+  return Buffer.from(bytes);
 }
 
 export function toSafeUtf8(buffer: Buffer): string | null {
@@ -314,15 +541,19 @@ export async function resolveRequestBodyFromActivePage(
 export function detectMagicFormats(buffer: Buffer): string[] {
   const matches: string[] = [];
   for (const signature of MAGIC_SIGNATURES) {
-    if (buffer.length < signature.bytes.length) continue;
+    const offset = signature.offset ?? 0;
+    if (buffer.length < offset + signature.bytes.length) continue;
     let matched = true;
     for (let i = 0; i < signature.bytes.length; i += 1) {
-      if (buffer[i] !== signature.bytes[i]) {
+      if (buffer[offset + i] !== signature.bytes[i]) {
         matched = false;
         break;
       }
     }
     if (matched) matches.push(signature.format);
+  }
+  if (buffer.length >= 2 && buffer[0] === 0x78 && [0x01, 0x5e, 0x9c, 0xda].includes(buffer[1]!)) {
+    matches.push('zlib');
   }
   return matches;
 }

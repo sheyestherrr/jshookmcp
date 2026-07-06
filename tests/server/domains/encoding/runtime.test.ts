@@ -168,6 +168,18 @@ describe('EncodingToolHandlers (handlers.impl.core.runtime)', () => {
       expect(body.outputFormat).toBe('utf8');
     });
 
+    it('decodes RFC4648 base32 to utf8 output', async () => {
+      const body = parseJson<any>(
+        await handlers.handleBinaryDecode({
+          data: 'NBSWY3DP',
+          encoding: 'base32',
+          outputFormat: 'utf8',
+        }),
+      );
+      expect(body.success).toBe(true);
+      expect(body.result).toBe('hello');
+    });
+
     it('decodes hex input to hex output', async () => {
       const body = parseJson<any>(
         await handlers.handleBinaryDecode({
@@ -333,6 +345,62 @@ describe('EncodingToolHandlers (handlers.impl.core.runtime)', () => {
       expect(body.success).toBe(true);
       expect(body.output).toContain('hello');
       expect(body.output).toContain('%20');
+    });
+
+    it.each([
+      'base32',
+      'base32hex',
+      'base32-crockford',
+      'base58',
+      'base85',
+      'gzip',
+      'zlib',
+      'deflate',
+      'brotli',
+    ])('roundtrips utf8 through %s', async (codec) => {
+      const encoded = parseJson<any>(
+        await handlers.handleBinaryEncode({
+          data: 'hello world',
+          inputFormat: 'utf8',
+          outputEncoding: codec,
+        }),
+      );
+      expect(encoded.success).toBe(true);
+      expect(encoded.outputEncoding).toBe(codec);
+      expect(typeof encoded.output).toBe('string');
+
+      const decoded = parseJson<any>(
+        await handlers.handleBinaryDecode({
+          data: encoded.output,
+          encoding: codec,
+          outputFormat: 'utf8',
+        }),
+      );
+      expect(decoded.success).toBe(true);
+      expect(decoded.result).toBe('hello world');
+    });
+
+    it('encodes base32 with RFC4648 padding', async () => {
+      const body = parseJson<any>(
+        await handlers.handleBinaryEncode({
+          data: 'hello',
+          inputFormat: 'utf8',
+          outputEncoding: 'base32',
+        }),
+      );
+      expect(body.output).toBe('NBSWY3DP');
+    });
+
+    it('reports base64 transport for compressed output encodings', async () => {
+      const body = parseJson<any>(
+        await handlers.handleBinaryEncode({
+          data: 'compress me',
+          inputFormat: 'utf8',
+          outputEncoding: 'gzip',
+        }),
+      );
+      expect(body.outputTransport).toBe('base64');
+      expect(body.outputByteLength).toBeGreaterThan(0);
     });
 
     it('encodes hex input to base64', async () => {

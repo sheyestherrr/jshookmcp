@@ -5,6 +5,16 @@
  * Handler methods call those functions directly instead of inheriting from a base class.
  */
 
+import {
+  brotliCompressSync,
+  brotliDecompressSync,
+  deflateRawSync,
+  deflateSync,
+  gunzipSync,
+  gzipSync,
+  inflateRawSync,
+  inflateSync,
+} from 'node:zlib';
 import type { CodeCollector } from '@server/domains/shared/modules/collector';
 import { parseProtobufMessage } from '@server/domains/encoding/encoding-protobuf';
 import { decodeMsgPack } from '@server/domains/encoding/encoding-msgpack';
@@ -25,6 +35,12 @@ import {
   looksLikeBase64,
   decodeUrl,
   encodeUrlBytes,
+  decodeBase32String,
+  encodeBase32Bytes,
+  decodeBase58String,
+  encodeBase58Bytes,
+  decodeAscii85String,
+  encodeAscii85Bytes,
   previewHex,
   hexDump,
   renderDecodedOutput,
@@ -68,6 +84,97 @@ type ResponseBodyPayload = {
 };
 
 type ResponseBodyResolver = (requestId: string) => Promise<ResponseBodyPayload | null>;
+
+function decodeDeclaredPayload(encoding: string, data: string): Buffer {
+  switch (encoding) {
+    case 'base64':
+      return decodeBase64String(data);
+    case 'base32':
+      return decodeBase32String(data, 'base32');
+    case 'base32hex':
+      return decodeBase32String(data, 'base32hex');
+    case 'base32-crockford':
+      return decodeBase32String(data, 'base32-crockford');
+    case 'base58':
+      return decodeBase58String(data);
+    case 'base85':
+      return decodeAscii85String(data);
+    case 'hex':
+      return decodeHexString(data);
+    case 'gzip':
+      return gunzipSync(decodeBinaryAuto(data));
+    case 'zlib':
+      return inflateSync(decodeBinaryAuto(data));
+    case 'deflate':
+      return inflateRawSync(decodeBinaryAuto(data));
+    case 'brotli':
+      return brotliDecompressSync(decodeBinaryAuto(data));
+    default:
+      return decodeBinaryAuto(data);
+  }
+}
+
+function encodePayload(
+  outputEncoding: string,
+  buffer: Buffer,
+): {
+  output: string;
+  outputTransport?: string;
+  outputByteLength?: number;
+} {
+  switch (outputEncoding) {
+    case 'base64':
+      return { output: buffer.toString('base64') };
+    case 'base32':
+      return { output: encodeBase32Bytes(buffer, 'base32') };
+    case 'base32hex':
+      return { output: encodeBase32Bytes(buffer, 'base32hex') };
+    case 'base32-crockford':
+      return { output: encodeBase32Bytes(buffer, 'base32-crockford') };
+    case 'base58':
+      return { output: encodeBase58Bytes(buffer) };
+    case 'base85':
+      return { output: encodeAscii85Bytes(buffer) };
+    case 'hex':
+      return { output: buffer.toString('hex') };
+    case 'url':
+      return { output: encodeUrlBytes(buffer) };
+    case 'gzip': {
+      const compressed = gzipSync(buffer);
+      return {
+        output: compressed.toString('base64'),
+        outputTransport: 'base64',
+        outputByteLength: compressed.length,
+      };
+    }
+    case 'zlib': {
+      const compressed = deflateSync(buffer);
+      return {
+        output: compressed.toString('base64'),
+        outputTransport: 'base64',
+        outputByteLength: compressed.length,
+      };
+    }
+    case 'deflate': {
+      const compressed = deflateRawSync(buffer);
+      return {
+        output: compressed.toString('base64'),
+        outputTransport: 'base64',
+        outputByteLength: compressed.length,
+      };
+    }
+    case 'brotli': {
+      const compressed = brotliCompressSync(buffer);
+      return {
+        output: compressed.toString('base64'),
+        outputTransport: 'base64',
+        outputByteLength: compressed.length,
+      };
+    }
+    default:
+      return { output: encodeUrlBytes(buffer) };
+  }
+}
 
 export class EncodingToolHandlers {
   protected collector: CodeCollector;
@@ -198,12 +305,7 @@ export class EncodingToolHandlers {
         return ok({ success: true, encoding, outputFormat, result: parsed ?? { text: decoded } });
       }
 
-      const rawBuffer =
-        encoding === 'base64'
-          ? decodeBase64String(data)
-          : encoding === 'hex'
-            ? decodeHexString(data)
-            : decodeBinaryAuto(data);
+      const rawBuffer = decodeDeclaredPayload(encoding, data);
 
       if (encoding === 'protobuf') {
         const parsed = parseProtobufMessage(rawBuffer, 0, 5);
@@ -250,14 +352,15 @@ export class EncodingToolHandlers {
         buffer = Buffer.from(JSON.stringify(parsed), 'utf8');
       }
 
-      const output =
-        outputEncoding === 'base64'
-          ? buffer.toString('base64')
-          : outputEncoding === 'hex'
-            ? buffer.toString('hex')
-            : encodeUrlBytes(buffer);
+      const encoded = encodePayload(outputEncoding, buffer);
 
-      return ok({ success: true, inputFormat, outputEncoding, byteLength: buffer.length, output });
+      return ok({
+        success: true,
+        inputFormat,
+        outputEncoding,
+        byteLength: buffer.length,
+        ...encoded,
+      });
     } catch (error) {
       return fail('binary_encode', error);
     }

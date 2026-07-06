@@ -382,13 +382,14 @@ export class EncodingHandlersBase {
     const matches: string[] = [];
 
     for (const signature of MAGIC_SIGNATURES) {
-      if (buffer.length < signature.bytes.length) {
+      const offset = signature.offset ?? 0;
+      if (buffer.length < offset + signature.bytes.length) {
         continue;
       }
 
       let matched = true;
       for (let index = 0; index < signature.bytes.length; index += 1) {
-        const actual = buffer[index];
+        const actual = buffer[offset + index];
         const expected = signature.bytes[index];
         if (actual === undefined || expected === undefined || actual !== expected) {
           matched = false;
@@ -399,6 +400,10 @@ export class EncodingHandlersBase {
       if (matched) {
         matches.push(signature.format);
       }
+    }
+
+    if (buffer.length >= 2 && buffer[0] === 0x78 && [0x01, 0x5e, 0x9c, 0xda].includes(buffer[1]!)) {
+      matches.push('zlib');
     }
 
     return matches;

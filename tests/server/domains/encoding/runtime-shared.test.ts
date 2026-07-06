@@ -74,14 +74,29 @@ describe('encoding/handlers.impl.core.runtime.shared', () => {
 
   describe('DECODE_ENCODING_SET', () => {
     it('contains all expected DecodeEncoding values', async () => {
-      const expected: DecodeEncoding[] = ['base64', 'hex', 'url', 'protobuf', 'msgpack'];
+      const expected: DecodeEncoding[] = [
+        'base64',
+        'base32',
+        'base32hex',
+        'base32-crockford',
+        'base58',
+        'base85',
+        'hex',
+        'url',
+        'gzip',
+        'zlib',
+        'deflate',
+        'brotli',
+        'protobuf',
+        'msgpack',
+      ];
       for (const val of expected) {
         expect(DECODE_ENCODING_SET.has(val)).toBe(true);
       }
     });
 
-    it('has exactly 5 members', async () => {
-      expect(DECODE_ENCODING_SET.size).toBe(5);
+    it('has exactly 14 members', async () => {
+      expect(DECODE_ENCODING_SET.size).toBe(14);
     });
 
     it('rejects unknown encoding values', async () => {
@@ -134,14 +149,27 @@ describe('encoding/handlers.impl.core.runtime.shared', () => {
 
   describe('OUTPUT_ENCODING_SET', () => {
     it('contains all expected OutputEncoding values', async () => {
-      const expected: OutputEncoding[] = ['base64', 'hex', 'url'];
+      const expected: OutputEncoding[] = [
+        'base64',
+        'base32',
+        'base32hex',
+        'base32-crockford',
+        'base58',
+        'base85',
+        'hex',
+        'url',
+        'gzip',
+        'zlib',
+        'deflate',
+        'brotli',
+      ];
       for (const val of expected) {
         expect(OUTPUT_ENCODING_SET.has(val)).toBe(true);
       }
     });
 
-    it('has exactly 3 members', async () => {
-      expect(OUTPUT_ENCODING_SET.size).toBe(3);
+    it('has exactly 12 members', async () => {
+      expect(OUTPUT_ENCODING_SET.size).toBe(12);
     });
 
     it('rejects unknown encoding values', async () => {
@@ -165,10 +193,15 @@ describe('encoding/handlers.impl.core.runtime.shared', () => {
       expect(formats).toContain('wasm');
       expect(formats).toContain('zip/apk');
       expect(formats).toContain('pdf');
+      expect(formats).toContain('gzip');
+      expect(formats).toContain('elf');
+      expect(formats).toContain('pe/dos');
+      expect(formats).toContain('webp');
+      expect(formats).toContain('zstd');
     });
 
-    it('has exactly 6 signatures', async () => {
-      expect(MAGIC_SIGNATURES.length).toBe(6);
+    it('has expanded common reverse-engineering signatures', async () => {
+      expect(MAGIC_SIGNATURES.length).toBeGreaterThanOrEqual(17);
     });
 
     it('each signature has format string and bytes array', async () => {
@@ -176,7 +209,7 @@ describe('encoding/handlers.impl.core.runtime.shared', () => {
         expect(typeof sig.format).toBe('string');
         expect(sig.format.length).toBeGreaterThan(0);
         expect(Array.isArray(sig.bytes)).toBe(true);
-        expect(sig.bytes.length).toBeGreaterThanOrEqual(3);
+        expect(sig.bytes.length).toBeGreaterThanOrEqual(2);
       }
     });
 
@@ -202,6 +235,10 @@ describe('encoding/handlers.impl.core.runtime.shared', () => {
       { format: 'wasm', expectedBytes: [0x00, 0x61, 0x73, 0x6d] },
       { format: 'zip/apk', expectedBytes: [0x50, 0x4b, 0x03, 0x04] },
       { format: 'pdf', expectedBytes: [0x25, 0x50, 0x44, 0x46] },
+      { format: 'gzip', expectedBytes: [0x1f, 0x8b] },
+      { format: 'elf', expectedBytes: [0x7f, 0x45, 0x4c, 0x46] },
+      { format: 'pe/dos', expectedBytes: [0x4d, 0x5a] },
+      { format: 'zstd', expectedBytes: [0x28, 0xb5, 0x2f, 0xfd] },
     ])('$format has correct magic bytes', ({ format, expectedBytes }) => {
       const sig = MAGIC_SIGNATURES.find((s) => s.format === format);
       expect(sig).toBeDefined();
@@ -219,9 +256,10 @@ describe('encoding/handlers.impl.core.runtime.shared', () => {
 
   describe('type contracts (compile-time + structural)', () => {
     it('MagicSignature has expected shape', async () => {
-      const sig: MagicSignature = { format: 'test', bytes: [0x00] };
+      const sig: MagicSignature = { format: 'test', bytes: [0x00], offset: 4 };
       expect(sig.format).toBe('test');
       expect(sig.bytes).toEqual([0x00]);
+      expect(sig.offset).toBe(4);
     });
 
     it('ByteFrequencyEntry has expected shape', async () => {

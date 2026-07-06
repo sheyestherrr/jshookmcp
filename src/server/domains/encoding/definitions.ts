@@ -14,19 +14,57 @@ export const encodingTools: Tool[] = [
   ),
   tool('binary_decode', (t) =>
     t
-      .desc('Decode binary payloads into hex, utf8, or json output.')
+      .desc(
+        'Decode binary payloads, transport encodings, and compressed blobs into hex, utf8, or json output.',
+      )
       .string('data', 'Input encoded payload')
-      .enum('encoding', ['base64', 'hex', 'url', 'protobuf', 'msgpack'], 'Declared input encoding')
+      .enum(
+        'encoding',
+        [
+          'base64',
+          'base32',
+          'base32hex',
+          'base32-crockford',
+          'base58',
+          'base85',
+          'hex',
+          'url',
+          'gzip',
+          'zlib',
+          'deflate',
+          'brotli',
+          'protobuf',
+          'msgpack',
+        ],
+        'Declared input encoding',
+      )
       .enum('outputFormat', ['hex', 'utf8', 'json'], 'Target output format', { default: 'hex' })
       .required('data', 'encoding')
       .query(),
   ),
   tool('binary_encode', (t) =>
     t
-      .desc('Encode utf8/hex/json input into base64/hex/url output.')
+      .desc('Encode utf8/hex/json input into transport encodings or compressed base64 blobs.')
       .string('data', 'Input payload')
       .enum('inputFormat', ['utf8', 'hex', 'json'], 'How to parse input')
-      .enum('outputEncoding', ['base64', 'hex', 'url'], 'Desired output encoding')
+      .enum(
+        'outputEncoding',
+        [
+          'base64',
+          'base32',
+          'base32hex',
+          'base32-crockford',
+          'base58',
+          'base85',
+          'hex',
+          'url',
+          'gzip',
+          'zlib',
+          'deflate',
+          'brotli',
+        ],
+        'Desired output encoding',
+      )
       .required('data', 'inputFormat', 'outputEncoding')
       .query(),
   ),

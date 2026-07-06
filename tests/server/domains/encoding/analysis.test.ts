@@ -66,6 +66,38 @@ describe('EncodingHandlersBase (analysis utilities)', () => {
         buffer: Buffer.from([0x25, 0x50, 0x44, 0x46]),
         expected: ['pdf'],
       },
+      {
+        name: 'gzip',
+        buffer: Buffer.from([0x1f, 0x8b, 0x08, 0x00]),
+        expected: ['gzip'],
+      },
+      {
+        name: 'zlib',
+        buffer: Buffer.from([0x78, 0x9c, 0x03, 0x00]),
+        expected: ['zlib'],
+      },
+      {
+        name: 'elf',
+        buffer: Buffer.from([0x7f, 0x45, 0x4c, 0x46]),
+        expected: ['elf'],
+      },
+      {
+        name: 'pe/dos',
+        buffer: Buffer.from([0x4d, 0x5a, 0x90, 0x00]),
+        expected: ['pe/dos'],
+      },
+      {
+        name: 'webp',
+        buffer: Buffer.from([
+          0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+        ]),
+        expected: ['webp'],
+      },
+      {
+        name: 'zstd',
+        buffer: Buffer.from([0x28, 0xb5, 0x2f, 0xfd]),
+        expected: ['zstd'],
+      },
     ])('detects $name header', ({ buffer, expected }) => {
       expect(analysis.detectMagicFormats(buffer)).toEqual(expected);
     });

@@ -24,7 +24,7 @@ Binary format detection, encoding conversion, entropy analysis, and raw protobuf
 | Tool | Description |
 | --- | --- |
 | `binary_detect_format` | Detect binary payload format and encoding signals. |
-| `binary_decode` | Decode binary payloads into hex, utf8, or json output. |
-| `binary_encode` | Encode utf8/hex/json input into base64/hex/url output. |
+| `binary_decode` | Decode binary payloads, transport encodings, and compressed blobs into hex, utf8, or json output. |
+| `binary_encode` | Encode utf8/hex/json input into transport encodings or compressed base64 blobs. |
 | `binary_entropy_analysis` | Compute entropy and byte frequency for a payload. |
 | `protobuf_decode_raw` | Decode protobuf bytes without a schema. |
