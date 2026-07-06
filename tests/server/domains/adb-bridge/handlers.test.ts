@@ -32,6 +32,9 @@ function mockExecFile(
         if (typeof dest === 'string' && dest.endsWith('.apk')) {
           mkdirSync(dirname(dest), { recursive: true });
           writeFileSync(dest, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]));
+        } else if (typeof dest === 'string' && dest.endsWith('.mp4')) {
+          mkdirSync(dirname(dest), { recursive: true });
+          writeFileSync(dest, Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]));
         }
       }
       if (resp.error) cb(resp.error);
@@ -227,6 +230,56 @@ describe('ADBBridgeHandlers', () => {
       expect((execFile as any).mock.calls[0][1]).toEqual(
         expect.arrayContaining(['exec-out', 'screencap', '-p']),
       );
+    } finally {
+      rmSync(outputPath, { force: true });
+    }
+  });
+
+  it('records a short screen capture and pulls the MP4 locally', async () => {
+    const outputPath = join(tmpdir(), `jshook-adb-test-${Date.now()}.mp4`);
+    mockExecFile([{ stdout: '' }, { stdout: 'pulled' }, { stdout: '' }]);
+
+    try {
+      const result = await handlers.handleScreenrecord({
+        serial: 'emulator-5554',
+        localPath: outputPath,
+        remotePath: '/sdcard/Download/test-record.mp4',
+        durationSec: 2,
+        bitRateMbps: 3,
+        size: '1280x720',
+      });
+      const parsed = parseResult(result);
+      expect(parsed.success).toBe(true);
+      expect(parsed.size).toBe(8);
+      expect(parsed.durationSec).toBe(2);
+      expect((execFile as any).mock.calls[0][1]).toEqual([
+        '-s',
+        'emulator-5554',
+        'shell',
+        'screenrecord',
+        '--time-limit',
+        '2',
+        '--bit-rate',
+        '3000000',
+        '--size',
+        '1280x720',
+        '/sdcard/Download/test-record.mp4',
+      ]);
+      expect((execFile as any).mock.calls[1][1]).toEqual([
+        '-s',
+        'emulator-5554',
+        'pull',
+        '/sdcard/Download/test-record.mp4',
+        outputPath,
+      ]);
+      expect((execFile as any).mock.calls[2][1]).toEqual([
+        '-s',
+        'emulator-5554',
+        'shell',
+        'rm',
+        '-f',
+        '/sdcard/Download/test-record.mp4',
+      ]);
     } finally {
       rmSync(outputPath, { force: true });
     }

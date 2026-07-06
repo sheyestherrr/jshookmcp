@@ -113,6 +113,21 @@ export const adbBridgeTools = [
       .requiredOpenWorld('serial'),
   ),
 
+  tool('adb_screenrecord', (t) =>
+    t
+      .desc('Record a short MP4 screen capture through adb shell screenrecord and pull it locally.')
+      .string('serial', 'Android device serial or emulator id')
+      .string('localPath', 'Optional local output MP4 path')
+      .string('remotePath', 'Optional temporary device MP4 path')
+      .number(
+        'durationSec',
+        'Recording duration in seconds, clamped to Android screenrecord limits',
+      )
+      .number('bitRateMbps', 'Optional video bit rate in megabits per second')
+      .string('size', 'Optional video size such as 1280x720')
+      .requiredOpenWorld('serial'),
+  ),
+
   tool('adb_port_forward', (t) =>
     t
       .desc('Manage ADB forward/reverse port mappings for device-host bridge workflows.')

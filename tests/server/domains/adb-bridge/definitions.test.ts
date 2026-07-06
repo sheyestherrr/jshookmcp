@@ -23,8 +23,8 @@ describe('adb-bridge tool definitions', () => {
       expect(adbBridgeTools.length).toBeGreaterThan(0);
     });
 
-    it('tool count matches expected (22 tools)', async () => {
-      expect(adbBridgeTools.length).toBe(22);
+    it('tool count matches expected (23 tools)', async () => {
+      expect(adbBridgeTools.length).toBe(23);
     });
 
     it('has unique tool names', async () => {
@@ -74,6 +74,7 @@ describe('adb-bridge tool definitions', () => {
       'adb_proc_maps',
       'adb_root_check',
       'adb_screenshot',
+      'adb_screenrecord',
       'adb_port_forward',
       'adb_logcat_query',
       'adb_app_cold_start_trace',
@@ -149,6 +150,9 @@ describe('adb-bridge tool definitions', () => {
       expect(getTool('adb_proc_maps').inputSchema.required ?? []).toContain('serial');
       expect(getTool('adb_root_check').inputSchema.required ?? []).toContain('serial');
       expect(getTool('adb_screenshot').inputSchema.required ?? []).toContain('serial');
+      expect(getTool('adb_screenrecord').inputSchema.required ?? []).toContain('serial');
+      expect(getToolProperty('adb_screenrecord', 'durationSec').type).toBe('number');
+      expect(getToolProperty('adb_screenrecord', 'localPath').type).toBe('string');
       expect(getTool('adb_port_forward').inputSchema.required ?? []).toEqual(
         expect.arrayContaining(['serial', 'action', 'direction']),
       );

@@ -359,6 +359,10 @@ export class ADBBridgeHandlers {
     return handleSafe(async () => await this.handleScreenshot(args));
   }
 
+  async handleScreenrecordTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleScreenrecord(args));
+  }
+
   async handlePortForwardTool(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => await this.handlePortForward(args));
   }
@@ -763,6 +767,101 @@ export class ADBBridgeHandlers {
         size: localStat.size,
         stderr: result.stderr,
         exitCode: result.exitCode,
+      };
+    });
+  }
+
+  async handleScreenrecord(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_screenrecord', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const localPath =
+        argString(args, 'localPath') ??
+        join(tmpdir(), `jshook-adb-screenrecord-${sanitizeLocalName(serial)}-${Date.now()}.mp4`);
+      const remotePath =
+        argString(args, 'remotePath') ??
+        `/sdcard/Download/jshook-screenrecord-${sanitizeLocalName(serial)}-${Date.now()}.mp4`;
+      const durationSec = Math.max(
+        1,
+        Math.min(180, Math.floor(argNumber(args, 'durationSec') ?? 10)),
+      );
+      const bitRateMbps = argNumber(args, 'bitRateMbps');
+      const size = argString(args, 'size');
+      const adb = await this.resolveAdb();
+
+      const recordArgs = [
+        ...serialArgs(serial),
+        'shell',
+        'screenrecord',
+        '--time-limit',
+        `${durationSec}`,
+      ];
+      if (bitRateMbps !== undefined) {
+        const bitRate = Math.max(1, Math.floor(bitRateMbps * 1_000_000));
+        recordArgs.push('--bit-rate', `${bitRate}`);
+      }
+      if (size) recordArgs.push('--size', size);
+      recordArgs.push(remotePath);
+
+      const recordResult = await execAdb(adb, recordArgs, {
+        allowNonZero: true,
+        timeoutMs: (durationSec + 10) * 1000,
+        maxBufferBytes: ADB_MAX_BUFFER_BYTES,
+      });
+      if (recordResult.exitCode !== 0) {
+        return {
+          success: false,
+          serial,
+          localPath,
+          remotePath,
+          durationSec,
+          stdout: recordResult.stdout,
+          stderr: recordResult.stderr,
+          exitCode: recordResult.exitCode,
+        };
+      }
+
+      await mkdir(dirname(localPath), { recursive: true });
+      const pullResult = await execAdb(
+        adb,
+        [...serialArgs(serial), 'pull', remotePath, localPath],
+        {
+          allowNonZero: true,
+          timeoutMs: ADB_FILE_TRANSFER_TIMEOUT_MS,
+          maxBufferBytes: ADB_MAX_BUFFER_BYTES,
+        },
+      );
+      const cleanupResult = await execAdb(
+        adb,
+        [...serialArgs(serial), 'shell', 'rm', '-f', remotePath],
+        {
+          allowNonZero: true,
+          timeoutMs: ADB_SHELL_TIMEOUT_MS,
+        },
+      );
+      if (pullResult.exitCode !== 0) {
+        return {
+          success: false,
+          serial,
+          localPath,
+          remotePath,
+          durationSec,
+          record: recordResult,
+          pull: pullResult,
+          cleanupExitCode: cleanupResult.exitCode,
+        };
+      }
+
+      const localStat = await stat(localPath);
+      return {
+        success: true,
+        serial,
+        localPath,
+        remotePath,
+        durationSec,
+        size: localStat.size,
+        record: recordResult,
+        pull: pullResult,
+        cleanupExitCode: cleanupResult.exitCode,
       };
     });
   }

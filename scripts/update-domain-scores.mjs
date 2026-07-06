@@ -7,7 +7,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const SCORES = {
-  'adb-bridge': [9.0, '22 tools, install/input/proc maps/root/screenshot + port forward lifecycle'],
+  'adb-bridge': [
+    9.1,
+    '23 tools, install/input/proc maps/root/screenshot/screenrecord + port forward lifecycle',
+  ],
   analysis: [
     9.8,
     '25 tools, Phase 3 interprocedural taint (function summaries + member-chain) + two-pass ordering-bug fix',
