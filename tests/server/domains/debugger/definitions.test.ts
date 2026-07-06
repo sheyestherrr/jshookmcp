@@ -17,8 +17,8 @@ describe('debugger tool definitions', () => {
     });
 
     it('contains the expected number of core tools', async () => {
-      // 13 core tools defined in definitions.tools.core.ts
-      expect(DEBUGGER_CORE_TOOLS).toHaveLength(13);
+      // 14 core tools defined in definitions.tools.core.ts
+      expect(DEBUGGER_CORE_TOOLS).toHaveLength(14);
     });
 
     it.each(DEBUGGER_CORE_TOOLS.map((tool) => [tool.name, tool]))(
@@ -52,6 +52,7 @@ describe('debugger tool definitions', () => {
       'get_call_stack',
       'debugger_evaluate',
       'debugger_wait_for_paused',
+      'debugger_capture_hit',
       'debugger_get_paused_state',
       'get_object_properties',
       'get_scope_variables_enhanced',
@@ -145,6 +146,17 @@ describe('debugger tool definitions', () => {
       expect(tool.inputSchema.properties).toHaveProperty('timeout');
       const timeoutProp = tool.inputSchema.properties!.timeout as Record<string, unknown>;
       expect(timeoutProp.default).toBe(30000);
+    });
+
+    it('debugger_capture_hit exposes capture options with defaults', async () => {
+      const tool = DEBUGGER_CORE_TOOLS.find((t) => t.name === 'debugger_capture_hit')!;
+      expect(tool.inputSchema.required).toBeUndefined();
+      const props = tool.inputSchema.properties!;
+      expect((props.timeout as Record<string, unknown>).default).toBe(30000);
+      expect((props.includeScope as Record<string, unknown>).default).toBe(true);
+      expect((props.includeObjectProperties as Record<string, unknown>).default).toBe(false);
+      expect((props.maxDepth as Record<string, unknown>).default).toBe(1);
+      expect((props.skipErrors as Record<string, unknown>).default).toBe(true);
     });
 
     it('get_scope_variables_enhanced has optional properties with defaults', async () => {

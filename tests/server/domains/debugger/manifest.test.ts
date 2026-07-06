@@ -106,6 +106,7 @@ describe('debugger manifest', () => {
       'get_call_stack',
       'debugger_evaluate',
       'debugger_wait_for_paused',
+      'debugger_capture_hit',
       'debugger_get_paused_state',
       'get_object_properties',
       'get_scope_variables_enhanced',

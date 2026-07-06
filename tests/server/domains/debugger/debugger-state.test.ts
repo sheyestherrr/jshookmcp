@@ -9,6 +9,7 @@ describe('DebuggerStateHandlers', () => {
   const debuggerManager = {
     waitForPaused: vi.fn(),
     getPausedState: vi.fn(),
+    getScopeVariables: vi.fn(),
   };
 
   const runtimeInspector = {
@@ -102,6 +103,120 @@ describe('DebuggerStateHandlers', () => {
       hitBreakpoints: ['bp-2'],
       timestamp: 1710000000000,
     });
+  });
+
+  it('captures a breakpoint hit with call stack and top-frame scope', async () => {
+    debuggerManager.waitForPaused.mockResolvedValueOnce({
+      reason: 'breakpoint',
+      callFrames: [
+        {
+          callFrameId: 'paused-frame',
+          functionName: 'fallback',
+          url: 'fallback.js',
+          location: { scriptId: 'script-1', lineNumber: 1, columnNumber: 0 },
+          scopeChain: [],
+        },
+      ],
+      hitBreakpoints: ['bp-1'],
+      timestamp: 1710000001000,
+    });
+    runtimeInspector.getCallStack.mockResolvedValueOnce({
+      reason: 'breakpoint',
+      callFrames: [
+        {
+          callFrameId: 'frame-1',
+          functionName: 'render',
+          location: { url: 'app.js', lineNumber: 7, columnNumber: 2 },
+          scopeChain: [{}, {}],
+        },
+      ],
+    });
+    debuggerManager.getScopeVariables.mockResolvedValueOnce({
+      success: true,
+      variables: [{ name: 'token', value: 'abc', type: 'string', scope: 'local' }],
+      callFrameId: 'frame-1',
+      totalScopes: 1,
+      successfulScopes: 1,
+    });
+
+    const body = parseJson<any>(
+      await handlers.handleDebuggerCaptureHit({
+        timeout: 1234,
+        includeObjectProperties: true,
+        maxDepth: 2,
+      }),
+    );
+
+    expect(debuggerManager.waitForPaused).toHaveBeenCalledWith(1234);
+    expect(runtimeInspector.getCallStack).toHaveBeenCalledOnce();
+    expect(debuggerManager.getScopeVariables).toHaveBeenCalledWith({
+      callFrameId: 'frame-1',
+      includeObjectProperties: true,
+      maxDepth: 2,
+      skipErrors: true,
+    });
+    expect(body).toEqual({
+      success: true,
+      paused: true,
+      reason: 'breakpoint',
+      hitBreakpoints: ['bp-1'],
+      timestamp: 1710000001000,
+      topFrame: {
+        callFrameId: 'frame-1',
+        functionName: 'render',
+        url: 'app.js',
+        location: { url: 'app.js', lineNumber: 7, columnNumber: 2 },
+        scopeCount: 2,
+      },
+      callStack: {
+        frameCount: 1,
+        reason: 'breakpoint',
+        frames: [
+          {
+            index: 0,
+            callFrameId: 'frame-1',
+            functionName: 'render',
+            url: 'app.js',
+            location: { url: 'app.js', lineNumber: 7, columnNumber: 2 },
+            scopeCount: 2,
+          },
+        ],
+      },
+      scope: {
+        success: true,
+        variables: [{ name: 'token', value: 'abc', type: 'string', scope: 'local' }],
+        callFrameId: 'frame-1',
+        totalScopes: 1,
+        successfulScopes: 1,
+      },
+      errors: [],
+    });
+  });
+
+  it('returns captured pause data when optional scope capture fails', async () => {
+    debuggerManager.waitForPaused.mockResolvedValueOnce({
+      reason: 'breakpoint',
+      callFrames: [
+        {
+          callFrameId: 'frame-2',
+          functionName: 'main',
+          url: 'app.js',
+          location: { scriptId: 'script-1', lineNumber: 3, columnNumber: 0 },
+          scopeChain: [],
+        },
+      ],
+      hitBreakpoints: ['bp-2'],
+      timestamp: 1710000002000,
+    });
+    runtimeInspector.getCallStack.mockResolvedValueOnce(undefined);
+    debuggerManager.getScopeVariables.mockRejectedValueOnce(new Error('scope failed'));
+
+    const body = parseJson<any>(await handlers.handleDebuggerCaptureHit({}));
+
+    expect(body.success).toBe(true);
+    expect(body.topFrame.callFrameId).toBe('frame-2');
+    expect(body.scope).toBeUndefined();
+    expect(body.errors).toEqual(['scope: scope failed']);
   });
 
   it('returns guidance when call stack is unavailable', async () => {

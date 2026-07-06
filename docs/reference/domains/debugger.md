@@ -21,7 +21,7 @@
 - debugger + browser
 - debugger + instrumentation
 
-## 工具清单（19）
+## 工具清单（20）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -34,6 +34,7 @@
 | `get_call_stack` | 获取当前调用栈（仅在断点暂停时可用）。 |
 | `debugger_evaluate` | 在特定上下文（当前调用帧或全局）中求值表达式。 |
 | `debugger_wait_for_paused` | 等待调试器进入暂停状态。 |
+| `debugger_capture_hit` | 等待下一次调试器暂停，并一次性捕获调用栈和可选的顶部调用帧作用域变量。 |
 | `debugger_get_paused_state` | 获取当前暂停状态及原因。 |
 | `get_object_properties` | 获取对象的全部属性。 |
 | `get_scope_variables_enhanced` | 增强查看作用域变量，支持深度对象遍历。 |

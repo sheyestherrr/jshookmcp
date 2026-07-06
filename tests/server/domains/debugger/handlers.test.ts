@@ -32,6 +32,7 @@ const {
   },
   debuggerState: {
     handleDebuggerWaitForPaused: vi.fn(async (args) => ({ from: 'wait-paused', args })),
+    handleDebuggerCaptureHit: vi.fn(async (args) => ({ from: 'capture-hit', args })),
     handleDebuggerGetPausedState: vi.fn(async (args) => ({ from: 'paused-state', args })),
     handleGetCallStack: vi.fn(async (args) => ({ from: 'call-stack', args })),
   },
@@ -361,6 +362,15 @@ describe('DebuggerToolHandlers', () => {
       expect(debuggerState.handleDebuggerWaitForPaused).toHaveBeenCalledWith(args);
     });
 
+    it('delegates handleDebuggerCaptureHit', async () => {
+      const args = { timeout: 5000, includeScope: true };
+      await expect(handlers.handleDebuggerCaptureHit(args)).resolves.toEqual({
+        from: 'capture-hit',
+        args,
+      });
+      expect(debuggerState.handleDebuggerCaptureHit).toHaveBeenCalledWith(args);
+    });
+
     it('delegates handleDebuggerGetPausedState', async () => {
       const args = {};
       await expect(handlers.handleDebuggerGetPausedState(args)).resolves.toEqual({
@@ -637,7 +647,7 @@ describe('DebuggerToolHandlers', () => {
     });
   });
 
-  // ── All 37 methods exist as functions ────────────────────────
+  // ── All 38 methods exist as functions ────────────────────────
 
   describe('method completeness', () => {
     const allMethods = [
@@ -651,6 +661,7 @@ describe('DebuggerToolHandlers', () => {
       'handleDebuggerEvaluate',
       'handleDebuggerEvaluateGlobal',
       'handleDebuggerWaitForPaused',
+      'handleDebuggerCaptureHit',
       'handleDebuggerGetPausedState',
       'handleGetCallStack',
       'handleSaveSession',
@@ -680,8 +691,8 @@ describe('DebuggerToolHandlers', () => {
       'handleBlackboxList',
     ];
 
-    it('has exactly 37 public handler methods', async () => {
-      expect(allMethods).toHaveLength(37);
+    it('has exactly 38 public handler methods', async () => {
+      expect(allMethods).toHaveLength(38);
     });
 
     it.each(allMethods)('%s is a function on the instance', (method) => {

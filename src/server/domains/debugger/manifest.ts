@@ -30,6 +30,7 @@ const registrations = [
       { tool: 'get_call_stack', method: 'handleGetCallStack' },
       { tool: 'debugger_evaluate', method: 'handleDebuggerEvaluateDispatch' },
       { tool: 'debugger_wait_for_paused', method: 'handleDebuggerWaitForPaused' },
+      { tool: 'debugger_capture_hit', method: 'handleDebuggerCaptureHit' },
       { tool: 'debugger_get_paused_state', method: 'handleDebuggerGetPausedState' },
       { tool: 'get_object_properties', method: 'handleGetObjectProperties' },
       { tool: 'get_scope_variables_enhanced', method: 'handleGetScopeVariablesEnhanced' },

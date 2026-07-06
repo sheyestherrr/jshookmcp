@@ -21,7 +21,7 @@ CDP-based debugging domain covering breakpoints, stepping, call stacks, watches,
 - debugger + browser
 - debugger + instrumentation
 
-## Full tool list (19)
+## Full tool list (20)
 
 | Tool | Description |
 | --- | --- |
@@ -34,6 +34,7 @@ CDP-based debugging domain covering breakpoints, stepping, call stacks, watches,
 | `get_call_stack` | Get the current call stack. |
 | `debugger_evaluate` | Evaluate a JavaScript expression. context="frame" evaluates in the current call frame (requires paused state); context="global" evaluates in the global context (no pause required). |
 | `debugger_wait_for_paused` | Wait for debugger pause after setting breakpoints. |
+| `debugger_capture_hit` | Wait for the next debugger pause and capture call stack plus optional top-frame scope variables. |
 | `debugger_get_paused_state` | Get current paused state and reason. |
 | `get_object_properties` | Get properties of an object by objectId. |
 | `get_scope_variables_enhanced` | Enhanced scope variable inspection with deep object traversal. |

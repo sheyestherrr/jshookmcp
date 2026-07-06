@@ -141,6 +141,10 @@ export class DebuggerToolHandlers {
     return this.debuggerState.handleDebuggerWaitForPaused(args);
   }
 
+  async handleDebuggerCaptureHit(args: Record<string, unknown>) {
+    return this.debuggerState.handleDebuggerCaptureHit(args);
+  }
+
   async handleDebuggerGetPausedState(args: Record<string, unknown>) {
     return this.debuggerState.handleDebuggerGetPausedState(args);
   }

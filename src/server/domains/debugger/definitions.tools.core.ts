@@ -112,6 +112,32 @@ Types & params:
       })
       .query(),
   ),
+  tool('debugger_capture_hit', (t) =>
+    t
+      .desc(
+        'Wait for the next debugger pause and capture call stack plus optional top-frame scope variables.',
+      )
+      .number('timeout', 'Timeout in milliseconds (default: 30000)', {
+        default: 30000,
+        minimum: 1000,
+        maximum: 120000,
+      })
+      .boolean('includeScope', 'Include top-frame scope variables in the capture.', {
+        default: true,
+      })
+      .boolean('includeObjectProperties', 'Expand object properties in captured scope variables.', {
+        default: false,
+      })
+      .number('maxDepth', 'Maximum object traversal depth for captured scope variables.', {
+        default: 1,
+        minimum: 1,
+        maximum: 10,
+      })
+      .boolean('skipErrors', 'Skip scope properties that throw during access.', {
+        default: true,
+      })
+      .query(),
+  ),
   tool('debugger_get_paused_state', (t) => t.desc('Get current paused state and reason.').query()),
   tool('get_object_properties', (t) =>
     t
