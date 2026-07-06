@@ -30,6 +30,7 @@ import {
   argNumber,
   argNumberRequired,
   argBool,
+  argEnum,
   argStringArray,
 } from '@server/domains/shared/parse-args';
 import { handleSafe } from '@server/domains/shared/ResponseBuilder';
@@ -266,6 +267,28 @@ function encodeInputText(text: string): string {
     .replace(/(["'`$&|;<>(){}[\]*?~!])/g, '\\$1');
 }
 
+const PORT_MAPPING_ACTIONS = new Set(['add', 'remove', 'remove_all', 'list'] as const);
+const PORT_MAPPING_DIRECTIONS = new Set(['forward', 'reverse'] as const);
+
+type PortMappingDirection = typeof PORT_MAPPING_DIRECTIONS extends Set<infer T> ? T : never;
+
+function parseAdbPortMappings(
+  stdout: string,
+  direction: PortMappingDirection,
+): Array<{ serial: string; local: string; remote: string }> {
+  const mappings: Array<{ serial: string; local: string; remote: string }> = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const [serial, first, second] = line.trim().split(/\s+/);
+    if (!serial || !first || !second) continue;
+    mappings.push(
+      direction === 'forward'
+        ? { serial, local: first, remote: second }
+        : { serial, local: second, remote: first },
+    );
+  }
+  return mappings;
+}
+
 export class ADBBridgeHandlers {
   private cachedAdb?: string;
 
@@ -334,6 +357,10 @@ export class ADBBridgeHandlers {
 
   async handleScreenshotTool(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => await this.handleScreenshot(args));
+  }
+
+  async handlePortForwardTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handlePortForward(args));
   }
 
   async handleApkPullTool(args: Record<string, unknown>): Promise<ToolResponse> {
@@ -734,6 +761,98 @@ export class ADBBridgeHandlers {
         serial,
         localPath,
         size: localStat.size,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      };
+    });
+  }
+
+  async handlePortForward(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_port_forward', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const action = argEnum(args, 'action', PORT_MAPPING_ACTIONS, 'list');
+      const direction = argEnum(args, 'direction', PORT_MAPPING_DIRECTIONS, 'forward');
+      const adb = await this.resolveAdb();
+
+      if (action === 'list') {
+        const result = await execAdb(adb, [...serialArgs(serial), direction, '--list'], {
+          allowNonZero: true,
+          timeoutMs: ADB_SHELL_TIMEOUT_MS,
+        });
+        const mappings = parseAdbPortMappings(result.stdout, direction);
+        return {
+          success: result.exitCode === 0,
+          serial,
+          action,
+          direction,
+          count: mappings.length,
+          mappings,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+        };
+      }
+
+      if (action === 'remove_all') {
+        const result = await execAdb(adb, [...serialArgs(serial), direction, '--remove-all'], {
+          allowNonZero: true,
+          timeoutMs: ADB_SHELL_TIMEOUT_MS,
+        });
+        return {
+          success: result.exitCode === 0,
+          serial,
+          action,
+          direction,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+        };
+      }
+
+      if (action === 'remove') {
+        const endpoint =
+          direction === 'forward'
+            ? argStringRequired(args, 'local')
+            : argStringRequired(args, 'remote');
+        const result = await execAdb(
+          adb,
+          [...serialArgs(serial), direction, '--remove', endpoint],
+          {
+            allowNonZero: true,
+            timeoutMs: ADB_SHELL_TIMEOUT_MS,
+          },
+        );
+        return {
+          success: result.exitCode === 0,
+          serial,
+          action,
+          direction,
+          local: direction === 'forward' ? endpoint : argString(args, 'local'),
+          remote: direction === 'reverse' ? endpoint : argString(args, 'remote'),
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+        };
+      }
+
+      const local = argStringRequired(args, 'local');
+      const remote = argStringRequired(args, 'remote');
+      const commandArgs =
+        direction === 'forward'
+          ? [...serialArgs(serial), 'forward', local, remote]
+          : [...serialArgs(serial), 'reverse', remote, local];
+      const result = await execAdb(adb, commandArgs, {
+        allowNonZero: true,
+        timeoutMs: ADB_SHELL_TIMEOUT_MS,
+      });
+      return {
+        success: result.exitCode === 0,
+        serial,
+        action,
+        direction,
+        local,
+        remote,
+        stdout: result.stdout,
         stderr: result.stderr,
         exitCode: result.exitCode,
       };

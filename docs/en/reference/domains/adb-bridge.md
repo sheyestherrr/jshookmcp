@@ -19,7 +19,7 @@ Android Debug Bridge integration domain for device management, application analy
 - adb-bridge + process
 - adb-bridge + network
 
-## Full tool list (21)
+## Full tool list (22)
 
 | Tool | Description |
 | --- | --- |
@@ -35,6 +35,7 @@ Android Debug Bridge integration domain for device management, application analy
 | `adb_proc_maps` | Read and parse /proc/PID/maps from a device, resolving PID from packageName when needed. |
 | `adb_root_check` | Probe root indicators such as su, Magisk, test-keys, SELinux, and shell uid. |
 | `adb_screenshot` | Capture a PNG screenshot through adb exec-out screencap -p. |
+| `adb_port_forward` | Manage ADB forward/reverse port mappings for device-host bridge workflows. |
 | `adb_apk_analyze` | Analyze an installed APK: package, permissions, activities, and security info. |
 | `adb_package_summary` | Return structured Android package metadata: launcher, uid, versions, permissions, components, and native library dirs. |
 | `adb_logcat_query` | Capture and filter Android logcat output in-process without shell grep pipelines. |

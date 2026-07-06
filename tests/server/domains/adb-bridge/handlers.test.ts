@@ -232,6 +232,76 @@ describe('ADBBridgeHandlers', () => {
     }
   });
 
+  it('adds an adb forward port mapping', async () => {
+    mockExecFile([{ stdout: '' }]);
+
+    const result = await handlers.handlePortForward({
+      serial: 'emulator-5554',
+      action: 'add',
+      direction: 'forward',
+      local: 'tcp:9222',
+      remote: 'localabstract:webview_devtools_remote_123',
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.direction).toBe('forward');
+    expect((execFile as any).mock.calls[0][1]).toEqual([
+      '-s',
+      'emulator-5554',
+      'forward',
+      'tcp:9222',
+      'localabstract:webview_devtools_remote_123',
+    ]);
+  });
+
+  it('lists adb reverse mappings with normalized local and remote endpoints', async () => {
+    mockExecFile([{ stdout: 'emulator-5554 tcp:9000 tcp:7000\n' }]);
+
+    const result = await handlers.handlePortForward({
+      serial: 'emulator-5554',
+      action: 'list',
+      direction: 'reverse',
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.count).toBe(1);
+    expect(parsed.mappings[0]).toEqual({
+      serial: 'emulator-5554',
+      remote: 'tcp:9000',
+      local: 'tcp:7000',
+    });
+    expect((execFile as any).mock.calls[0][1]).toEqual([
+      '-s',
+      'emulator-5554',
+      'reverse',
+      '--list',
+    ]);
+  });
+
+  it('removes an adb reverse mapping by remote endpoint', async () => {
+    mockExecFile([{ stdout: '' }]);
+
+    const result = await handlers.handlePortForward({
+      serial: 'emulator-5554',
+      action: 'remove',
+      direction: 'reverse',
+      remote: 'tcp:9000',
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.remote).toBe('tcp:9000');
+    expect((execFile as any).mock.calls[0][1]).toEqual([
+      '-s',
+      'emulator-5554',
+      'reverse',
+      '--remove',
+      'tcp:9000',
+    ]);
+  });
+
   it('pulls APK from device', async () => {
     mockExecFile([
       {

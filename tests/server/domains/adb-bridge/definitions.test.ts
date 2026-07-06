@@ -23,8 +23,8 @@ describe('adb-bridge tool definitions', () => {
       expect(adbBridgeTools.length).toBeGreaterThan(0);
     });
 
-    it('tool count matches expected (21 tools)', async () => {
-      expect(adbBridgeTools.length).toBe(21);
+    it('tool count matches expected (22 tools)', async () => {
+      expect(adbBridgeTools.length).toBe(22);
     });
 
     it('has unique tool names', async () => {
@@ -74,6 +74,7 @@ describe('adb-bridge tool definitions', () => {
       'adb_proc_maps',
       'adb_root_check',
       'adb_screenshot',
+      'adb_port_forward',
       'adb_logcat_query',
       'adb_app_cold_start_trace',
       'adb_file_pull',
@@ -148,6 +149,16 @@ describe('adb-bridge tool definitions', () => {
       expect(getTool('adb_proc_maps').inputSchema.required ?? []).toContain('serial');
       expect(getTool('adb_root_check').inputSchema.required ?? []).toContain('serial');
       expect(getTool('adb_screenshot').inputSchema.required ?? []).toContain('serial');
+      expect(getTool('adb_port_forward').inputSchema.required ?? []).toEqual(
+        expect.arrayContaining(['serial', 'action', 'direction']),
+      );
+      expect(getToolProperty('adb_port_forward', 'action').enum).toEqual([
+        'add',
+        'remove',
+        'remove_all',
+        'list',
+      ]);
+      expect(getToolProperty('adb_port_forward', 'direction').enum).toEqual(['forward', 'reverse']);
     });
   });
 

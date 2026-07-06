@@ -113,6 +113,21 @@ export const adbBridgeTools = [
       .requiredOpenWorld('serial'),
   ),
 
+  tool('adb_port_forward', (t) =>
+    t
+      .desc('Manage ADB forward/reverse port mappings for device-host bridge workflows.')
+      .string('serial', 'Android device serial or emulator id')
+      .enum('action', ['add', 'remove', 'remove_all', 'list'], 'Port mapping action')
+      .enum(
+        'direction',
+        ['forward', 'reverse'],
+        'forward maps host→device; reverse maps device→host',
+      )
+      .string('local', 'Host-side endpoint such as tcp:9222')
+      .string('remote', 'Device-side endpoint such as tcp:8080 or localabstract:webview_devtools')
+      .requiredOpenWorld('serial', 'action', 'direction'),
+  ),
+
   tool('adb_apk_pull', (t) =>
     t
       .desc('Pull an APK from a device to the local filesystem.')

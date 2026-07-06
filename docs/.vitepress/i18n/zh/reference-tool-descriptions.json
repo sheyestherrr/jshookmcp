@@ -565,5 +565,6 @@
   "native_symbol_sync": "从已连接的原生分析后端导出并同步符号。",
   "proxy_list_rules": "列出当前 handler 跟踪的活动代理拦截规则。",
   "proxy_clear_rules": "在保持代理运行的情况下清空当前活动拦截规则。",
-  "debugger_run_to_location": "通过设置临时代码断点并恢复执行，等待调试器在指定源码位置暂停，随后自动移除该断点。"
+  "debugger_run_to_location": "通过设置临时代码断点并恢复执行，等待调试器在指定源码位置暂停，随后自动移除该断点。",
+  "adb_port_forward": "管理 ADB forward/reverse 端口映射，用于设备与主机之间的调试桥接流程。"
 }
