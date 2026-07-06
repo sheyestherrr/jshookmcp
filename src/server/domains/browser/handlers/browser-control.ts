@@ -14,8 +14,12 @@ import type { BrowserAttachRuntimeSnapshot } from '@server/runtime/ServerRuntime
 
 const projectEnvPath = join(projectRoot, '.env');
 const CHROME_CHANNELS = new Set(['stable', 'beta', 'dev', 'canary'] as const);
+const BROWSER_DRIVERS = new Set(['chrome', 'camoufox'] as const);
+const BROWSER_LAUNCH_MODES = new Set(['launch', 'connect'] as const);
 
 type ChromeChannel = 'stable' | 'beta' | 'dev' | 'canary';
+type BrowserDriver = 'chrome' | 'camoufox';
+type BrowserLaunchMode = 'launch' | 'connect';
 
 type ChromeConnectRequest = {
   browserURL?: string;
@@ -159,6 +163,31 @@ export class BrowserControlHandlers {
     };
   }
 
+  private parseBrowserLaunchEnum<T extends string>(
+    args: Record<string, unknown>,
+    key: string,
+    allowed: ReadonlySet<T>,
+    fallback: T,
+  ): T {
+    const value = args[key];
+    if (value === undefined) {
+      return fallback;
+    }
+    if (typeof value !== 'string' || !allowed.has(value as T)) {
+      const actual = typeof value === 'string' ? `"${value}"` : String(value);
+      throw new Error(`Invalid ${key} ${actual}. Expected one of: ${[...allowed].join(', ')}.`);
+    }
+    return value as T;
+  }
+
+  private parseBrowserDriver(args: Record<string, unknown>): BrowserDriver {
+    return this.parseBrowserLaunchEnum(args, 'driver', BROWSER_DRIVERS, 'chrome');
+  }
+
+  private parseBrowserLaunchMode(args: Record<string, unknown>): BrowserLaunchMode {
+    return this.parseBrowserLaunchEnum(args, 'mode', BROWSER_LAUNCH_MODES, 'launch');
+  }
+
   private hasChromeConnectRequest(request: ChromeConnectRequest): boolean {
     return Boolean(
       request.browserURL ||
@@ -240,11 +269,10 @@ export class BrowserControlHandlers {
 
   async handleBrowserLaunch(args: Record<string, unknown>): Promise<ToolResponse> {
     try {
-      const driver = argString(args, 'driver', 'chrome');
+      const driver = this.parseBrowserDriver(args);
+      const mode = this.parseBrowserLaunchMode(args);
 
       if (driver === 'camoufox') {
-        const mode = argString(args, 'mode', 'launch');
-
         if (mode === 'connect') {
           const wsEndpoint = argString(args, 'wsEndpoint');
           if (!wsEndpoint) {
@@ -275,7 +303,6 @@ export class BrowserControlHandlers {
           .json();
       }
 
-      const mode = argString(args, 'mode', 'launch');
       if (mode === 'connect') {
         const connectRequest = this.parseChromeConnectRequest(args);
 

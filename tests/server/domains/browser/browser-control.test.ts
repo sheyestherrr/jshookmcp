@@ -243,6 +243,28 @@ describe('BrowserControlHandlers – handleBrowserLaunch', () => {
     expect(body.error).toContain('Invalid channel "nightly"');
   });
 
+  it('rejects invalid browser driver without launching or connecting', async () => {
+    const body = parseJson<BrowserLaunchResponse>(
+      await handlers.handleBrowserLaunch({ driver: 'firefox' }),
+    );
+
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('Invalid driver "firefox"');
+    expect(collector.launch).not.toHaveBeenCalled();
+    expect(collector.connect).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid browser mode without launching or connecting', async () => {
+    const body = parseJson<BrowserLaunchResponse>(
+      await handlers.handleBrowserLaunch({ mode: 'attach' }),
+    );
+
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('Invalid mode "attach"');
+    expect(collector.launch).not.toHaveBeenCalled();
+    expect(collector.connect).not.toHaveBeenCalled();
+  });
+
   it('launches camoufox in default launch mode', async () => {
     const body = parseJson<BrowserLaunchResponse>(
       await handlers.handleBrowserLaunch({ driver: 'camoufox' }),
