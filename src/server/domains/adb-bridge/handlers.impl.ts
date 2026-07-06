@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { mkdir, open, stat } from 'node:fs/promises';
+import { mkdir, open, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { ToolError } from '@errors/ToolError';
 import { probeCommand } from '@modules/external/ToolProbe';
@@ -27,6 +28,7 @@ import {
   argString,
   argStringRequired,
   argNumber,
+  argNumberRequired,
   argBool,
   argStringArray,
 } from '@server/domains/shared/parse-args';
@@ -76,6 +78,48 @@ async function execAdb(
         const result: AdbExecResult = {
           stdout: out ?? '',
           stderr: errOut ?? '',
+          exitCode:
+            typeof (err as { code?: unknown } | null)?.code === 'number'
+              ? ((err as { code: number }).code ?? 1)
+              : 0,
+          signal:
+            typeof (err as { signal?: unknown } | null)?.signal === 'string'
+              ? ((err as { signal: string }).signal ?? undefined)
+              : undefined,
+        };
+        if (err && !options.allowNonZero) {
+          reject(err);
+          return;
+        }
+        resolve(result);
+      },
+    );
+  });
+}
+
+async function execAdbBuffer(
+  adb: string,
+  args: string[],
+  options: AdbExecOptions = {},
+): Promise<{ stdout: Buffer; stderr: string; exitCode: number; signal?: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      adb,
+      args,
+      {
+        encoding: 'buffer',
+        windowsHide: true,
+        timeout: options.timeoutMs ?? ADB_DEFAULT_TIMEOUT_MS,
+        maxBuffer: options.maxBufferBytes ?? ADB_MAX_BUFFER_BYTES,
+      },
+      (err, out, errOut) => {
+        const result = {
+          stdout: Buffer.isBuffer(out) ? out : Buffer.from(out ?? ''),
+          stderr: Buffer.isBuffer(errOut)
+            ? errOut.toString('utf8')
+            : typeof errOut === 'string'
+              ? errOut
+              : '',
           exitCode:
             typeof (err as { code?: unknown } | null)?.code === 'number'
               ? ((err as { code: number }).code ?? 1)
@@ -193,6 +237,35 @@ function parseNativeLibraryDirs(
   return [...dirs];
 }
 
+function parseProcMaps(stdout: string): Array<Record<string, string>> {
+  const modules: Array<Record<string, string>> = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const match = line.match(
+      /^([0-9a-fA-F]+)-([0-9a-fA-F]+)\s+(\S+)\s+([0-9a-fA-F]+)\s+(\S+)\s+(\d+)\s*(.*)$/,
+    );
+    if (!match) continue;
+    const [, start, end, perms, offset, dev, inode, pathname] = match;
+    modules.push({
+      start: `0x${(start ?? '').toLowerCase()}`,
+      end: `0x${(end ?? '').toLowerCase()}`,
+      perms: perms ?? '',
+      offset: `0x${(offset ?? '').toLowerCase()}`,
+      dev: dev ?? '',
+      inode: inode ?? '',
+      pathname: pathname?.trim() ?? '',
+    });
+  }
+  return modules;
+}
+
+function encodeInputText(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/\s/g, '%s')
+    .replace(/(["'`$&|;<>(){}[\]*?~!])/g, '\\$1');
+}
+
 export class ADBBridgeHandlers {
   private cachedAdb?: string;
 
@@ -225,6 +298,42 @@ export class ADBBridgeHandlers {
 
   async handleShellTool(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => await this.handleShell(args));
+  }
+
+  async handleInstallTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleInstall(args));
+  }
+
+  async handleUninstallTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleUninstall(args));
+  }
+
+  async handleInputTapTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleInputTap(args));
+  }
+
+  async handleInputSwipeTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleInputSwipe(args));
+  }
+
+  async handleInputKeyeventTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleInputKeyevent(args));
+  }
+
+  async handleInputTextTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleInputText(args));
+  }
+
+  async handleProcMapsTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleProcMaps(args));
+  }
+
+  async handleRootCheckTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleRootCheck(args));
+  }
+
+  async handleScreenshotTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleScreenshot(args));
   }
 
   async handleApkPullTool(args: Record<string, unknown>): Promise<ToolResponse> {
@@ -323,6 +432,310 @@ export class ADBBridgeHandlers {
         stderr: stderr || '',
         exitCode,
         ...(signal ? { signal } : {}),
+      };
+    });
+  }
+
+  async handleInstall(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_install', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const apkPath = argString(args, 'apkPath');
+      const apkPaths = [...(apkPath ? [apkPath] : []), ...argStringArray(args, 'apkPaths')];
+      if (apkPaths.length === 0) {
+        return { success: false, serial, error: 'apkPath or apkPaths is required' };
+      }
+
+      const reinstall = argBool(args, 'reinstall') ?? true;
+      const allowDowngrade = argBool(args, 'allowDowngrade') ?? false;
+      const grantPermissions = argBool(args, 'grantPermissions') ?? false;
+      const allowTestOnly = argBool(args, 'allowTestOnly') ?? true;
+      const installSplit = argBool(args, 'installSplit') ?? apkPaths.length > 1;
+      const user = argString(args, 'user');
+      const adb = await this.resolveAdb();
+      const installArgs = [
+        ...serialArgs(serial),
+        installSplit || apkPaths.length > 1 ? 'install-multiple' : 'install',
+      ];
+      if (reinstall) installArgs.push('-r');
+      if (allowDowngrade) installArgs.push('-d');
+      if (grantPermissions) installArgs.push('-g');
+      if (allowTestOnly) installArgs.push('-t');
+      if (user) installArgs.push('--user', user);
+      installArgs.push(...apkPaths);
+
+      const result = await execAdb(adb, installArgs, {
+        allowNonZero: true,
+        timeoutMs: ADB_FILE_TRANSFER_TIMEOUT_MS,
+        maxBufferBytes: ADB_MAX_BUFFER_BYTES,
+      });
+      const combined = `${result.stdout}\n${result.stderr}`;
+      return {
+        success: result.exitCode === 0 && /Success/i.test(combined),
+        serial,
+        command: installArgs,
+        apkPaths,
+        installSplit: installSplit || apkPaths.length > 1,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      };
+    });
+  }
+
+  async handleUninstall(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_uninstall', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const packageName = argStringRequired(args, 'packageName');
+      const keepData = argBool(args, 'keepData') ?? false;
+      const adb = await this.resolveAdb();
+      const uninstallArgs = [...serialArgs(serial), 'uninstall'];
+      if (keepData) uninstallArgs.push('-k');
+      uninstallArgs.push(packageName);
+      const result = await execAdb(adb, uninstallArgs, {
+        allowNonZero: true,
+        timeoutMs: ADB_FILE_TRANSFER_TIMEOUT_MS,
+      });
+      const combined = `${result.stdout}\n${result.stderr}`;
+      return {
+        success: result.exitCode === 0 && /Success/i.test(combined),
+        serial,
+        packageName,
+        keepData,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      };
+    });
+  }
+
+  async handleInputTap(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_input_tap', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const x = argNumberRequired(args, 'x');
+      const y = argNumberRequired(args, 'y');
+      const adb = await this.resolveAdb();
+      const result = await execAdb(
+        adb,
+        [...serialArgs(serial), 'shell', 'input', 'tap', `${x}`, `${y}`],
+        {
+          allowNonZero: true,
+          timeoutMs: ADB_SHELL_TIMEOUT_MS,
+        },
+      );
+      return { success: result.exitCode === 0, serial, x, y, ...result };
+    });
+  }
+
+  async handleInputSwipe(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_input_swipe', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const x1 = argNumberRequired(args, 'x1');
+      const y1 = argNumberRequired(args, 'y1');
+      const x2 = argNumberRequired(args, 'x2');
+      const y2 = argNumberRequired(args, 'y2');
+      const durationMs = argNumber(args, 'durationMs');
+      const adb = await this.resolveAdb();
+      const shellArgs = [
+        ...serialArgs(serial),
+        'shell',
+        'input',
+        'swipe',
+        `${x1}`,
+        `${y1}`,
+        `${x2}`,
+        `${y2}`,
+      ];
+      if (durationMs !== undefined) shellArgs.push(`${durationMs}`);
+      const result = await execAdb(adb, shellArgs, {
+        allowNonZero: true,
+        timeoutMs: ADB_SHELL_TIMEOUT_MS,
+      });
+      return { success: result.exitCode === 0, serial, x1, y1, x2, y2, durationMs, ...result };
+    });
+  }
+
+  async handleInputKeyevent(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_input_keyevent', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const keyCode = argStringRequired(args, 'keyCode');
+      const adb = await this.resolveAdb();
+      const result = await execAdb(
+        adb,
+        [...serialArgs(serial), 'shell', 'input', 'keyevent', keyCode],
+        { allowNonZero: true, timeoutMs: ADB_SHELL_TIMEOUT_MS },
+      );
+      return { success: result.exitCode === 0, serial, keyCode, ...result };
+    });
+  }
+
+  async handleInputText(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_input_text', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const text = argStringRequired(args, 'text');
+      const encodedText = encodeInputText(text);
+      const adb = await this.resolveAdb();
+      const result = await execAdb(
+        adb,
+        [...serialArgs(serial), 'shell', 'input', 'text', encodedText],
+        { allowNonZero: true, timeoutMs: ADB_SHELL_TIMEOUT_MS },
+      );
+      return {
+        success: result.exitCode === 0,
+        serial,
+        textLength: text.length,
+        encodedText,
+        ...result,
+      };
+    });
+  }
+
+  async handleProcMaps(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_proc_maps', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const packageName = argString(args, 'packageName');
+      let pid = argString(args, 'pid');
+      const includeRaw = argBool(args, 'includeRaw') ?? false;
+      const localPath = argString(args, 'localPath');
+      if (!pid && packageName) {
+        pid = await this.resolvePackagePid(serial, packageName);
+      }
+      if (!pid) {
+        return {
+          success: false,
+          serial,
+          packageName,
+          error: 'pid or resolvable packageName is required',
+        };
+      }
+
+      const adb = await this.resolveAdb();
+      const { stdout, stderr, exitCode } = await execAdb(
+        adb,
+        [...serialArgs(serial), 'shell', `cat /proc/${pid}/maps`],
+        {
+          allowNonZero: true,
+          timeoutMs: ADB_SHELL_TIMEOUT_MS,
+          maxBufferBytes: ADB_LARGE_OUTPUT_MAX_BUFFER_BYTES,
+        },
+      );
+      if (localPath) {
+        await mkdir(dirname(localPath), { recursive: true });
+        await writeFile(localPath, stdout, 'utf8');
+      }
+      const modules = parseProcMaps(stdout);
+      return {
+        success: exitCode === 0,
+        serial,
+        packageName,
+        pid,
+        count: modules.length,
+        modules,
+        localPath,
+        stderr,
+        exitCode,
+        ...(includeRaw ? { raw: stdout } : {}),
+      };
+    });
+  }
+
+  async handleRootCheck(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_root_check', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const adb = await this.resolveAdb();
+      const runShellProbe = async (command: string) =>
+        await execAdb(adb, [...serialArgs(serial), 'shell', command], {
+          allowNonZero: true,
+          timeoutMs: ADB_SHELL_TIMEOUT_MS,
+          maxBufferBytes: ADB_MAX_BUFFER_BYTES,
+        });
+
+      const [su, magisk, buildTags, selinux, id] = await Promise.all([
+        runShellProbe('which su'),
+        runShellProbe('pm list packages com.topjohnwu.magisk'),
+        runShellProbe('getprop ro.build.tags'),
+        runShellProbe('getenforce'),
+        runShellProbe('id'),
+      ]);
+      const indicators: Array<{
+        name: string;
+        evidence: string;
+        severity: 'low' | 'medium' | 'high';
+      }> = [];
+      if (su.exitCode === 0 && su.stdout.trim()) {
+        indicators.push({ name: 'su-binary', evidence: su.stdout.trim(), severity: 'high' });
+      }
+      if (magisk.stdout.includes('com.topjohnwu.magisk')) {
+        indicators.push({
+          name: 'magisk-package',
+          evidence: magisk.stdout.trim(),
+          severity: 'high',
+        });
+      }
+      if (buildTags.stdout.includes('test-keys')) {
+        indicators.push({
+          name: 'test-keys',
+          evidence: buildTags.stdout.trim(),
+          severity: 'medium',
+        });
+      }
+      if (/permissive/i.test(selinux.stdout)) {
+        indicators.push({
+          name: 'selinux-permissive',
+          evidence: selinux.stdout.trim(),
+          severity: 'medium',
+        });
+      }
+      if (/\buid=0\b/.test(id.stdout)) {
+        indicators.push({ name: 'adbd-root-shell', evidence: id.stdout.trim(), severity: 'high' });
+      }
+      const high = indicators.filter((indicator) => indicator.severity === 'high').length;
+      const confidence = Math.min(1, high * 0.4 + (indicators.length - high) * 0.2);
+      return {
+        success: true,
+        serial,
+        rooted: indicators.length > 0,
+        confidence,
+        indicators,
+      };
+    });
+  }
+
+  async handleScreenshot(args: Record<string, unknown>): Promise<ToolResponse> {
+    return this.run('adb_screenshot', async () => {
+      const serial = argStringRequired(args, 'serial');
+      const localPath =
+        argString(args, 'localPath') ??
+        join(tmpdir(), `jshook-adb-screenshot-${sanitizeLocalName(serial)}-${Date.now()}.png`);
+      const adb = await this.resolveAdb();
+      const result = await execAdbBuffer(
+        adb,
+        [...serialArgs(serial), 'exec-out', 'screencap', '-p'],
+        {
+          allowNonZero: true,
+          timeoutMs: ADB_SHELL_TIMEOUT_MS,
+          maxBufferBytes: ADB_LARGE_OUTPUT_MAX_BUFFER_BYTES,
+        },
+      );
+      if (result.exitCode !== 0) {
+        return {
+          success: false,
+          serial,
+          localPath,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+        };
+      }
+
+      await mkdir(dirname(localPath), { recursive: true });
+      await writeFile(localPath, result.stdout);
+      const localStat = await stat(localPath);
+      return {
+        success: true,
+        serial,
+        localPath,
+        size: localStat.size,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
       };
     });
   }

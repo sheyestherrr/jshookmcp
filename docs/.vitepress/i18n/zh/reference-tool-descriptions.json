@@ -542,5 +542,14 @@
   "mojo_encode_message": "待补充中文：Encode a structured Mojo IPC message into a hex payload.",
   "frida_spawn": "待补充中文：Spawn a target through Frida for early instrumentation before normal execution.",
   "frida_resume": "待补充中文：Resume a target previously spawned for early Frida instrumentation.",
-  "frida_attach_interceptor": "待补充中文：Generate a real Frida Interceptor.attach block for a symbol and optionally install it in a session."
+  "frida_attach_interceptor": "待补充中文：Generate a real Frida Interceptor.attach block for a symbol and optionally install it in a session.",
+  "adb_install": "待补充中文：Install one APK or a split-APK set onto a device with parsed success output.",
+  "adb_uninstall": "待补充中文：Uninstall a package from a device, optionally keeping app data.",
+  "adb_input_tap": "待补充中文：Send a touchscreen tap event through adb shell input.",
+  "adb_input_swipe": "待补充中文：Send a touchscreen swipe event through adb shell input.",
+  "adb_input_keyevent": "待补充中文：Send an Android keyevent name or numeric key code through adb shell input.",
+  "adb_input_text": "待补充中文：Send text through adb shell input text with Android-safe whitespace encoding.",
+  "adb_proc_maps": "待补充中文：Read and parse /proc/PID/maps from a device, resolving PID from packageName when needed.",
+  "adb_root_check": "待补充中文：Probe root indicators such as su, Magisk, test-keys, SELinux, and shell uid.",
+  "adb_screenshot": "待补充中文：Capture a PNG screenshot through adb exec-out screencap -p."
 }

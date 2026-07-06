@@ -3,8 +3,9 @@ import { ADBBridgeHandlers } from '@server/domains/adb-bridge/handlers.impl';
 import { ResponseBuilder } from '@server/domains/shared/ResponseBuilder';
 import { probeCommand } from '@modules/external/ToolProbe';
 import { execFile } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
@@ -15,7 +16,9 @@ vi.mock('@modules/external/ToolProbe', () => ({
   probeCommand: vi.fn(),
 }));
 
-function mockExecFile(responses: Array<{ stdout?: string; stderr?: string; error?: Error }>) {
+function mockExecFile(
+  responses: Array<{ stdout?: string | Buffer; stderr?: string; error?: Error }>,
+) {
   let callIndex = 0;
   (execFile as any).mockImplementation(
     (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
@@ -100,6 +103,133 @@ describe('ADBBridgeHandlers', () => {
     const parsed = parseResult(result);
     expect(parsed.success).toBe(true);
     expect(parsed.stdout).toContain('Linux');
+  });
+
+  it('installs a single APK with reinstall and test-only flags', async () => {
+    mockExecFile([{ stdout: 'Success\n' }]);
+
+    const result = await handlers.handleInstall({
+      serial: 'emulator-5554',
+      apkPath: '/tmp/app.apk',
+      grantPermissions: true,
+    });
+    const parsed = parseResult(result);
+    expect(parsed.success).toBe(true);
+    expect(parsed.apkPaths).toEqual(['/tmp/app.apk']);
+    expect((execFile as any).mock.calls[0][1]).toEqual(
+      expect.arrayContaining(['-s', 'emulator-5554', 'install', '-r', '-g', '-t', '/tmp/app.apk']),
+    );
+  });
+
+  it('uninstalls a package while keeping data when requested', async () => {
+    mockExecFile([{ stdout: 'Success\n' }]);
+
+    const result = await handlers.handleUninstall({
+      serial: 'emulator-5554',
+      packageName: 'com.example.app',
+      keepData: true,
+    });
+    const parsed = parseResult(result);
+    expect(parsed.success).toBe(true);
+    expect(parsed.keepData).toBe(true);
+    expect((execFile as any).mock.calls[0][1]).toEqual(
+      expect.arrayContaining(['uninstall', '-k', 'com.example.app']),
+    );
+  });
+
+  it('sends input tap and encoded text events', async () => {
+    mockExecFile([{ stdout: '' }, { stdout: '' }]);
+
+    const tap = parseResult(
+      await handlers.handleInputTap({
+        serial: 'emulator-5554',
+        x: 120,
+        y: 340,
+      }),
+    );
+    const text = parseResult(
+      await handlers.handleInputText({
+        serial: 'emulator-5554',
+        text: 'hello world',
+      }),
+    );
+
+    expect(tap.success).toBe(true);
+    expect(text.encodedText).toBe('hello%sworld');
+    expect((execFile as any).mock.calls[0][1]).toEqual(
+      expect.arrayContaining(['shell', 'input', 'tap', '120', '340']),
+    );
+    expect((execFile as any).mock.calls[1][1]).toEqual(
+      expect.arrayContaining(['shell', 'input', 'text', 'hello%sworld']),
+    );
+  });
+
+  it('reads and parses proc maps after resolving a package pid', async () => {
+    mockExecFile([
+      { stdout: '4321\n' },
+      {
+        stdout: [
+          '70000000-70012000 r-xp 00000000 fd:01 7 /data/app/lib/arm64/libfoo.so',
+          '71000000-71001000 r--p 00000000 fd:01 8 /data/app/base.apk',
+        ].join('\n'),
+      },
+    ]);
+
+    const result = await handlers.handleProcMaps({
+      serial: 'emulator-5554',
+      packageName: 'com.example.app',
+    });
+    const parsed = parseResult(result);
+    expect(parsed.success).toBe(true);
+    expect(parsed.pid).toBe('4321');
+    expect(parsed.count).toBe(2);
+    expect(parsed.modules[0]).toMatchObject({
+      start: '0x70000000',
+      end: '0x70012000',
+      perms: 'r-xp',
+      pathname: '/data/app/lib/arm64/libfoo.so',
+    });
+  });
+
+  it('reports structured root indicators', async () => {
+    mockExecFile([
+      { stdout: '/system/xbin/su\n' },
+      { stdout: 'package:com.topjohnwu.magisk\n' },
+      { stdout: 'release-keys\n' },
+      { stdout: 'Enforcing\n' },
+      { stdout: 'uid=2000(shell) gid=2000(shell)\n' },
+    ]);
+
+    const result = await handlers.handleRootCheck({ serial: 'emulator-5554' });
+    const parsed = parseResult(result);
+    expect(parsed.success).toBe(true);
+    expect(parsed.rooted).toBe(true);
+    expect(parsed.indicators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'su-binary' }),
+        expect.objectContaining({ name: 'magisk-package' }),
+      ]),
+    );
+  });
+
+  it('captures screenshots through exec-out screencap', async () => {
+    const outputPath = join(tmpdir(), `jshook-adb-test-${Date.now()}.png`);
+    mockExecFile([{ stdout: Buffer.from([0x89, 0x50, 0x4e, 0x47]) }]);
+
+    try {
+      const result = await handlers.handleScreenshot({
+        serial: 'emulator-5554',
+        localPath: outputPath,
+      });
+      const parsed = parseResult(result);
+      expect(parsed.success).toBe(true);
+      expect(parsed.size).toBe(4);
+      expect((execFile as any).mock.calls[0][1]).toEqual(
+        expect.arrayContaining(['exec-out', 'screencap', '-p']),
+      );
+    } finally {
+      rmSync(outputPath, { force: true });
+    }
   });
 
   it('pulls APK from device', async () => {

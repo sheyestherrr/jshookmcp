@@ -23,8 +23,8 @@ describe('adb-bridge tool definitions', () => {
       expect(adbBridgeTools.length).toBeGreaterThan(0);
     });
 
-    it('tool count matches expected (12 tools)', async () => {
-      expect(adbBridgeTools.length).toBe(12);
+    it('tool count matches expected (21 tools)', async () => {
+      expect(adbBridgeTools.length).toBe(21);
     });
 
     it('has unique tool names', async () => {
@@ -65,6 +65,15 @@ describe('adb-bridge tool definitions', () => {
     const expectedNames = [
       'adb_apk_analyze',
       'adb_package_summary',
+      'adb_install',
+      'adb_uninstall',
+      'adb_input_tap',
+      'adb_input_swipe',
+      'adb_input_keyevent',
+      'adb_input_text',
+      'adb_proc_maps',
+      'adb_root_check',
+      'adb_screenshot',
       'adb_logcat_query',
       'adb_app_cold_start_trace',
       'adb_file_pull',
@@ -103,6 +112,42 @@ describe('adb-bridge tool definitions', () => {
       const prop = getToolProperty('adb_webview_list', 'hostPort');
       expect(prop.type).toBe('number');
       expect(prop.default).toBe(9222);
+    });
+  });
+
+  describe('adb device control tools', () => {
+    it('adb_install exposes APK paths and install flags', async () => {
+      const tool = getTool('adb_install');
+      expect(tool.inputSchema.required ?? []).toContain('serial');
+      expect(getToolProperty('adb_install', 'apkPath').type).toBe('string');
+      expect(getToolProperty('adb_install', 'apkPaths').type).toBe('array');
+      expect(getToolProperty('adb_install', 'reinstall').default).toBe(true);
+      expect(getToolProperty('adb_install', 'allowTestOnly').default).toBe(true);
+    });
+
+    it('adb_uninstall requires serial and packageName', async () => {
+      const tool = getTool('adb_uninstall');
+      expect(tool.inputSchema.required ?? []).toContain('serial');
+      expect(tool.inputSchema.required ?? []).toContain('packageName');
+      expect(getToolProperty('adb_uninstall', 'keepData').default).toBe(false);
+    });
+
+    it('input and inspection tools expose expected required fields', async () => {
+      expect(getTool('adb_input_tap').inputSchema.required ?? []).toEqual(
+        expect.arrayContaining(['serial', 'x', 'y']),
+      );
+      expect(getTool('adb_input_swipe').inputSchema.required ?? []).toEqual(
+        expect.arrayContaining(['serial', 'x1', 'y1', 'x2', 'y2']),
+      );
+      expect(getTool('adb_input_keyevent').inputSchema.required ?? []).toEqual(
+        expect.arrayContaining(['serial', 'keyCode']),
+      );
+      expect(getTool('adb_input_text').inputSchema.required ?? []).toEqual(
+        expect.arrayContaining(['serial', 'text']),
+      );
+      expect(getTool('adb_proc_maps').inputSchema.required ?? []).toContain('serial');
+      expect(getTool('adb_root_check').inputSchema.required ?? []).toContain('serial');
+      expect(getTool('adb_screenshot').inputSchema.required ?? []).toContain('serial');
     });
   });
 

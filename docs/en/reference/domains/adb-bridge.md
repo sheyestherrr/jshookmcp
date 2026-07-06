@@ -19,13 +19,22 @@ Android Debug Bridge integration domain for device management, application analy
 - adb-bridge + process
 - adb-bridge + network
 
-## Full tool list (12)
+## Full tool list (21)
 
 | Tool | Description |
 | --- | --- |
 | `adb_device_list` | List all connected Android devices and emulators. |
 | `adb_apk_pull` | Pull an APK from a device to the local filesystem. |
 | `adb_shell` | Execute an ADB shell command on a specific device. |
+| `adb_install` | Install one APK or a split-APK set onto a device with parsed success output. |
+| `adb_uninstall` | Uninstall a package from a device, optionally keeping app data. |
+| `adb_input_tap` | Send a touchscreen tap event through adb shell input. |
+| `adb_input_swipe` | Send a touchscreen swipe event through adb shell input. |
+| `adb_input_keyevent` | Send an Android keyevent name or numeric key code through adb shell input. |
+| `adb_input_text` | Send text through adb shell input text with Android-safe whitespace encoding. |
+| `adb_proc_maps` | Read and parse /proc/PID/maps from a device, resolving PID from packageName when needed. |
+| `adb_root_check` | Probe root indicators such as su, Magisk, test-keys, SELinux, and shell uid. |
+| `adb_screenshot` | Capture a PNG screenshot through adb exec-out screencap -p. |
 | `adb_apk_analyze` | Analyze an installed APK: package, permissions, activities, and security info. |
 | `adb_package_summary` | Return structured Android package metadata: launcher, uid, versions, permissions, components, and native library dirs. |
 | `adb_logcat_query` | Capture and filter Android logcat output in-process without shell grep pipelines. |
