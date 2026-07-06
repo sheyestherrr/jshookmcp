@@ -21,7 +21,7 @@ export const graphqlTools: Tool[] = [
   ),
   tool('graphql_introspect', (t) =>
     t
-      .desc('Run GraphQL introspection query against a target endpoint.')
+      .desc('Run GraphQL introspection and optional Apollo Federation _service.sdl probing.')
       .string('endpoint', 'GraphQL endpoint URL')
       .prop('headers', {
         type: 'object',
@@ -34,6 +34,9 @@ export const graphqlTools: Tool[] = [
           'false to force a Node-side fetch.',
         { default: true },
       )
+      .boolean('includeFederation', 'Also probe Apollo Federation _service { sdl } metadata.', {
+        default: true,
+      })
       .requiredOpenWorld('endpoint'),
   ),
   tool('graphql_extract_queries', (t) =>

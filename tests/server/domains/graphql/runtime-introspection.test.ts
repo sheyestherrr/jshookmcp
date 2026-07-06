@@ -190,8 +190,131 @@ describe('GraphQLToolHandlersIntrospection', () => {
           endpoint: withPath(TEST_URLS.root, 'graphql'),
           headers: { Authorization: 'Bearer token123' },
           query: expect.stringContaining('IntrospectionQuery'),
+          federationQuery: expect.stringContaining('_service'),
+          includeFederation: true,
         }),
       );
+    });
+
+    it('summarizes Apollo Federation service SDL when available', async () => {
+      const sdl = `
+type Product @key(fields: "id") {
+  id: ID!
+  sku: String @external
+}
+
+extend type Query {
+  product(id: ID!): Product
+}
+`.trim();
+      const browserResult: BrowserFetchResult & { federation: BrowserFetchResult } = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        totalLength: 50,
+        preview: JSON.stringify({ data: { __schema: { types: [] } } }),
+        truncated: false,
+        json: { data: { __schema: { types: [] } } },
+        responseHeaders: { 'content-type': 'application/json' },
+        federation: {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          totalLength: sdl.length,
+          preview: '',
+          truncated: false,
+          json: { data: { _service: { sdl } } },
+          responseHeaders: { 'content-type': 'application/json' },
+        },
+      };
+      page.evaluate.mockResolvedValueOnce(browserResult);
+
+      const body = parseJson<any>(
+        await handlers.handleGraphqlIntrospect({
+          endpoint: withPath(TEST_URLS.root, 'graphql'),
+          useBrowser: true,
+        }),
+      );
+
+      expect(body.federation).toMatchObject({
+        attempted: true,
+        supported: true,
+        status: 200,
+        sdlLength: sdl.length,
+        sdl,
+      });
+      expect(body.federation.directives).toEqual(['external', 'key']);
+      expect(body.federation.entityTypes).toEqual(['Product']);
+    });
+
+    it('can skip Apollo Federation probing', async () => {
+      const browserResult: BrowserFetchResult = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        totalLength: 50,
+        preview: JSON.stringify({ data: { __schema: { types: [] } } }),
+        truncated: false,
+        json: { data: { __schema: { types: [] } } },
+        responseHeaders: { 'content-type': 'application/json' },
+      };
+      page.evaluate.mockResolvedValueOnce(browserResult);
+
+      const body = parseJson<any>(
+        await handlers.handleGraphqlIntrospect({
+          endpoint: withPath(TEST_URLS.root, 'graphql'),
+          useBrowser: true,
+          includeFederation: false,
+        }),
+      );
+
+      expect(body.federation).toBeUndefined();
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ includeFederation: false }),
+      );
+    });
+
+    it('fetches Apollo Federation SDL in Node mode', async () => {
+      const originalFetch = globalThis.fetch;
+      const sdl = 'type Review @key(fields: "id") { id: ID! body: String }';
+      const makeResponse = (payload: unknown) =>
+        ({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          text: async () => JSON.stringify(payload),
+          headers: {
+            forEach: (cb: (value: string, key: string) => void) => {
+              cb('application/json', 'content-type');
+            },
+          },
+        }) as Response;
+
+      try {
+        globalThis.fetch = vi
+          .fn()
+          .mockResolvedValueOnce(makeResponse({ data: { __schema: { types: [] } } }))
+          .mockResolvedValueOnce(makeResponse({ data: { _service: { sdl } } })) as any;
+
+        const body = parseJson<any>(
+          await handlers.handleGraphqlIntrospect({
+            endpoint: withPath(TEST_URLS.root, 'graphql'),
+            useBrowser: false,
+          }),
+        );
+
+        expect(body.success).toBe(true);
+        expect(body.federation.supported).toBe(true);
+        expect(body.federation.sdl).toBe(sdl);
+        expect(body.federation.entityTypes).toEqual(['Review']);
+        expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+        const federationBody = JSON.parse((globalThis.fetch as any).mock.calls[1][1].body);
+        expect(federationBody.query).toContain('_service');
+        expect(federationBody.operationName).toBe('FederationServiceQuery');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     it('includes response headers in output', async () => {

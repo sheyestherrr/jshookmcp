@@ -115,6 +115,13 @@ describe('graphql definitions', () => {
       expect(useBrowser.type).toBe('boolean');
       expect(useBrowser.default).toBe(true);
     });
+
+    it('documents Federation probing as enabled by default', async () => {
+      const includeFederation = (tool.inputSchema.properties as any).includeFederation;
+      expect(includeFederation).toBeDefined();
+      expect(includeFederation.type).toBe('boolean');
+      expect(includeFederation.default).toBe(true);
+    });
   });
 
   describe('graphql_extract_queries tool', () => {

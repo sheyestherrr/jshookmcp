@@ -132,3 +132,11 @@ fragment TypeRef on __Type {
   ${buildGraphqlTypeRefSelection(INTROSPECTION_TYPE_REF_DEPTH)}
 }
 `.trim();
+
+export const FEDERATION_SERVICE_QUERY = `
+query FederationServiceQuery {
+  _service {
+    sdl
+  }
+}
+`.trim();

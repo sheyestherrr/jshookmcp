@@ -6,6 +6,7 @@ import {
   GRAPHQL_MAX_QUERY_CHARS,
   GRAPHQL_MAX_GRAPH_NODES,
   GRAPHQL_MAX_GRAPH_EDGES,
+  FEDERATION_SERVICE_QUERY,
   INTROSPECTION_QUERY,
 } from '@server/domains/graphql/handlers.impl.core.runtime.shared';
 
@@ -90,6 +91,14 @@ describe('INTROSPECTION_QUERY', () => {
 
   it('is trimmed (no leading/trailing whitespace)', async () => {
     expect(INTROSPECTION_QUERY).toBe(INTROSPECTION_QUERY.trim());
+  });
+});
+
+describe('FEDERATION_SERVICE_QUERY', () => {
+  it('queries Apollo Federation service SDL', async () => {
+    expect(FEDERATION_SERVICE_QUERY).toContain('FederationServiceQuery');
+    expect(FEDERATION_SERVICE_QUERY).toContain('_service');
+    expect(FEDERATION_SERVICE_QUERY).toContain('sdl');
   });
 });
 
