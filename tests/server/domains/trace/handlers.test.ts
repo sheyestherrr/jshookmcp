@@ -453,6 +453,69 @@ describe('TraceToolHandlers', () => {
       expect(result.samplesInWindow).toHaveLength(1);
       expect(result.samplesInWindow[0]?.functionName).toBe('hotFn');
     });
+
+    it('returns structured runtime console and exception state in the seek window', async () => {
+      // @ts-expect-error
+      db.insertConsoleLog({
+        timestamp: 1010,
+        wallTime: 1010,
+        monotonicTime: 10,
+        level: 'warning',
+        text: 'watch this',
+        args: '[{"value":"watch this"}]',
+        stackTrace: '{"callFrames":[]}',
+        scriptId: 'console-script',
+        lineNumber: 4,
+        columnNumber: 2,
+        executionContextId: 1,
+      });
+      // @ts-expect-error
+      db.insertException({
+        timestamp: 1020,
+        wallTime: 1020,
+        monotonicTime: 20,
+        text: 'Uncaught Error: boom',
+        exceptionId: 5,
+        url: 'app.js',
+        scriptId: 'exception-script',
+        lineNumber: 8,
+        columnNumber: 1,
+        description: 'Error: boom',
+        stackTrace: '{"callFrames":[]}',
+        executionContextId: 1,
+      });
+      // @ts-expect-error
+      db.close();
+
+      const recorder = new TraceRecorder();
+      const ctx = createMockContext() as MCPServerContext;
+      const handler = new TraceToolHandlers(recorder, ctx);
+
+      const result = parseToolResponse<{
+        runtimeState: {
+          consoleLogs: Array<{ text: string; level: string; scriptId: string }>;
+          exceptions: Array<{ text: string; exceptionId: number; description: string }>;
+        };
+      }>(
+        await handler.handleSeekToTimestamp({
+          timestamp: 1000,
+          dbPath,
+          windowMs: 50,
+        }),
+      );
+
+      expect(result.runtimeState.consoleLogs).toHaveLength(1);
+      expect(result.runtimeState.consoleLogs[0]).toMatchObject({
+        level: 'warning',
+        text: 'watch this',
+        scriptId: 'console-script',
+      });
+      expect(result.runtimeState.exceptions).toHaveLength(1);
+      expect(result.runtimeState.exceptions[0]).toMatchObject({
+        exceptionId: 5,
+        description: 'Error: boom',
+      });
+    });
   });
 
   describe('handleGetTraceNetworkFlow', () => {

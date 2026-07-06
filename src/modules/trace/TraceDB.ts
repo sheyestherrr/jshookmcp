@@ -10,14 +10,18 @@ import type {
   MemoryDelta,
   NetworkTraceChunk,
   NetworkTraceResource,
+  TraceConsoleLog,
   TraceDBOptions,
   TraceEvent,
+  TraceException,
   TraceQueryResult,
   TraceSample,
 } from '@modules/trace/TraceDB.types';
 import {
   initializeTraceSchema,
+  mapConsoleLogRow,
   mapEventRow,
+  mapExceptionRow,
   mapNetworkChunkRow,
   mapNetworkResourceRow,
   mapSampleRow,
@@ -52,6 +56,8 @@ export class TraceDB {
   private upsertNetworkResourceStmt!: import('better-sqlite3').Statement;
   private insertNetworkChunkStmt!: import('better-sqlite3').Statement;
   private insertSampleStmt!: import('better-sqlite3').Statement;
+  private insertConsoleLogStmt!: import('better-sqlite3').Statement;
+  private insertExceptionStmt!: import('better-sqlite3').Statement;
 
   constructor(private readonly options: TraceDBOptions) {
     if (!Database) {
@@ -77,6 +83,8 @@ export class TraceDB {
     this.upsertNetworkResourceStmt = statements.upsertNetworkResourceStmt;
     this.insertNetworkChunkStmt = statements.insertNetworkChunkStmt;
     this.insertSampleStmt = statements.insertSampleStmt;
+    this.insertConsoleLogStmt = statements.insertConsoleLogStmt;
+    this.insertExceptionStmt = statements.insertExceptionStmt;
   }
 
   /** Database file path. */
@@ -121,6 +129,41 @@ export class TraceDB {
       sample.url,
       sample.lineNumber,
       sample.columnNumber,
+    );
+  }
+
+  insertConsoleLog(log: TraceConsoleLog): void {
+    this.ensureOpen();
+    this.insertConsoleLogStmt.run(
+      log.timestamp,
+      log.wallTime,
+      log.monotonicTime,
+      log.level,
+      log.text,
+      log.args,
+      log.stackTrace,
+      log.scriptId,
+      log.lineNumber,
+      log.columnNumber,
+      log.executionContextId,
+    );
+  }
+
+  insertException(exception: TraceException): void {
+    this.ensureOpen();
+    this.insertExceptionStmt.run(
+      exception.timestamp,
+      exception.wallTime,
+      exception.monotonicTime,
+      exception.text,
+      exception.exceptionId,
+      exception.url,
+      exception.scriptId,
+      exception.lineNumber,
+      exception.columnNumber,
+      exception.description,
+      exception.stackTrace,
+      exception.executionContextId,
     );
   }
 
@@ -361,6 +404,50 @@ export class TraceDB {
     return (
       stmt.all(timestamp - windowMs, timestamp + windowMs, limit) as Array<Record<string, unknown>>
     ).map(mapSampleRow);
+  }
+
+  getConsoleLogsByTimeRange(
+    start: number,
+    end: number,
+    timeDomain: 'wall' | 'monotonic' = 'wall',
+    limit = 100,
+  ): TraceConsoleLog[] {
+    this.ensureOpen();
+    this.flush();
+
+    const timeExpr =
+      timeDomain === 'monotonic' ? 'COALESCE(monotonic_time, timestamp)' : 'timestamp';
+    const stmt = this.db.prepare(`
+      SELECT *
+      FROM console_logs
+      WHERE ${timeExpr} >= ? AND ${timeExpr} <= ?
+      ORDER BY ${timeExpr} ASC, id ASC
+      LIMIT ?
+    `);
+
+    return (stmt.all(start, end, limit) as Array<Record<string, unknown>>).map(mapConsoleLogRow);
+  }
+
+  getExceptionsByTimeRange(
+    start: number,
+    end: number,
+    timeDomain: 'wall' | 'monotonic' = 'wall',
+    limit = 100,
+  ): TraceException[] {
+    this.ensureOpen();
+    this.flush();
+
+    const timeExpr =
+      timeDomain === 'monotonic' ? 'COALESCE(monotonic_time, timestamp)' : 'timestamp';
+    const stmt = this.db.prepare(`
+      SELECT *
+      FROM exceptions
+      WHERE ${timeExpr} >= ? AND ${timeExpr} <= ?
+      ORDER BY ${timeExpr} ASC, id ASC
+      LIMIT ?
+    `);
+
+    return (stmt.all(start, end, limit) as Array<Record<string, unknown>>).map(mapExceptionRow);
   }
 
   getMemoryDeltasByAddress(address: string): MemoryDelta[] {

@@ -753,6 +753,97 @@ describe('TraceRecorder', () => {
     }
   });
 
+  it('records structured Runtime console logs and exceptions for seek windows', async () => {
+    const mockCdp = createMockCDPSession();
+    await recorder.start(eventBus, mockCdp);
+
+    const consoleHandler = Array.from(mockCdp.listeners.get('Runtime.consoleAPICalled') || [])[0];
+    const exceptionHandler = Array.from(mockCdp.listeners.get('Runtime.exceptionThrown') || [])[0];
+    expect(consoleHandler).toBeDefined();
+    expect(exceptionHandler).toBeDefined();
+
+    consoleHandler!({
+      type: 'error',
+      timestamp: 1.5,
+      executionContextId: 7,
+      args: [
+        { type: 'string', value: 'failed' },
+        { type: 'number', value: 42 },
+      ],
+      stackTrace: {
+        callFrames: [
+          {
+            scriptId: 'console-script',
+            url: 'app.js',
+            lineNumber: 12,
+            columnNumber: 3,
+          },
+        ],
+      },
+    });
+    exceptionHandler!({
+      timestamp: 2,
+      exceptionDetails: {
+        exceptionId: 99,
+        text: 'Uncaught Error: boom',
+        url: 'app.js',
+        scriptId: 'exception-script',
+        lineNumber: 21,
+        columnNumber: 4,
+        executionContextId: 7,
+        exception: {
+          type: 'object',
+          className: 'Error',
+          description: 'Error: boom',
+        },
+        stackTrace: {
+          callFrames: [
+            {
+              scriptId: 'exception-script',
+              url: 'app.js',
+              lineNumber: 21,
+              columnNumber: 4,
+            },
+          ],
+        },
+      },
+    });
+
+    await recorder.stop();
+
+    const db = new TraceDB({ dbPath: recorder.getSession()!.dbPath });
+    try {
+      const logs = db.getConsoleLogsByTimeRange(1490, 1510, 'monotonic');
+      const exceptions = db.getExceptionsByTimeRange(1990, 2010, 'monotonic');
+      const eventLocations = db.query(
+        "SELECT event_type, script_id, line_number FROM events WHERE event_type LIKE 'Runtime.%' " +
+          'ORDER BY event_type',
+      );
+
+      expect(logs).toHaveLength(1);
+      expect(logs[0]?.level).toBe('error');
+      expect(logs[0]?.text).toBe('failed 42');
+      expect(logs[0]?.scriptId).toBe('console-script');
+      expect(logs[0]?.columnNumber).toBe(3);
+      expect(exceptions).toHaveLength(1);
+      expect(exceptions[0]?.exceptionId).toBe(99);
+      expect(exceptions[0]?.description).toBe('Error: boom');
+      expect(exceptions[0]?.scriptId).toBe('exception-script');
+      expect(eventLocations.rows).toContainEqual([
+        'Runtime.consoleAPICalled',
+        'console-script',
+        12,
+      ]);
+      expect(eventLocations.rows).toContainEqual([
+        'Runtime.exceptionThrown',
+        'exception-script',
+        21,
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
   it('extractHeapSummary handles nodes with missing nameIndex gracefully', async () => {
     const mockCdp = createMockCDPSession();
     await recorder.start(eventBus, mockCdp);

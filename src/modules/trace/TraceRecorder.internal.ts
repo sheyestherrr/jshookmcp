@@ -102,6 +102,24 @@ export const extractScriptLocation = (
   if ('scriptId' in params) scriptId = String(params['scriptId']);
   if ('lineNumber' in params) lineNumber = Number(params['lineNumber']) || null;
 
+  const topStackLocation = extractStackTraceLocation(params['stackTrace']);
+  if (topStackLocation.scriptId !== null) scriptId = topStackLocation.scriptId;
+  if (topStackLocation.lineNumber !== null) lineNumber = topStackLocation.lineNumber;
+
+  if (eventName === 'Runtime.exceptionThrown' && isObjectRecord(params['exceptionDetails'])) {
+    const details = params['exceptionDetails'];
+    if ('scriptId' in details) scriptId = String(details['scriptId']);
+    if ('lineNumber' in details) lineNumber = Number(details['lineNumber']) || null;
+
+    const exceptionStackLocation = extractStackTraceLocation(details['stackTrace']);
+    if (scriptId === null && exceptionStackLocation.scriptId !== null) {
+      scriptId = exceptionStackLocation.scriptId;
+    }
+    if (lineNumber === null && exceptionStackLocation.lineNumber !== null) {
+      lineNumber = exceptionStackLocation.lineNumber;
+    }
+  }
+
   if (eventName === 'Debugger.paused' && Array.isArray(params['callFrames'])) {
     const frame = (params['callFrames'] as Array<Record<string, unknown>>)[0];
     if (frame) {
@@ -114,6 +132,24 @@ export const extractScriptLocation = (
   }
 
   return { scriptId, lineNumber };
+};
+
+const extractStackTraceLocation = (
+  stackTrace: unknown,
+): { scriptId: string | null; lineNumber: number | null } => {
+  if (!isObjectRecord(stackTrace) || !Array.isArray(stackTrace['callFrames'])) {
+    return { scriptId: null, lineNumber: null };
+  }
+
+  const frame = stackTrace['callFrames'][0];
+  if (!isObjectRecord(frame)) {
+    return { scriptId: null, lineNumber: null };
+  }
+
+  return {
+    scriptId: typeof frame['scriptId'] === 'string' ? frame['scriptId'] : null,
+    lineNumber: asFiniteNumber(frame['lineNumber']),
+  };
 };
 
 export const sanitizeTracePayload = (eventName: string, params: unknown): unknown => {

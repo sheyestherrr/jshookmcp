@@ -59,7 +59,9 @@ describe('TraceDB', () => {
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     );
     const tableNames = result.rows.map((r) => r[0]);
+    expect(tableNames).toContain('console_logs');
     expect(tableNames).toContain('events');
+    expect(tableNames).toContain('exceptions');
     expect(tableNames).toContain('network_resources');
     expect(tableNames).toContain('network_chunks');
     expect(tableNames).toContain('samples');
@@ -68,14 +70,21 @@ describe('TraceDB', () => {
     expect(tableNames).toContain('metadata');
   });
 
-  it('creates indexes — 5 indexes present', () => {
+  it('creates indexes for seek-critical tables', () => {
     const result = db.query(
       "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%' ORDER BY name",
     );
     const indexNames = result.rows.map((r) => r[0]);
+    expect(indexNames).toContain('idx_console_logs_timestamp');
+    expect(indexNames).toContain('idx_console_logs_monotonic_time');
+    expect(indexNames).toContain('idx_console_logs_level');
     expect(indexNames).toContain('idx_events_timestamp');
     expect(indexNames).toContain('idx_events_category_type');
     expect(indexNames).toContain('idx_events_script_id');
+    expect(indexNames).toContain('idx_exceptions_timestamp');
+    expect(indexNames).toContain('idx_exceptions_monotonic_time');
+    expect(indexNames).toContain('idx_exceptions_exception_id');
+    expect(indexNames).toContain('idx_exceptions_script_id');
     expect(indexNames).toContain('idx_memory_timestamp');
     expect(indexNames).toContain('idx_memory_address');
     expect(indexNames).toContain('idx_samples_timestamp');
@@ -146,6 +155,46 @@ describe('TraceDB', () => {
     expect(byFunction).toHaveLength(1);
     expect(byFunction[0]?.selfTime).toBe(4.5);
     expect(inWindow[0]?.functionName).toBe('hotFn');
+  });
+
+  it('inserts and queries structured runtime console logs and exceptions', () => {
+    db.insertConsoleLog({
+      timestamp: 2000,
+      wallTime: 2000,
+      monotonicTime: 20,
+      level: 'error',
+      text: 'failed',
+      args: '[{"value":"failed"}]',
+      stackTrace: '{"callFrames":[]}',
+      scriptId: 'script-1',
+      lineNumber: 7,
+      columnNumber: 3,
+      executionContextId: 1,
+    });
+    db.insertException({
+      timestamp: 2010,
+      wallTime: 2010,
+      monotonicTime: 21,
+      text: 'Uncaught Error: boom',
+      exceptionId: 42,
+      url: 'app.js',
+      scriptId: 'script-2',
+      lineNumber: 9,
+      columnNumber: 4,
+      description: 'Error: boom',
+      stackTrace: '{"callFrames":[]}',
+      executionContextId: 1,
+    });
+
+    const wallLogs = db.getConsoleLogsByTimeRange(1990, 2020);
+    const monotonicExceptions = db.getExceptionsByTimeRange(20, 22, 'monotonic');
+
+    expect(wallLogs).toHaveLength(1);
+    expect(wallLogs[0]?.level).toBe('error');
+    expect(wallLogs[0]?.scriptId).toBe('script-1');
+    expect(monotonicExceptions).toHaveLength(1);
+    expect(monotonicExceptions[0]?.exceptionId).toBe(42);
+    expect(monotonicExceptions[0]?.description).toBe('Error: boom');
   });
 
   it('inserts heap snapshots immediately (no flush needed)', () => {
@@ -325,6 +374,45 @@ describe('TraceDB', () => {
     ).toThrow(/TraceDB is closed/);
   });
 
+  it('insertConsoleLog() throws when db is closed', () => {
+    db.close();
+    expect(() =>
+      db.insertConsoleLog({
+        timestamp: 1000,
+        wallTime: 1000,
+        monotonicTime: null,
+        level: 'log',
+        text: 'hello',
+        args: '[]',
+        stackTrace: null,
+        scriptId: null,
+        lineNumber: null,
+        columnNumber: null,
+        executionContextId: null,
+      }),
+    ).toThrow(/TraceDB is closed/);
+  });
+
+  it('insertException() throws when db is closed', () => {
+    db.close();
+    expect(() =>
+      db.insertException({
+        timestamp: 1000,
+        wallTime: 1000,
+        monotonicTime: null,
+        text: 'boom',
+        exceptionId: null,
+        url: null,
+        scriptId: null,
+        lineNumber: null,
+        columnNumber: null,
+        description: null,
+        stackTrace: null,
+        executionContextId: null,
+      }),
+    ).toThrow(/TraceDB is closed/);
+  });
+
   it('setMetadata() throws when db is closed', () => {
     db.close();
     expect(() => db.setMetadata('k', 'v')).toThrow(/TraceDB is closed/);
@@ -348,6 +436,16 @@ describe('TraceDB', () => {
   it('getEventsByTimeRange() throws when db is closed', () => {
     db.close();
     expect(() => db.getEventsByTimeRange(0, 1000)).toThrow(/TraceDB is closed/);
+  });
+
+  it('getConsoleLogsByTimeRange() throws when db is closed', () => {
+    db.close();
+    expect(() => db.getConsoleLogsByTimeRange(0, 1000)).toThrow(/TraceDB is closed/);
+  });
+
+  it('getExceptionsByTimeRange() throws when db is closed', () => {
+    db.close();
+    expect(() => db.getExceptionsByTimeRange(0, 1000)).toThrow(/TraceDB is closed/);
   });
 
   it('getMemoryDeltasByAddress() throws when db is closed', () => {

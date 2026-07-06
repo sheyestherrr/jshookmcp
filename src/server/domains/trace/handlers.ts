@@ -349,6 +349,16 @@ export class TraceToolHandlers {
             )
           : null;
       const samplesInWindow = db.getSamplesInWindow(timestamp, windowMs);
+      const consoleLogs = db.getConsoleLogsByTimeRange(
+        timestamp - windowMs,
+        timestamp + windowMs,
+        timeDomain,
+      );
+      const exceptions = db.getExceptionsByTimeRange(
+        timestamp - windowMs,
+        timestamp + windowMs,
+        timeDomain,
+      );
 
       return R.ok()
         .merge({
@@ -376,6 +386,10 @@ export class TraceToolHandlers {
             completedRequests: networkResult.rows.map((row) =>
               rowToObject(networkResult.columns, row),
             ),
+          },
+          runtimeState: {
+            consoleLogs,
+            exceptions,
           },
           nearestHeapSnapshot:
             snapshotResult && snapshotResult.rows.length > 0

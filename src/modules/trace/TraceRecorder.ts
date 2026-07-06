@@ -6,15 +6,25 @@
 
 import { randomUUID } from 'node:crypto';
 import type { EventBus, ServerEventMap } from '@server/EventBus';
-import type { MemoryDelta, TraceSample } from '@modules/trace/TraceDB.types';
+import type {
+  MemoryDelta,
+  TraceConsoleLog,
+  TraceException,
+  TraceSample,
+} from '@modules/trace/TraceDB.types';
 import {
+  asFiniteNumber,
+  asString,
   CDP_EVENTS_BY_DOMAIN,
   DEFAULT_CDP_DOMAINS,
   extractEventTiming,
   extractRequestId,
   extractScriptLocation,
+  isObjectRecord,
   sanitizeTracePayload,
   type CDPEventHandler,
+  type EventTiming,
+  type UnknownRecord,
 } from '@modules/trace/TraceRecorder.internal';
 import { TraceNetworkCapture } from '@modules/trace/TraceRecorder.network';
 import type {
@@ -47,6 +57,14 @@ interface CpuProfile {
   samples?: number[];
   timeDeltas?: number[];
 }
+
+interface RuntimeLocation {
+  scriptId: string | null;
+  lineNumber: number | null;
+  columnNumber: number | null;
+}
+
+const MAX_STRUCTURED_RUNTIME_FIELD_BYTES = 64 * 1024;
 
 export class TraceRecorder {
   private db: TraceDB | null = null;
@@ -186,6 +204,16 @@ export class TraceRecorder {
                   sequence: this.nextSequence(),
                 });
                 this.eventCount++;
+
+                if (domain === 'Runtime') {
+                  this.recordStructuredRuntimeEvent(
+                    eventName,
+                    params,
+                    timing,
+                    scriptId,
+                    lineNumber,
+                  );
+                }
 
                 if (domain === 'Network') {
                   this.networkCapture.handleEvent(eventName, params, timing);
@@ -460,6 +488,180 @@ export class TraceRecorder {
   private nextSequence(): number {
     this.eventSequence += 1;
     return this.eventSequence;
+  }
+
+  private recordStructuredRuntimeEvent(
+    eventName: string,
+    params: unknown,
+    timing: EventTiming,
+    scriptId: string | null,
+    lineNumber: number | null,
+  ): void {
+    if (!this.db) return;
+
+    if (eventName === 'Runtime.consoleAPICalled') {
+      const log = this.createConsoleLog(params, timing, scriptId, lineNumber);
+      if (log) this.db.insertConsoleLog(log);
+      return;
+    }
+
+    if (eventName === 'Runtime.exceptionThrown') {
+      const exception = this.createException(params, timing, scriptId, lineNumber);
+      if (exception) this.db.insertException(exception);
+    }
+  }
+
+  private createConsoleLog(
+    params: unknown,
+    timing: EventTiming,
+    scriptId: string | null,
+    lineNumber: number | null,
+  ): TraceConsoleLog | null {
+    if (!isObjectRecord(params)) return null;
+
+    const args = Array.isArray(params['args']) ? params['args'] : [];
+    const text = this.limitStructuredRuntimeField(
+      args
+        .map((arg) => this.remoteObjectToText(arg))
+        .filter(Boolean)
+        .join(' ') ||
+        asString(params['type']) ||
+        'console',
+    );
+    const location = this.extractRuntimeLocation(params, scriptId, lineNumber);
+
+    return {
+      timestamp: timing.timestamp,
+      wallTime: timing.wallTime,
+      monotonicTime: timing.monotonicTime,
+      level: asString(params['type']) ?? 'log',
+      text,
+      args: this.stringifyStructuredRuntimeField(args) ?? '[]',
+      stackTrace: this.stringifyStructuredRuntimeField(params['stackTrace']),
+      scriptId: location.scriptId,
+      lineNumber: location.lineNumber,
+      columnNumber: location.columnNumber,
+      executionContextId: asFiniteNumber(params['executionContextId']),
+    };
+  }
+
+  private createException(
+    params: unknown,
+    timing: EventTiming,
+    scriptId: string | null,
+    lineNumber: number | null,
+  ): TraceException | null {
+    if (!isObjectRecord(params)) return null;
+
+    const details = isObjectRecord(params['exceptionDetails'])
+      ? params['exceptionDetails']
+      : params;
+    const exceptionObject = isObjectRecord(details['exception']) ? details['exception'] : null;
+    const description = exceptionObject ? this.remoteObjectToText(exceptionObject) : null;
+    const text = this.limitStructuredRuntimeField(
+      asString(details['text']) ?? description ?? 'Runtime.exceptionThrown',
+    );
+    const location = this.extractRuntimeLocation(details, scriptId, lineNumber);
+
+    return {
+      timestamp: timing.timestamp,
+      wallTime: timing.wallTime,
+      monotonicTime: timing.monotonicTime,
+      text,
+      exceptionId: asFiniteNumber(details['exceptionId']),
+      url: asString(details['url']),
+      scriptId: location.scriptId,
+      lineNumber: location.lineNumber,
+      columnNumber: location.columnNumber,
+      description: description ? this.limitStructuredRuntimeField(description) : null,
+      stackTrace: this.stringifyStructuredRuntimeField(
+        details['stackTrace'] ?? params['stackTrace'],
+      ),
+      executionContextId: asFiniteNumber(details['executionContextId']),
+    };
+  }
+
+  private extractRuntimeLocation(
+    record: UnknownRecord,
+    scriptId: string | null,
+    lineNumber: number | null,
+  ): RuntimeLocation {
+    const directLineNumber = asFiniteNumber(record['lineNumber']);
+    const directColumnNumber = asFiniteNumber(record['columnNumber']);
+    let location: RuntimeLocation = {
+      scriptId: asString(record['scriptId']) ?? scriptId,
+      lineNumber: directLineNumber ?? lineNumber,
+      columnNumber: directColumnNumber,
+    };
+
+    const stackLocation = this.extractStackTraceLocation(record['stackTrace']);
+    location = {
+      scriptId: location.scriptId ?? stackLocation.scriptId,
+      lineNumber: location.lineNumber ?? stackLocation.lineNumber,
+      columnNumber: location.columnNumber ?? stackLocation.columnNumber,
+    };
+
+    return location;
+  }
+
+  private extractStackTraceLocation(stackTrace: unknown): RuntimeLocation {
+    if (!isObjectRecord(stackTrace) || !Array.isArray(stackTrace['callFrames'])) {
+      return { scriptId: null, lineNumber: null, columnNumber: null };
+    }
+
+    const frame = stackTrace['callFrames'][0];
+    if (!isObjectRecord(frame)) {
+      return { scriptId: null, lineNumber: null, columnNumber: null };
+    }
+
+    return {
+      scriptId: asString(frame['scriptId']),
+      lineNumber: asFiniteNumber(frame['lineNumber']),
+      columnNumber: asFiniteNumber(frame['columnNumber']),
+    };
+  }
+
+  private remoteObjectToText(value: unknown): string {
+    if (!isObjectRecord(value)) {
+      return value === undefined ? '' : String(value);
+    }
+
+    if ('value' in value) {
+      const rawValue = value['value'];
+      if (rawValue === null) return 'null';
+      if (rawValue !== undefined) {
+        if (typeof rawValue === 'string') return rawValue;
+        try {
+          return JSON.stringify(rawValue) ?? String(rawValue);
+        } catch {
+          return String(rawValue);
+        }
+      }
+    }
+
+    return (
+      asString(value['unserializableValue']) ??
+      asString(value['description']) ??
+      asString(value['className']) ??
+      asString(value['type']) ??
+      ''
+    );
+  }
+
+  private stringifyStructuredRuntimeField(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    try {
+      return this.limitStructuredRuntimeField(JSON.stringify(value));
+    } catch {
+      return this.limitStructuredRuntimeField(String(value));
+    }
+  }
+
+  private limitStructuredRuntimeField(value: string): string {
+    if (Buffer.byteLength(value, 'utf8') <= MAX_STRUCTURED_RUNTIME_FIELD_BYTES) {
+      return value;
+    }
+    return `${value.slice(0, MAX_STRUCTURED_RUNTIME_FIELD_BYTES)}...[truncated]`;
   }
 
   private async startProfilerCapture(cdpSession: CDPSessionLike): Promise<void> {

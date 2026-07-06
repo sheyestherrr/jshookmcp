@@ -1,6 +1,8 @@
 import type {
   NetworkTraceChunk,
   NetworkTraceResource,
+  TraceConsoleLog,
+  TraceException,
   TraceSample,
   TraceEvent,
 } from '@modules/trace/TraceDB.types';
@@ -13,6 +15,8 @@ export interface TraceDBStatements {
   upsertNetworkResourceStmt: import('better-sqlite3').Statement;
   insertNetworkChunkStmt: import('better-sqlite3').Statement;
   insertSampleStmt: import('better-sqlite3').Statement;
+  insertConsoleLogStmt: import('better-sqlite3').Statement;
+  insertExceptionStmt: import('better-sqlite3').Statement;
 }
 
 export function initializeTraceSchema(db: import('better-sqlite3').Database): void {
@@ -129,6 +133,44 @@ export function initializeTraceSchema(db: import('better-sqlite3').Database): vo
       );
       CREATE INDEX IF NOT EXISTS idx_samples_timestamp ON samples(timestamp);
       CREATE INDEX IF NOT EXISTS idx_samples_function ON samples(function_name);
+
+      CREATE TABLE IF NOT EXISTS console_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp REAL NOT NULL,
+        wall_time REAL,
+        monotonic_time REAL,
+        level TEXT NOT NULL,
+        text TEXT NOT NULL,
+        args TEXT NOT NULL DEFAULT '[]',
+        stack_trace TEXT,
+        script_id TEXT,
+        line_number INTEGER,
+        column_number INTEGER,
+        execution_context_id INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_console_logs_timestamp ON console_logs(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_console_logs_monotonic_time ON console_logs(monotonic_time);
+      CREATE INDEX IF NOT EXISTS idx_console_logs_level ON console_logs(level);
+
+      CREATE TABLE IF NOT EXISTS exceptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp REAL NOT NULL,
+        wall_time REAL,
+        monotonic_time REAL,
+        text TEXT NOT NULL,
+        exception_id INTEGER,
+        url TEXT,
+        script_id TEXT,
+        line_number INTEGER,
+        column_number INTEGER,
+        description TEXT,
+        stack_trace TEXT,
+        execution_context_id INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_exceptions_timestamp ON exceptions(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_exceptions_monotonic_time ON exceptions(monotonic_time);
+      CREATE INDEX IF NOT EXISTS idx_exceptions_exception_id ON exceptions(exception_id);
+      CREATE INDEX IF NOT EXISTS idx_exceptions_script_id ON exceptions(script_id);
     `);
 
   ensureColumn(db, 'events', 'wall_time', 'REAL');
@@ -269,6 +311,39 @@ export function prepareTraceStatements(db: import('better-sqlite3').Database): T
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `),
+    insertConsoleLogStmt: db.prepare(`
+      INSERT INTO console_logs (
+        timestamp,
+        wall_time,
+        monotonic_time,
+        level,
+        text,
+        args,
+        stack_trace,
+        script_id,
+        line_number,
+        column_number,
+        execution_context_id
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertExceptionStmt: db.prepare(`
+      INSERT INTO exceptions (
+        timestamp,
+        wall_time,
+        monotonic_time,
+        text,
+        exception_id,
+        url,
+        script_id,
+        line_number,
+        column_number,
+        description,
+        stack_trace,
+        execution_context_id
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
   };
 }
 
@@ -364,6 +439,41 @@ export function mapSampleRow(row: Record<string, unknown>): TraceSample {
     url: (row['url'] as string) ?? null,
     lineNumber: (row['line_number'] as number) ?? null,
     columnNumber: (row['column_number'] as number) ?? null,
+  };
+}
+
+export function mapConsoleLogRow(row: Record<string, unknown>): TraceConsoleLog {
+  return {
+    id: row['id'] as number,
+    timestamp: row['timestamp'] as number,
+    wallTime: (row['wall_time'] as number) ?? null,
+    monotonicTime: (row['monotonic_time'] as number) ?? null,
+    level: row['level'] as string,
+    text: row['text'] as string,
+    args: (row['args'] as string) ?? '[]',
+    stackTrace: (row['stack_trace'] as string) ?? null,
+    scriptId: (row['script_id'] as string) ?? null,
+    lineNumber: (row['line_number'] as number) ?? null,
+    columnNumber: (row['column_number'] as number) ?? null,
+    executionContextId: (row['execution_context_id'] as number) ?? null,
+  };
+}
+
+export function mapExceptionRow(row: Record<string, unknown>): TraceException {
+  return {
+    id: row['id'] as number,
+    timestamp: row['timestamp'] as number,
+    wallTime: (row['wall_time'] as number) ?? null,
+    monotonicTime: (row['monotonic_time'] as number) ?? null,
+    text: row['text'] as string,
+    exceptionId: (row['exception_id'] as number) ?? null,
+    url: (row['url'] as string) ?? null,
+    scriptId: (row['script_id'] as string) ?? null,
+    lineNumber: (row['line_number'] as number) ?? null,
+    columnNumber: (row['column_number'] as number) ?? null,
+    description: (row['description'] as string) ?? null,
+    stackTrace: (row['stack_trace'] as string) ?? null,
+    executionContextId: (row['execution_context_id'] as number) ?? null,
   };
 }
 

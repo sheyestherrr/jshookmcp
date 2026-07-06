@@ -59,7 +59,10 @@ const SCORES = {
     9.0,
     '15 tools, PID/return filters, MCP-safe wrappers, richer strace fd/path decoding',
   ],
-  trace: [9.0, '9 tools, Phase 1 category thread tracks + Phase 2 MCP-safe wrappers'],
+  trace: [
+    9.2,
+    '9 tools, category thread tracks, MCP-safe wrappers, structured Runtime console/exception seek context',
+  ],
   transform: [9.1, '7 tools, Phase 2 MCP-safe wrappers'],
   'v8-inspector': [9.5, '19 tools, 23 scan-counted tests, Tier A+B+D+C all done'],
   wasm: [9.2, '12 tools, Phase 0 instances[0]→instanceIndex fix + Phase 2 MCP-safe wrappers'],

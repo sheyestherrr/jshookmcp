@@ -93,6 +93,39 @@ export interface TraceSample {
   columnNumber: number | null;
 }
 
+/** Structured Runtime.consoleAPICalled entry for timestamp seeks and SQL analysis. */
+export interface TraceConsoleLog {
+  id?: number;
+  timestamp: number;
+  wallTime: number | null;
+  monotonicTime: number | null;
+  level: string;
+  text: string;
+  args: string;
+  stackTrace: string | null;
+  scriptId: string | null;
+  lineNumber: number | null;
+  columnNumber: number | null;
+  executionContextId: number | null;
+}
+
+/** Structured Runtime.exceptionThrown entry for timestamp seeks and SQL analysis. */
+export interface TraceException {
+  id?: number;
+  timestamp: number;
+  wallTime: number | null;
+  monotonicTime: number | null;
+  text: string;
+  exceptionId: number | null;
+  url: string | null;
+  scriptId: string | null;
+  lineNumber: number | null;
+  columnNumber: number | null;
+  description: string | null;
+  stackTrace: string | null;
+  executionContextId: number | null;
+}
+
 /** A single memory write delta for differential tracing. */
 export interface MemoryDelta {
   id?: number;
