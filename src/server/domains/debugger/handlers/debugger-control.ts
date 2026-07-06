@@ -14,7 +14,13 @@ export class DebuggerControlHandlers {
   constructor(private deps: DebuggerControlHandlersDeps) {}
 
   async handleDebuggerLifecycle(args: Record<string, unknown>) {
-    const action = args.action as 'enable' | 'disable';
+    const action = argString(args, 'action');
+
+    if (action !== 'enable' && action !== 'disable') {
+      throw new Error(
+        `Invalid debugger lifecycle action: ${String(args.action ?? '')}. Expected one of: enable, disable`,
+      );
+    }
 
     if (action === 'enable') {
       await this.deps.debuggerManager.init();

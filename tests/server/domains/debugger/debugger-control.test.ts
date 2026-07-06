@@ -85,6 +85,17 @@ describe('DebuggerControlHandlers', () => {
     });
   });
 
+  it('rejects unknown debugger lifecycle actions without disabling', async () => {
+    const handlers = createHandlers();
+
+    await expect(handlers.handleDebuggerLifecycle({ action: 'restart' })).rejects.toThrow(
+      'Invalid debugger lifecycle action: restart',
+    );
+
+    expect(debuggerManager.disable).not.toHaveBeenCalled();
+    expect(runtimeInspector.disable).not.toHaveBeenCalled();
+  });
+
   it('reports when execution actually pauses', async () => {
     debuggerManager.waitForPaused.mockResolvedValueOnce({
       reason: 'other',
