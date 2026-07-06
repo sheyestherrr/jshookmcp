@@ -1,10 +1,12 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { CrossDomainHandlers } from '@server/domains/cross-domain/handlers';
 import { ResponseBuilder } from '@server/domains/shared/ResponseBuilder';
+import { asJsonResponse } from '@server/domains/shared/response';
 import {
   CrossDomainEvidenceBridge,
   resetIdCounter,
 } from '@server/domains/cross-domain/handlers/evidence-graph-bridge';
+import { CrossDomainWorkflowClassifier } from '@server/domains/cross-domain/handlers';
 import {
   ReverseEvidenceGraph,
   resetIdCounter as _resetGraphIdCounter,
@@ -91,6 +93,125 @@ describe('CrossDomainHandlers', () => {
       const data = JSON.parse(result.content[0].text);
       expect(data.evidenceGraph).toBeDefined();
       expect(data.evidenceGraph.version).toBe(1);
+    });
+
+    it('pulls missing inputs from live domain tools when requested', async () => {
+      const calls: string[] = [];
+      const ctx = {
+        executeToolWithTracking: async (name: string) => {
+          calls.push(name);
+          if (name === 'skia_extract_scene') {
+            return asJsonResponse({
+              sceneTree: {
+                layers: [{ id: 'layer-1', label: 'PlayerSprite', type: 'layer' }],
+                drawCommands: [],
+              },
+            });
+          }
+          if (name === 'mojo_messages_get') {
+            return asJsonResponse({ messages: [] });
+          }
+          if (name === 'network_get_requests') {
+            return asJsonResponse({ requests: [] });
+          }
+          if (name === 'syscall_capture_events') {
+            return asJsonResponse({ events: [] });
+          }
+          if (name === 'syscall_stack_capture') {
+            return asJsonResponse({ events: [] });
+          }
+          return asJsonResponse({});
+        },
+      };
+      handlers = new CrossDomainHandlers(bridge, undefined, ctx as any);
+
+      const result = await handlers.handleCorrelateAll({
+        pullFromDomains: true,
+        jsObjects: [
+          {
+            objectId: 'heap-1',
+            className: 'Sprite',
+            name: 'PlayerSprite',
+            stringProps: [],
+            numericProps: {},
+            colorProps: [],
+            urlProps: [],
+          },
+        ],
+      });
+
+      const data = ResponseBuilder.parse<Record<string, any>>(result);
+      expect(calls).toContain('skia_extract_scene');
+      expect(data.correlationResults.liveState.sources.sceneTree.fetched).toBe(true);
+      expect(data.correlationResults.skia.correlations).toHaveLength(1);
+    });
+
+    it('filters returned evidence edges by confidence', async () => {
+      const result = await handlers.handleCorrelateAll({
+        minConfidence: 0.5,
+        syscallEvents: [{ pid: 1, tid: 2, syscallName: 'NtOpenFile', timestamp: 10 }],
+        jsStacks: [{ threadId: 2, timestamp: 10, frames: [{ functionName: 'unrelated' }] }],
+      });
+
+      const data = ResponseBuilder.parse<Record<string, any>>(result);
+      expect(data.correlationResults.syscall.correlations).toHaveLength(1);
+      expect(data.evidenceGraph.edges).toHaveLength(0);
+      expect(data.evidenceGraph.edgeFilterSummary.removedByConfidence).toBeGreaterThan(0);
+    });
+
+    it('truncates returned evidence edges per type', async () => {
+      const result = await handlers.handleCorrelateAll({
+        maxEdgesPerType: 1,
+        sceneTree: {
+          layers: [
+            { id: 'layer-1', label: 'SpriteA', type: 'layer' },
+            { id: 'layer-2', label: 'SpriteB', type: 'layer' },
+          ],
+          drawCommands: [],
+        },
+        jsObjects: [
+          {
+            objectId: 'heap-1',
+            className: 'Sprite',
+            name: 'SpriteA',
+            stringProps: [],
+            numericProps: {},
+            colorProps: [],
+            urlProps: [],
+          },
+          {
+            objectId: 'heap-2',
+            className: 'Sprite',
+            name: 'SpriteB',
+            stringProps: [],
+            numericProps: {},
+            colorProps: [],
+            urlProps: [],
+          },
+        ],
+      });
+
+      const data = ResponseBuilder.parse<Record<string, any>>(result);
+      const canvasEdges = data.evidenceGraph.edges.filter(
+        (edge: Record<string, unknown>) => edge.type === 'canvas-rendered-by',
+      );
+      expect(canvasEdges).toHaveLength(1);
+      expect(data.evidenceGraph.edgeFilterSummary.truncatedByType['canvas-rendered-by']).toBe(1);
+    });
+  });
+
+  describe('CrossDomainWorkflowClassifier', () => {
+    it('reports expanded v5 domain support', async () => {
+      const ctx = {
+        enabledDomains: new Set(['webgpu', 'trace']),
+        selectedTools: [],
+        resolveEnabledDomains: () => new Set<string>(),
+      };
+      const classifier = new CrossDomainWorkflowClassifier(ctx as any, true);
+      const capabilities = classifier.getCapabilities();
+      expect(capabilities.supportedDomains).toContain('webgpu');
+      expect(capabilities.supportedDomains).toContain('trace');
+      expect(capabilities.availableDomains).toEqual(['trace', 'webgpu']);
     });
   });
 

@@ -28,6 +28,25 @@ export const crossDomainToolDefinitions: Tool[] = [
         'Run the built-in skia, mojo, syscall, and binary correlators and merge the results into the shared ' +
           'evidence graph.',
       )
+      .boolean(
+        'pullFromDomains',
+        'When true, fetch missing correlator inputs from live domain buffers using available getter tools',
+        { default: false },
+      )
+      .number(
+        'minConfidence',
+        'Minimum edge confidence to include in the returned evidence graph',
+        {
+          default: 0,
+          minimum: 0,
+          maximum: 1,
+        },
+      )
+      .number(
+        'maxEdgesPerType',
+        'Maximum number of returned evidence edges per edge type; 0 means unlimited',
+        { default: 0, minimum: 0 },
+      )
       .prop('sceneTree', {
         type: 'object',
         description: 'Skia scene tree with layers and drawCommands',

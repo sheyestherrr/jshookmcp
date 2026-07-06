@@ -60,7 +60,7 @@ async function ensure(ctx: MCPServerContext): Promise<CrossDomainHandlers> {
     ctx.setDomainInstance('crossDomainWorkflowClassifier', workflowClassifier);
   }
 
-  const handlers = new CrossDomainHandlers(bridge, workflowClassifier);
+  const handlers = new CrossDomainHandlers(bridge, workflowClassifier, ctx);
   ctx.setDomainInstance(DEP_KEY, handlers);
   return handlers;
 }
