@@ -168,7 +168,7 @@ export const crossDomainToolDefinitions: Tool[] = [
       .string('metadataKey', 'Metadata key for queryType=metadata')
       .string('metadataValue', 'Optional exact metadata value for queryType=metadata')
       .enum('direction', ['forward', 'backward'], 'Traversal direction for queryType=chain')
-      .number('limit', 'Maximum nodes to return', { default: 50, minimum: 1 })
+      .number('limit', 'Maximum nodes to return', { default: 50, minimum: 1, maximum: 500 })
       .required('queryType')
       .query(),
   ),

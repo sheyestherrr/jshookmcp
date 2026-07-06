@@ -23,6 +23,10 @@ describe('cross-domain definitions', () => {
     expect(tool?.inputSchema.properties).toHaveProperty('value');
     expect(tool?.inputSchema.properties).toHaveProperty('metadataKey');
     expect(tool?.inputSchema.properties).toHaveProperty('direction');
+    expect((tool?.inputSchema.properties?.direction as any)?.enum).toEqual(['forward', 'backward']);
+    expect(tool?.inputSchema.properties?.limit).toMatchObject({
+      maximum: 500,
+    });
     expect((tool?.inputSchema.properties?.queryType as any)?.enum).toContain('network_url');
     expect((tool?.inputSchema.properties?.queryType as any)?.enum).toContain('metadata');
     expect((tool?.inputSchema.properties?.queryType as any)?.enum).toContain('chain');

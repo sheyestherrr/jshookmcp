@@ -121,6 +121,16 @@ describe('CrossDomainHandlers', () => {
       expect(data.edges[0].type).toBe('canvas-rendered-by');
     });
 
+    it('rejects invalid evidence chain directions', async () => {
+      await expect(
+        handlers.handleEvidenceQuery({
+          queryType: 'chain',
+          value: 'node_1',
+          direction: 'sideways',
+        }),
+      ).rejects.toThrow('Invalid evidence chain direction');
+    });
+
     it('rejects metadata queries without a metadataKey', async () => {
       await expect(handlers.handleEvidenceQuery({ queryType: 'metadata' })).rejects.toThrow(
         'metadataKey is required',

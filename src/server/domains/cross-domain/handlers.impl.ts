@@ -498,6 +498,7 @@ export class CrossDomainHandlers {
     const graph = this.evidenceBridge.getGraph();
 
     let nodes: EvidenceNode[];
+    let chainDirection: 'forward' | 'backward' | undefined;
     switch (queryType) {
       case 'network_url':
         requireQueryValue(queryType, value);
@@ -530,7 +531,8 @@ export class CrossDomainHandlers {
         break;
       case 'chain':
         requireQueryValue(queryType, value);
-        nodes = graph.getEvidenceChain(value, readChainDirection(args['direction']));
+        chainDirection = readChainDirection(args['direction']);
+        nodes = graph.getEvidenceChain(value, chainDirection);
         break;
       default:
         throw new Error(
@@ -551,7 +553,7 @@ export class CrossDomainHandlers {
         value: value || undefined,
         metadataKey: argString(args, 'metadataKey'),
         metadataValue: argString(args, 'metadataValue'),
-        direction: queryType === 'chain' ? readChainDirection(args['direction']) : undefined,
+        direction: chainDirection,
         limit,
       },
       total,
@@ -574,7 +576,9 @@ function requireQueryValue(queryType: string, value: string): void {
 }
 
 function readChainDirection(value: unknown): 'forward' | 'backward' {
-  return value === 'backward' ? 'backward' : 'forward';
+  if (value === undefined || value === null) return 'forward';
+  if (value === 'forward' || value === 'backward') return value;
+  throw new Error('Invalid evidence chain direction. Expected one of: forward, backward');
 }
 
 function queryNodesByMetadata(
