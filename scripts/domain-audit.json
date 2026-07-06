@@ -307,14 +307,14 @@
   "mojo-ipc": {
     "domain": "mojo-ipc",
     "dims": {
-      "d1_toolCount": 5,
+      "d1_toolCount": 6,
       "d2_testFiles": 4,
       "d3_coverageExcluded": [
         "src/server/domains/mojo-ipc/handlers.impl.ts",
         "src/server/domains/mojo-ipc/handlers.ts"
       ],
       "d4_bareCatch": 0,
-      "d5_handleSafeRefs": 6,
+      "d5_handleSafeRefs": 7,
       "d6_doc": {
         "hasClaude": true,
         "hasScore": true,
@@ -533,7 +533,7 @@
       "d1_toolCount": 7,
       "d2_testFiles": 15,
       "d3_coverageExcluded": ["src/server/domains/transform/handlers.ts"],
-      "d4_bareCatch": 14,
+      "d4_bareCatch": 17,
       "d5_handleSafeRefs": 8,
       "d6_doc": {
         "hasClaude": true,
