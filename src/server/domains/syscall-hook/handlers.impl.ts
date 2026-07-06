@@ -100,23 +100,46 @@ function readBackend(value: unknown): SyscallBackend | undefined {
   return undefined;
 }
 
-function readFilter(value: unknown): EventFilter | undefined {
+type CaptureFilterValidation =
+  | {
+      ok: true;
+      filter?: EventFilter;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+function hasOwn(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function validateCaptureFilter(value: unknown): CaptureFilterValidation {
+  if (value === undefined) {
+    return { ok: true };
+  }
   if (!isRecord(value)) {
-    return undefined;
+    return { ok: false, error: 'filter must be an object when provided' };
   }
 
   const filter: EventFilter = {};
-  const names = readStringArray(value['name']);
-  const pid = readNumber(value['pid']);
-
-  if (names) {
+  if (hasOwn(value, 'name') && value['name'] !== undefined) {
+    const names = readStringArray(value['name']);
+    if (!names) {
+      return { ok: false, error: 'filter.name must be an array of strings when provided' };
+    }
     filter.name = names;
   }
-  if (pid !== undefined) {
+
+  if (hasOwn(value, 'pid') && value['pid'] !== undefined) {
+    const pid = readNumber(value['pid']);
+    if (pid === undefined) {
+      return { ok: false, error: 'filter.pid must be a number when provided' };
+    }
     filter.pid = pid;
   }
 
-  return filter;
+  return { ok: true, filter };
 }
 
 function isSyscallEvent(value: unknown): value is SyscallEvent {
@@ -343,7 +366,14 @@ export class SyscallHookHandlers {
 
   async handleSyscallCaptureEvents(args: Record<string, unknown>): Promise<unknown> {
     const monitor = this.ensureMonitor();
-    const filter = readFilter(args['filter']);
+    const filterValidation = validateCaptureFilter(args['filter']);
+    if (!filterValidation.ok) {
+      return {
+        ok: false,
+        error: filterValidation.error,
+      };
+    }
+    const filter = filterValidation.filter;
     const minTimestamp = readNumber(args['minTimestamp']);
     if (
       args['minTimestamp'] !== undefined &&

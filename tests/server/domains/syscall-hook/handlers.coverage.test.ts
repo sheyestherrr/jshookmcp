@@ -318,45 +318,53 @@ describe('SyscallHookHandlers — coverage expansion', () => {
       expect(result).toMatchObject({ ok: true, count: 0 });
     });
 
-    it('passes undefined filter when filter value is not a record', async () => {
-      monitor.captureEvents.mockResolvedValueOnce([]);
+    it('returns error when filter value is not a record', async () => {
       const result = await handlers.handleSyscallCaptureEvents({ filter: 'invalid' });
-      expect(monitor.captureEvents).toHaveBeenCalledWith(undefined);
-      expect(result).toMatchObject({ ok: true, count: 0 });
+      expect(monitor.captureEvents).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        ok: false,
+        error: 'filter must be an object when provided',
+      });
     });
 
-    it('passes undefined filter when filter is null', async () => {
-      monitor.captureEvents.mockResolvedValueOnce([]);
+    it('returns error when filter is null', async () => {
       const result = await handlers.handleSyscallCaptureEvents({ filter: null });
-      expect(monitor.captureEvents).toHaveBeenCalledWith(undefined);
-      expect(result).toMatchObject({ ok: true, count: 0 });
+      expect(monitor.captureEvents).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        ok: false,
+        error: 'filter must be an object when provided',
+      });
     });
 
-    it('passes undefined filter when filter is a number', async () => {
-      monitor.captureEvents.mockResolvedValueOnce([]);
+    it('returns error when filter is a number', async () => {
       const result = await handlers.handleSyscallCaptureEvents({ filter: 42 });
-      expect(monitor.captureEvents).toHaveBeenCalledWith(undefined);
-      expect(result).toMatchObject({ ok: true, count: 0 });
+      expect(monitor.captureEvents).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        ok: false,
+        error: 'filter must be an object when provided',
+      });
     });
 
-    it('passes filter with only names when pid is non-finite', async () => {
-      monitor.captureEvents.mockResolvedValueOnce([]);
+    it('returns error when filter pid is non-finite', async () => {
       const result = await handlers.handleSyscallCaptureEvents({
         filter: { name: ['openat'], pid: Infinity },
       });
-      // Infinity fails readNumber, so pid should be excluded
-      expect(monitor.captureEvents).toHaveBeenCalledWith({ name: ['openat'] });
-      expect(result).toMatchObject({ ok: true, count: 0 });
+      expect(monitor.captureEvents).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        ok: false,
+        error: 'filter.pid must be a number when provided',
+      });
     });
 
-    it('passes filter with only pid when name contains non-strings', async () => {
-      monitor.captureEvents.mockResolvedValueOnce([]);
+    it('returns error when filter name contains non-strings', async () => {
       const result = await handlers.handleSyscallCaptureEvents({
         filter: { name: ['openat', 123], pid: 42 },
       });
-      // name array has a number, so readStringArray returns undefined
-      expect(monitor.captureEvents).toHaveBeenCalledWith({ pid: 42 });
-      expect(result).toMatchObject({ ok: true, count: 0 });
+      expect(monitor.captureEvents).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        ok: false,
+        error: 'filter.name must be an array of strings when provided',
+      });
     });
 
     it('returns empty events array and stats', async () => {
