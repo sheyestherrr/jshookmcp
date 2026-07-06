@@ -36,6 +36,11 @@ export const PROTO_TLS_CONFIDENCE = float('PROTO_TLS_CONFIDENCE', 0.95);
 export const PROTO_WS_CONFIDENCE = float('PROTO_WS_CONFIDENCE', 0.85);
 export const PROTO_HTTP_CONFIDENCE = float('PROTO_HTTP_CONFIDENCE', 0.95);
 export const PROTO_SSH_CONFIDENCE = float('PROTO_SSH_CONFIDENCE', 0.95);
+export const PROTO_MQTT_CONFIDENCE = float('PROTO_MQTT_CONFIDENCE', 0.85);
+export const PROTO_STUN_CONFIDENCE = float('PROTO_STUN_CONFIDENCE', 0.92);
+export const PROTO_QUIC_CONFIDENCE = float('PROTO_QUIC_CONFIDENCE', 0.88);
+export const PROTO_SOCKS5_CONFIDENCE = float('PROTO_SOCKS5_CONFIDENCE', 0.9);
+export const PROTO_H2_CONFIDENCE = float('PROTO_H2_CONFIDENCE', 0.9);
 
 /* ================================================================== */
 /*  Network bot detection                                              */

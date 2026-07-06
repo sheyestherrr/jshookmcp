@@ -36,7 +36,10 @@ const SCORES = {
   network: [9.0, '37 tools, 37 scan-counted tests'],
   platform: [9.1, '16 tools, Phase 2 MCP-safe wrappers, M3 work'],
   process: [9.0, '27 tools, Phase 1 suspend/resume + hollowing dumps + Phase 2 MCP-safe wrappers'],
-  'protocol-analysis': [9.1, '20 tools, Phase 2 MCP-safe wrappers, M2 work'],
+  'protocol-analysis': [
+    9.6,
+    '20 tools, Phase 3 +5 protocol fingerprints: MQTT/STUN/QUIC/SOCKS5/HTTP2',
+  ],
   proxy: [8.6, '8 tools, Phase 2 MCP-safe wrappers + Phase 3 body/timing capture'],
   sourcemap: [9.1, '6 tools, Phase 2 MCP-safe wrappers'],
   streaming: [8.6, '5 tools, Phase 2 MCP-safe wrappers'],

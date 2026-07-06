@@ -304,4 +304,165 @@ describe('ProtocolAnalysisHandlers — handleProtoFingerprint behavioral tests',
       expect(json.success).toBe(false);
     });
   });
+
+  describe('MQTT detection', () => {
+    it('detects MQTT CONNECT packet', async () => {
+      // Fixed header: type=1 (CONNECT, 0x10), remaining length=12 (0x0c, single-byte encoding)
+      // Variable header: 00 04 M Q T T 04 02 00 3c (keepalive=60s) + 2 trailing bytes = 12
+      const mqtt = '100c00044d5154540402003c0000';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [mqtt] });
+      const json = parseContent(res);
+      const fp = json.fingerprints[0];
+      expect(fp.protocolMatches[0].protocol).toBe('MQTT');
+      expect(fp.protocolMatches[0].confidence).toBe(0.85);
+      expect(fp.parsedFields.packetType).toBe('CONNECT');
+    });
+
+    it('detects MQTT PUBLISH packet with multi-byte remaining length', async () => {
+      // Type=3 (PUBLISH, 0x30), remaining length=300 (0xac, 0x02 → 0xac + 0x02*128 = 300)
+      const mqtt = '30ac02' + '00'.repeat(300);
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [mqtt] });
+      const json = parseContent(res);
+      const fp = json.fingerprints[0];
+      expect(fp.protocolMatches[0].protocol).toBe('MQTT');
+    });
+
+    it('rejects invalid MQTT packet type (0x00 -> type 0)', async () => {
+      const notMqtt = '000c000000000000000000000000';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [notMqtt] });
+      const json = parseContent(res);
+      expect(json.fingerprints[0].protocolMatches[0].protocol).toBe('unknown');
+    });
+  });
+
+  describe('STUN detection', () => {
+    it('detects STUN Binding Request', async () => {
+      // Type=0x0001 (Binding), Length=0 (no attributes), Magic=0x2112A442, 12-byte TID
+      const stun = '000100002112a442000000000000000000000000';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [stun] });
+      const json = parseContent(res);
+      const fp = json.fingerprints[0];
+      expect(fp.protocolMatches[0].protocol).toBe('STUN');
+      expect(fp.protocolMatches[0].confidence).toBe(0.92);
+      expect(fp.parsedFields.class).toBe('request');
+    });
+
+    it('rejects STUN with bad magic cookie', async () => {
+      // msgType=0x0001, msgLen=0, magic=0x00000000 (invalid), TID
+      // Also ensures bytes 4-5=0x0000 so DNS qdcount+ancount=0 (avoids DNS match)
+      const badStun = '000100000000000000000000000000000000000000';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [badStun] });
+      const json = parseContent(res);
+      expect(json.fingerprints[0].protocolMatches[0].protocol).toBe('unknown');
+    });
+  });
+
+  describe('QUIC detection', () => {
+    it('detects QUIC v1 initial packet (long header)', async () => {
+      // Long header 0xc0, version=0x00000001, DCIL+SCIL=0x00
+      const quic = 'c00000000100';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [quic] });
+      const json = parseContent(res);
+      const fp = json.fingerprints[0];
+      expect(fp.protocolMatches[0].protocol).toBe('QUIC');
+      expect(fp.protocolMatches[0].confidence).toBe(0.88);
+      expect(fp.parsedFields.version).toBe('v1');
+    });
+
+    it('detects QUIC version-negotiation packet', async () => {
+      // Long header 0xc0, version=0x00000000
+      const quic = 'c00000000000';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [quic] });
+      const json = parseContent(res);
+      const fp = json.fingerprints[0];
+      expect(fp.protocolMatches[0].protocol).toBe('QUIC');
+    });
+
+    it('rejects non-QUIC bytes starting with 0xc0 but bad version', async () => {
+      // 0xc0 prefix but version=0x12345678 — not a known QUIC version
+      const badQuic = 'c01234567800';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [badQuic] });
+      const json = parseContent(res);
+      expect(json.fingerprints[0].protocolMatches[0].protocol).toBe('unknown');
+    });
+  });
+
+  describe('SOCKS5 detection', () => {
+    it('detects SOCKS5 greeting with auth methods', async () => {
+      // Ver=5, nmethods=5 (not a valid CMD 1-3), methods=[0,1,2,3,4]
+      const socks5 = '05050001020304';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [socks5] });
+      const json = parseContent(res);
+      const fp = json.fingerprints[0];
+      expect(fp.protocolMatches[0].protocol).toBe('SOCKS5');
+      expect(fp.protocolMatches[0].confidence).toBe(0.9);
+      expect(fp.parsedFields.authMethodCount).toBe(5);
+    });
+
+    it('detects SOCKS5 CONNECT command', async () => {
+      // Ver=5, CMD=1 (CONNECT), RSV=0x00, ATYP=0x01 (IPv4), DST.ADDR=0x7f000001, DST.PORT=0x1f90
+      const socks5 = '050100017f0000011f90';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [socks5] });
+      const json = parseContent(res);
+      expect(json.fingerprints[0].protocolMatches[0].protocol).toBe('SOCKS5');
+      if (json.fingerprints[0].parsedFields) {
+        expect(json.fingerprints[0].parsedFields.command).toBe('CONNECT');
+      }
+    });
+
+    it('rejects non-SOCKS5 version byte', async () => {
+      const bad = '040100017f0000011f90';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [bad] });
+      const json = parseContent(res);
+      expect(json.fingerprints[0].protocolMatches[0].protocol).toBe('unknown');
+    });
+  });
+
+  describe('HTTP/2 frame detection', () => {
+    it('detects HTTP/2 SETTINGS frame', async () => {
+      // 9-byte header: length=0, type=4 (SETTINGS), flags=0, stream_id=0
+      const h2 = '000000040000000000';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [h2] });
+      const json = parseContent(res);
+      const fp = json.fingerprints[0];
+      expect(fp.protocolMatches[0].protocol).toBe('HTTP/2');
+      expect(fp.protocolMatches[0].confidence).toBe(0.9);
+      expect(fp.parsedFields.frameType).toBe('SETTINGS');
+    });
+
+    it('detects HTTP/2 DATA frame', async () => {
+      // Length=5, type=0 (DATA), flags=0, stream_id=1, payload="hello"
+      const h2 = '000005000000000001' + Buffer.from('hello').toString('hex');
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [h2] });
+      const json = parseContent(res);
+      const fp = json.fingerprints[0];
+      expect(fp.protocolMatches[0].protocol).toBe('HTTP/2');
+      expect(fp.parsedFields.frameType).toBe('DATA');
+    });
+
+    it('rejects HTTP/2 with invalid frame type (>9)', async () => {
+      const bad = '0000000a0000000000';
+      const res = await handlers.handleProtoFingerprint({ hexPayloads: [bad] });
+      const json = parseContent(res);
+      expect(json.fingerprints[0].protocolMatches[0].protocol).toBe('unknown');
+    });
+  });
+
+  describe('multi-protocol batch', () => {
+    it('identifies mixed protocols in a single call', async () => {
+      const mqtt = '100c00044d5154540402003c0000';
+      const stun = '000100002112a442000000000000000000000000';
+      const quic = 'c00000000100';
+      const socks5 = '05020002';
+      const h2 = '000000040000000000';
+      const res = await handlers.handleProtoFingerprint({
+        hexPayloads: [mqtt, stun, quic, socks5, h2],
+      });
+      const json = parseContent(res);
+      expect(json.success).toBe(true);
+      expect(json.fingerprints).toHaveLength(5);
+      const protocols = json.fingerprints.map((f: any) => f.protocolMatches[0].protocol);
+      expect(protocols).toEqual(['MQTT', 'STUN', 'QUIC', 'SOCKS5', 'HTTP/2']);
+    });
+  });
 });

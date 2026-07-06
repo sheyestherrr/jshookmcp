@@ -6,8 +6,13 @@ import { argStringArray } from '@server/domains/shared/parse-args';
 import { asJsonResponse } from '@server/domains/shared/response';
 import type { ToolArgs, ToolResponse } from '@server/types';
 import {
+  PROTO_H2_CONFIDENCE,
   PROTO_HTTP_CONFIDENCE,
+  PROTO_MQTT_CONFIDENCE,
+  PROTO_QUIC_CONFIDENCE,
+  PROTO_SOCKS5_CONFIDENCE,
   PROTO_SSH_CONFIDENCE,
+  PROTO_STUN_CONFIDENCE,
   PROTO_TLS_CONFIDENCE,
   PROTO_TLS_MIN_RECORD_LEN,
   PROTO_WS_CONFIDENCE,
@@ -148,10 +153,177 @@ export class ProtocolAnalysisFingerprintHandlers extends ProtocolAnalysisPacketH
             headerSize,
           };
         }
+      } else if (
+        actualBytes >= 20 &&
+        (() => {
+          const magic =
+            (readU8(clean, 4) << 24) |
+            (readU8(clean, 5) << 16) |
+            (readU8(clean, 6) << 8) |
+            readU8(clean, 7);
+          if (magic !== 0x2112a442) return false;
+          const msgType = readU16(clean, 0);
+          if ((msgType & 0xc000) !== 0) return false;
+          const msgLen = readU16(clean, 2);
+          return 20 + msgLen <= actualBytes;
+        })()
+      ) {
+        matches.push({ protocol: 'STUN', layer: 'L5-STUN', confidence: PROTO_STUN_CONFIDENCE });
+        if (includeHints) {
+          const msgType = readU16(clean, 0);
+          const cls = (msgType >> 4) & 1;
+          const method = msgType & 0x3eef;
+          deepParse = {
+            messageType: msgType,
+            class: cls ? 'indication/response' : 'request',
+            method,
+            messageLength: readU16(clean, 2),
+          };
+        }
+      } else if (
+        actualBytes >= 6 &&
+        readU8(clean, 0) === 0xc0 &&
+        (() => {
+          const version =
+            (readU8(clean, 1) << 24) |
+            (readU8(clean, 2) << 16) |
+            (readU8(clean, 3) << 8) |
+            readU8(clean, 4);
+          return version === 0x00000001 || version === 0x00000000 || version === 0x709a50c4;
+        })()
+      ) {
+        const version =
+          (readU8(clean, 1) << 24) |
+          (readU8(clean, 2) << 16) |
+          (readU8(clean, 3) << 8) |
+          readU8(clean, 4);
+        matches.push({ protocol: 'QUIC', layer: 'L4-QUIC', confidence: PROTO_QUIC_CONFIDENCE });
+        if (includeHints && actualBytes >= 6) {
+          const destConnIdLen = readU8(clean, 5);
+          deepParse = {
+            headerForm: 'long',
+            version:
+              version === 0x00000001
+                ? 'v1'
+                : version === 0x00000000
+                  ? 'version-negotiation'
+                  : `0x${version.toString(16)}`,
+            destConnIdLen,
+          };
+        }
+      } else if (
+        actualBytes >= 3 &&
+        readU8(clean, 0) === 0x05 &&
+        (() => {
+          const b1 = readU8(clean, 1);
+          return (b1 >= 1 && b1 <= 3) || (b1 > 0 && b1 < 10);
+        })()
+      ) {
+        matches.push({
+          protocol: 'SOCKS5',
+          layer: 'L5-SOCKS5',
+          confidence: PROTO_SOCKS5_CONFIDENCE,
+        });
+        if (includeHints) {
+          const b1 = readU8(clean, 1);
+          const CMD_NAMES: Record<number, string> = { 1: 'CONNECT', 2: 'BIND', 3: 'UDP_ASSOCIATE' };
+          const isCmd = b1 >= 1 && b1 <= 3;
+          deepParse = isCmd ? { command: CMD_NAMES[b1] ?? b1 } : { authMethodCount: b1 };
+        }
       } else if (isDns) {
         matches.push({ protocol: 'DNS', layer: 'L7-DNS', confidence: 0.85 });
         if (includeHints) {
           deepParse = parseDnsHeader(clean);
+        }
+      } else if (
+        actualBytes >= 2 &&
+        (() => {
+          const b0 = readU8(clean, 0);
+          const mqttType = b0 >> 4;
+          if (mqttType < 1 || mqttType > 14) return false;
+          if (mqttType !== 3 && (b0 & 0x0f) !== 0) return false;
+          let value = 0;
+          let shift = 0;
+          let encodedBytes = 0;
+          for (let i = 1; i <= 4 && i < actualBytes; i++) {
+            const b = readU8(clean, i);
+            value |= (b & 0x7f) << shift;
+            shift += 7;
+            encodedBytes++;
+            if ((b & 0x80) === 0) break;
+          }
+          return encodedBytes > 0 && value > 0 && 1 + encodedBytes + value <= actualBytes;
+        })()
+      ) {
+        matches.push({ protocol: 'MQTT', layer: 'L7-MQTT', confidence: PROTO_MQTT_CONFIDENCE });
+        if (includeHints) {
+          const mqttB0 = readU8(clean, 0);
+          const mqttType = mqttB0 >> 4;
+          const MQTT_NAMES: Record<number, string> = {
+            1: 'CONNECT',
+            2: 'CONNACK',
+            3: 'PUBLISH',
+            4: 'PUBACK',
+            5: 'PUBREC',
+            6: 'PUBREL',
+            7: 'PUBCOMP',
+            8: 'SUBSCRIBE',
+            9: 'SUBACK',
+            10: 'UNSUBSCRIBE',
+            11: 'UNSUBACK',
+            12: 'PINGREQ',
+            13: 'PINGRESP',
+            14: 'DISCONNECT',
+          };
+          deepParse = {
+            packetType: MQTT_NAMES[mqttType] ?? mqttType,
+            dup: (mqttB0 >> 3) & 1,
+            qos: (mqttB0 >> 1) & 3,
+          };
+        }
+      } else if (
+        actualBytes >= 9 &&
+        (() => {
+          const frameLen = (readU8(clean, 0) << 16) | (readU8(clean, 1) << 8) | readU8(clean, 2);
+          const frameType = readU8(clean, 3);
+          if (frameType < 0 || frameType > 9) return false;
+          if (frameType === 0 && frameLen === 0) return false;
+          if (frameLen > 16384) return false;
+          const streamId =
+            (readU8(clean, 5) << 24) |
+            (readU8(clean, 6) << 16) |
+            (readU8(clean, 7) << 8) |
+            readU8(clean, 8);
+          if ((streamId & 0x80000000) !== 0) return false;
+          return 9 + frameLen <= actualBytes;
+        })()
+      ) {
+        const frameType = readU8(clean, 3);
+        const streamId =
+          (readU8(clean, 5) << 24) |
+          (readU8(clean, 6) << 16) |
+          (readU8(clean, 7) << 8) |
+          readU8(clean, 8);
+        const FRAME_NAMES: Record<number, string> = {
+          0: 'DATA',
+          1: 'HEADERS',
+          2: 'PRIORITY',
+          3: 'RST_STREAM',
+          4: 'SETTINGS',
+          5: 'PUSH_PROMISE',
+          6: 'PING',
+          7: 'GOAWAY',
+          8: 'WINDOW_UPDATE',
+          9: 'CONTINUATION',
+        };
+        matches.push({ protocol: 'HTTP/2', layer: 'L5-HTTP2', confidence: PROTO_H2_CONFIDENCE });
+        if (includeHints) {
+          deepParse = {
+            frameType: FRAME_NAMES[frameType] ?? frameType,
+            frameLength: (readU8(clean, 0) << 16) | (readU8(clean, 1) << 8) | readU8(clean, 2),
+            flags: readU8(clean, 4),
+            streamId,
+          };
         }
       }
 
