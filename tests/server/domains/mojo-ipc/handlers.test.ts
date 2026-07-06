@@ -101,6 +101,20 @@ describe('MojoIPCHandlers', () => {
     expect(result).toMatchObject({ success: true });
   });
 
+  it('passes optional decode context for interface field labels', async () => {
+    const result = await handlers.handleMojoDecodeMessage({
+      hexPayload: '0001',
+      interfaceName: 'network.mojom.URLLoaderFactory',
+      messageType: 'CreateLoaderAndStart',
+    });
+
+    expect(decoder.decodePayload).toHaveBeenCalledWith('0001', {
+      interfaceName: 'network.mojom.URLLoaderFactory',
+      messageType: 'CreateLoaderAndStart',
+    });
+    expect(result).toMatchObject({ success: true });
+  });
+
   it('encodes mojo payloads with the current API', async () => {
     const fields = [{ type: 'bool', value: true }];
     const result = await handlers.handleMojoEncodeMessage({

@@ -264,7 +264,7 @@
       "d5_handleSafeRefs": 14,
       "d6_doc": {
         "hasClaude": true,
-        "hasScore": false,
+        "hasScore": true,
         "hasPrereq": false,
         "hasToolDeps": false
       }

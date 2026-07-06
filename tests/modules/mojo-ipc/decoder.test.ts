@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MojoDecoder } from '@modules/mojo-ipc';
+import { TEST_URLS, withPath } from '@tests/shared/test-urls';
 
 describe('MojoDecoder', () => {
   let decoder: MojoDecoder;
@@ -25,6 +26,43 @@ describe('MojoDecoder', () => {
     expect(decoded.fields.field0).toBe(true);
     expect(decoded.fields.field1).toBe(42);
     expect(decoded.fields.field2).toBe('hello');
+  });
+
+  it('labels known interface fields when decode context is provided', () => {
+    const encoded = decoder.encodeMessage(
+      'network.mojom.URLLoaderFactory',
+      'CreateLoaderAndStart',
+      [
+        { type: 'uint32', value: 7 },
+        { type: 'uint32', value: 99 },
+        { type: 'uint32', value: 0 },
+        {
+          type: 'struct',
+          fields: [
+            { type: 'string', value: 'GET' },
+            { type: 'string', value: withPath(TEST_URLS.root, 'api') },
+          ],
+        },
+        { type: 'pending_remote', handle: 12 },
+        { type: 'uint32', value: 1234 },
+      ],
+    );
+
+    const decoded = decoder.decodePayload(encoded, {
+      interfaceName: 'network.mojom.URLLoaderFactory',
+      messageType: 'CreateLoaderAndStart',
+    });
+
+    expect(decoded.fields.routingId).toBe(7);
+    expect(decoded.fields.requestId).toBe(99);
+    expect(decoded.fields.options).toBe(0);
+    expect(decoded.fields.request).toEqual({
+      field0: 'GET',
+      field1: withPath(TEST_URLS.root, 'api'),
+    });
+    expect(decoded.fields.client).toEqual({ kind: 'pending_remote', handle: 12 });
+    expect(decoded.fields.trafficAnnotation).toBe(1234);
+    expect(decoded._raw_summary).toContain('network.mojom.URLLoaderFactory.CreateLoaderAndStart');
   });
 
   it('round-trips typed primitive fields', () => {

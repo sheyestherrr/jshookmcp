@@ -232,7 +232,12 @@ export class MojoIPCHandlers {
       };
     }
 
-    const decoded = this.getDecoder().decodePayload(hexPayload);
+    const interfaceName = argString(args, 'interfaceName')?.trim();
+    const messageType = argStringOrNumber(args, 'messageType');
+    const decoded =
+      interfaceName || messageType !== undefined
+        ? this.getDecoder().decodePayload(hexPayload, { interfaceName, messageType })
+        : this.getDecoder().decodePayload(hexPayload);
     return {
       success: true,
       decoded: toJsonSafe(decoded),

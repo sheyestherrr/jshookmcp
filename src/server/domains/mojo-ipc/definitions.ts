@@ -14,6 +14,11 @@ export const mojoIpcTools: Tool[] = [
     t
       .desc('Decode a Mojo IPC hex payload into a structured field map.')
       .string('hexPayload', 'Hex-encoded Mojo IPC payload')
+      .string('interfaceName', 'Optional Mojo interface name used to label known fields')
+      .prop('messageType', {
+        anyOf: [{ type: 'string' }, { type: 'number' }],
+        description: 'Optional method name or message type used with interfaceName to label fields',
+      })
       .required('hexPayload')
       .query(),
   ),

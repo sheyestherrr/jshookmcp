@@ -55,6 +55,12 @@ interface DecodedHeader {
   requestId?: bigint;
 }
 
+interface DecodeContext {
+  interfaceName?: string;
+  messageType?: string | number;
+  label?: string;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -116,6 +122,26 @@ const HANDLE_LIKE_TYPES = new Set([
   FIELD_TYPE_PENDING_ASSOCIATED_RECEIVER,
 ]);
 
+const FIELD_NAME_CATALOG: Record<string, string[]> = {
+  'network.mojom.networkservice:createnetworkcontext': ['receiver', 'params'],
+  'network.mojom.networkservice:configurestubhostresolver': ['config'],
+  'network.mojom.networkservice:setrawheadersaccess': ['processId', 'origins'],
+  'network.mojom.urlloaderfactory:createloaderandstart': [
+    'routingId',
+    'requestId',
+    'options',
+    'request',
+    'client',
+    'trafficAnnotation',
+  ],
+  'network.mojom.urlloaderfactory:clone': ['receiver'],
+  'network.mojom.urlloader:followredirect': ['removedHeaders', 'modifiedHeaders', 'newUrl'],
+  'network.mojom.urlloader:setpriority': ['priority', 'intraPriorityValue'],
+  'blink.mojom.widgethost:setcursor': ['cursor'],
+  'blink.mojom.widgethost:updatevisualproperties': ['visualProperties'],
+  'blink.mojom.widgethost:dispatchinputevent': ['event', 'callback'],
+};
+
 function isHandleField(value: unknown): value is HandleField {
   return isRecord(value) && typeof value['handle'] === 'number';
 }
@@ -141,11 +167,13 @@ function typeName(typeCode: number): string {
 }
 
 export class MojoDecoder {
-  decodePayload(hex: string, context?: string): DecodedPayload {
+  decodePayload(hex: string, context?: string | DecodeContext): DecodedPayload {
     const raw = this.cleanHex(hex);
     const bytes = Buffer.from(raw, 'hex');
 
     const header = this.decodeHeader(bytes);
+    const decodeContext = this.normalizeDecodeContext(context);
+    const fieldNames = this.resolveFieldNames(decodeContext);
 
     const fields: Record<string, unknown> = {};
     const summaryParts: string[] = [];
@@ -158,7 +186,7 @@ export class MojoDecoder {
         break;
       }
 
-      const fieldName = `field${index}`;
+      const fieldName = fieldNames[index] ?? `field${index}`;
       const decoded = this.decodeField(bytes, cursor, fieldName);
       fields[fieldName] = decoded.value;
       actualHandles += decoded.handles;
@@ -170,7 +198,12 @@ export class MojoDecoder {
     const summary =
       summaryParts.length > 0
         ? summaryParts.join('; ')
-        : this.buildSummary(context, Object.keys(fields).length, header.numFields, actualHandles);
+        : this.buildSummary(
+            decodeContext.label,
+            Object.keys(fields).length,
+            header.numFields,
+            actualHandles,
+          );
 
     return {
       header,
@@ -636,6 +669,36 @@ export class MojoDecoder {
     }
 
     return hash;
+  }
+
+  private normalizeDecodeContext(context: string | DecodeContext | undefined): DecodeContext {
+    if (typeof context === 'string') {
+      return { label: context };
+    }
+    if (!context) {
+      return {};
+    }
+
+    const interfaceName = context.interfaceName?.trim();
+    const messageType =
+      typeof context.messageType === 'string' ? context.messageType.trim() : context.messageType;
+    const label =
+      context.label ??
+      [interfaceName, messageType === undefined ? undefined : String(messageType)]
+        .filter(Boolean)
+        .join('.');
+
+    return { interfaceName, messageType, label: label || undefined };
+  }
+
+  private resolveFieldNames(context: DecodeContext): string[] {
+    if (!context.interfaceName || context.messageType === undefined) {
+      return [];
+    }
+    const key =
+      `${context.interfaceName.trim().toLowerCase()}:` +
+      `${String(context.messageType).trim().toLowerCase()}`;
+    return FIELD_NAME_CATALOG[key] ?? [];
   }
 
   private buildSummary(

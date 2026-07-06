@@ -45,7 +45,10 @@ const SCORES = {
   ],
   maintenance: [9.2, '13 tools, sandbox hardening plus category-aware artifact retention cleanup'],
   memory: [9.7, '34 tools, E5 parity, Phase 0 find_accesses wired readMemory+capstone+pid'],
-  'mojo-ipc': [9.0, '6 tools, encode/filter surface, expanded decoder types + v2 header metadata'],
+  'mojo-ipc': [
+    9.2,
+    '6 tools, encode/filter surface, expanded decoder types, v2 header metadata, field-name decode context',
+  ],
   'native-bridge': [
     9.5,
     '6 tools, runtime DomainManifest registration + Rizin/Binary Ninja bridge parity',
