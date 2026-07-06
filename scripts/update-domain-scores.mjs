@@ -33,7 +33,7 @@ const SCORES = {
   instrumentation: [9.0, '16 tools, Phase 3 session snapshot export to artifacts'],
   maintenance: [9.0, '13 tools, sandbox memory/tool allowlist/redaction hardening, 6 tests'],
   memory: [9.7, '34 tools, E5 parity, Phase 0 find_accesses wired readMemory+capstone+pid'],
-  'mojo-ipc': [8.6, '5 tools, Phase 2 MCP-safe wrappers'],
+  'mojo-ipc': [9.0, '6 tools, encode/filter surface, expanded decoder types + v2 header metadata'],
   'native-bridge': [
     9.5,
     '6 tools, runtime DomainManifest registration + Rizin/Binary Ninja bridge parity',

@@ -81,6 +81,22 @@ describe('MojoDecoder', () => {
   it('decodes payloads with a v2 extended header', () => {
     const decoded = decoder.decodePayload('0200030100000000000000000000000000000101');
     expect(decoded.header.version).toBe(2);
+    expect(decoded.header.headerSize).toBe(18);
+    expect(decoded.header.interfaceId).toBe(0);
+    expect(decoded.header.requestId).toBe(0n);
+    expect(decoded.fields.field0).toBe(true);
+  });
+
+  it('surfaces v2 interface id, request id, and semantic flags', () => {
+    const decoded = decoder.decodePayload('0203070100007856341208070605040302010101');
+    expect(decoded.header.version).toBe(2);
+    expect(decoded.header.headerSize).toBe(18);
+    expect(decoded.header.interfaceId).toBe(0x12345678);
+    expect(decoded.header.requestId).toBe(0x0102030405060708n);
+    expect(decoded.header.expectsResponse).toBe(true);
+    expect(decoded.header.isResponse).toBe(true);
+    expect(decoded.header.isSync).toBe(false);
+    expect(decoded.header.flagNames).toEqual(['expects_response', 'is_response']);
     expect(decoded.fields.field0).toBe(true);
   });
 

@@ -2,9 +2,16 @@ export interface DecodedPayload {
   header: {
     version: number;
     flags: number;
+    flagNames: string[];
+    expectsResponse: boolean;
+    isResponse: boolean;
+    isSync: boolean;
     messageType: number;
     numFields: number;
     handles: number;
+    headerSize: number;
+    interfaceId?: number;
+    requestId?: bigint;
   };
   fields: Record<string, unknown>;
   handles: number;
@@ -31,6 +38,21 @@ interface DecodedField {
   handles: number;
   complete: boolean;
   summary?: string;
+}
+
+interface DecodedHeader {
+  version: number;
+  flags: number;
+  flagNames: string[];
+  expectsResponse: boolean;
+  isResponse: boolean;
+  isSync: boolean;
+  messageType: number;
+  numFields: number;
+  handles: number;
+  headerSize: number;
+  interfaceId?: number;
+  requestId?: bigint;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -123,18 +145,14 @@ export class MojoDecoder {
     const raw = this.cleanHex(hex);
     const bytes = Buffer.from(raw, 'hex');
 
-    const version = this.readUInt8(bytes, 0);
-    const flags = this.readUInt8(bytes, 1);
-    const messageType = this.readUInt8(bytes, 2);
-    const numFields = this.readUInt8(bytes, 3);
-    const declaredHandles = this.readUInt16LE(bytes, 4);
+    const header = this.decodeHeader(bytes);
 
     const fields: Record<string, unknown> = {};
     const summaryParts: string[] = [];
-    let cursor = this.payloadCursor(bytes, version);
+    let cursor = header.headerSize;
     let actualHandles = 0;
 
-    for (let index = 0; index < numFields; index += 1) {
+    for (let index = 0; index < header.numFields; index += 1) {
       if (cursor >= bytes.length) {
         summaryParts.push('payload ended before all fields were decoded');
         break;
@@ -152,16 +170,10 @@ export class MojoDecoder {
     const summary =
       summaryParts.length > 0
         ? summaryParts.join('; ')
-        : this.buildSummary(context, Object.keys(fields).length, numFields, actualHandles);
+        : this.buildSummary(context, Object.keys(fields).length, header.numFields, actualHandles);
 
     return {
-      header: {
-        version,
-        flags,
-        messageType,
-        numFields,
-        handles: declaredHandles,
-      },
+      header,
       fields,
       handles: actualHandles,
       raw,
@@ -195,11 +207,42 @@ export class MojoDecoder {
     return normalizeHexInput(hex);
   }
 
-  private payloadCursor(bytes: Buffer, version: number): number {
-    if (version >= 2 && bytes.length >= 18) {
-      return 18;
+  private decodeHeader(bytes: Buffer): DecodedHeader {
+    const version = this.readUInt8(bytes, 0);
+    const flags = this.readUInt8(bytes, 1);
+    const header: DecodedHeader = {
+      version,
+      flags,
+      ...this.decodeFlags(flags),
+      messageType: this.readUInt8(bytes, 2),
+      numFields: this.readUInt8(bytes, 3),
+      handles: this.readUInt16LE(bytes, 4),
+      headerSize: version >= 2 && bytes.length >= 18 ? 18 : 6,
+    };
+
+    if (header.headerSize >= 18) {
+      header.interfaceId = this.readUInt32LE(bytes, 6);
+      header.requestId = this.readBigUInt64LE(bytes, 10);
     }
-    return 6;
+
+    return header;
+  }
+
+  private decodeFlags(flags: number): {
+    flagNames: string[];
+    expectsResponse: boolean;
+    isResponse: boolean;
+    isSync: boolean;
+  } {
+    const expectsResponse = (flags & 0x01) !== 0;
+    const isResponse = (flags & 0x02) !== 0;
+    const isSync = (flags & 0x04) !== 0;
+    const flagNames: string[] = [];
+    if (expectsResponse) flagNames.push('expects_response');
+    if (isResponse) flagNames.push('is_response');
+    if (isSync) flagNames.push('is_sync');
+
+    return { flagNames, expectsResponse, isResponse, isSync };
   }
 
   private decodeField(bytes: Buffer, cursor: number, fieldName: string): DecodedField {
@@ -629,6 +672,22 @@ export class MojoDecoder {
     }
 
     return bytes.readUInt16LE(offset);
+  }
+
+  private readUInt32LE(bytes: Buffer, offset: number): number {
+    if (!this.hasBytes(bytes, offset, 4)) {
+      return 0;
+    }
+
+    return bytes.readUInt32LE(offset);
+  }
+
+  private readBigUInt64LE(bytes: Buffer, offset: number): bigint {
+    if (!this.hasBytes(bytes, offset, 8)) {
+      return 0n;
+    }
+
+    return bytes.readBigUInt64LE(offset);
   }
 
   private hasBytes(bytes: Buffer, offset: number, length: number): boolean {
