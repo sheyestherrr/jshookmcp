@@ -30,6 +30,55 @@ function readStringArray(value: unknown): string[] | undefined {
 export class PageDataHandlers {
   constructor(private deps: PageDataHandlersDeps) {}
 
+  private readCookieInput(value: unknown): PageCookieInput[] {
+    if (!Array.isArray(value) || value.length === 0) {
+      throw new Error('cookies must be a non-empty array for action=set');
+    }
+
+    return value.map((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        throw new Error(`cookies[${index}] must be an object`);
+      }
+
+      const cookie = item as Record<string, unknown>;
+      if (typeof cookie.name !== 'string' || cookie.name.trim().length === 0) {
+        throw new Error(`cookies[${index}].name must be a non-empty string`);
+      }
+      if (typeof cookie.value !== 'string') {
+        throw new Error(`cookies[${index}].value must be a string`);
+      }
+      if (
+        cookie.sameSite !== undefined &&
+        cookie.sameSite !== 'Strict' &&
+        cookie.sameSite !== 'Lax' &&
+        cookie.sameSite !== 'None'
+      ) {
+        throw new Error(`cookies[${index}].sameSite must be Strict, Lax, or None`);
+      }
+      if (cookie.expires !== undefined && typeof cookie.expires !== 'number') {
+        throw new Error(`cookies[${index}].expires must be a number`);
+      }
+
+      return item as PageCookieInput;
+    });
+  }
+
+  private requirePositiveInteger(args: Record<string, unknown>, key: string): number {
+    const value = argNumber(args, key);
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+      throw new Error(`${key} must be a positive integer`);
+    }
+    return value;
+  }
+
+  private requireStorageKey(args: Record<string, unknown>, storageName: string): string {
+    const key = argString(args, 'key', '');
+    if (!key.trim()) {
+      throw new Error(`${storageName} key must be a non-empty string`);
+    }
+    return key;
+  }
+
   private safeOrigin(url: string): string | null {
     try {
       return new URL(url).origin;
@@ -144,7 +193,7 @@ export class PageDataHandlers {
 
   async handlePageSetCookies(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
-      const cookies = args.cookies as PageCookieInput[];
+      const cookies = this.readCookieInput(args.cookies);
       await this.deps.pageController.setCookies(cookies);
       return { message: `Set ${cookies.length} cookies` };
     });
@@ -172,8 +221,8 @@ export class PageDataHandlers {
 
   async handlePageSetViewport(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
-      const width = argNumber(args, 'width', 0);
-      const height = argNumber(args, 'height', 0);
+      const width = this.requirePositiveInteger(args, 'width');
+      const height = this.requirePositiveInteger(args, 'height');
       await this.deps.pageController.setViewport(width, height);
       return { viewport: { width, height } };
     });
@@ -196,7 +245,7 @@ export class PageDataHandlers {
 
   async handlePageSetLocalStorage(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
-      const key = argString(args, 'key', '');
+      const key = this.requireStorageKey(args, 'localStorage');
       const value = argString(args, 'value', '');
       await this.deps.pageController.setLocalStorage(key, value);
       return { key };
@@ -219,7 +268,7 @@ export class PageDataHandlers {
 
   async handlePageSetSessionStorage(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
-      const key = argString(args, 'key', '');
+      const key = this.requireStorageKey(args, 'sessionStorage');
       const value = argString(args, 'value', '');
       await this.deps.pageController.setSessionStorage(key, value);
       return { key };

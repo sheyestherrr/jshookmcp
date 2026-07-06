@@ -20,6 +20,9 @@ describe('PageDataHandlers', () => {
       emulateDevice: vi.fn(),
       getLocalStorage: vi.fn(),
       setLocalStorage: vi.fn(),
+      getSessionStorage: vi.fn(),
+      setSessionStorage: vi.fn(),
+      clearSessionStorage: vi.fn(),
     };
     handlers = new PageDataHandlers({
       pageController,
@@ -97,6 +100,26 @@ describe('PageDataHandlers', () => {
     });
   });
 
+  it('rejects cookie writes without a non-empty cookies array', async () => {
+    const body = parseJson<BrowserStatusResponse>(await handlers.handlePageSetCookies({}));
+
+    expect(pageController.setCookies).not.toHaveBeenCalled();
+    expect(body.success).toBe(false);
+    expect(body.message).toContain('cookies must be a non-empty array');
+  });
+
+  it('rejects cookie writes with invalid cookie entries', async () => {
+    const body = parseJson<BrowserStatusResponse>(
+      await handlers.handlePageSetCookies({
+        cookies: [{ value: 'abc' }],
+      }),
+    );
+
+    expect(pageController.setCookies).not.toHaveBeenCalled();
+    expect(body.success).toBe(false);
+    expect(body.message).toContain('cookies[0].name');
+  });
+
   it('returns cookies with a count', async () => {
     pageController.getCookies.mockResolvedValue([
       { name: 'session', value: 'abc' },
@@ -159,6 +182,16 @@ describe('PageDataHandlers', () => {
     });
   });
 
+  it('rejects non-positive viewport dimensions before calling the controller', async () => {
+    const body = parseJson<BrowserStatusResponse>(
+      await handlers.handlePageSetViewport({ width: 0, height: 900 }),
+    );
+
+    expect(pageController.setViewport).not.toHaveBeenCalled();
+    expect(body.success).toBe(false);
+    expect(body.message).toContain('width must be a positive integer');
+  });
+
   it('emulates a device and returns the selected device', async () => {
     pageController.emulateDevice.mockResolvedValue(undefined);
 
@@ -204,6 +237,26 @@ describe('PageDataHandlers', () => {
       success: true,
       key: 'token',
     });
+  });
+
+  it('rejects localStorage writes with an empty key', async () => {
+    const body = parseJson<BrowserStatusResponse>(
+      await handlers.handlePageSetLocalStorage({ key: '   ', value: 'abc123' }),
+    );
+
+    expect(pageController.setLocalStorage).not.toHaveBeenCalled();
+    expect(body.success).toBe(false);
+    expect(body.message).toContain('localStorage key');
+  });
+
+  it('rejects sessionStorage writes with an empty key', async () => {
+    const body = parseJson<BrowserStatusResponse>(
+      await handlers.handlePageSetSessionStorage({ key: '', value: 'abc123' }),
+    );
+
+    expect(pageController.setSessionStorage).not.toHaveBeenCalled();
+    expect(body.success).toBe(false);
+    expect(body.message).toContain('sessionStorage key');
   });
 
   it('returns failure response when setting cookies fails', async () => {
