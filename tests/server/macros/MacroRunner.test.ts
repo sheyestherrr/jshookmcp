@@ -45,6 +45,93 @@ describe('MacroRunner', () => {
     expect(wf.tags).toEqual(['test']);
   });
 
+  it('buildWorkflowFromDefinition maps macro orchestration nodes', () => {
+    const def = makeDef({
+      steps: [
+        {
+          id: 'retry_step',
+          toolName: 'tool_retry',
+          retry: { maxAttempts: 3, backoffMs: 25, multiplier: 2 },
+        },
+        {
+          id: 'parallel_group',
+          parallelSteps: [
+            { id: 'parallel_a', toolName: 'tool_a' },
+            { id: 'parallel_b', toolName: 'tool_b' },
+          ],
+          maxConcurrency: 2,
+          failFast: true,
+        },
+        {
+          id: 'branch_group',
+          branchStep: {
+            predicateId: 'always_true',
+            whenTrue: { id: 'yes', toolName: 'tool_yes' },
+            whenFalse: { id: 'no', toolName: 'tool_no' },
+          },
+        },
+        {
+          id: 'fallback_group',
+          fallbackStep: {
+            primary: { id: 'primary', toolName: 'tool_primary' },
+            fallback: { id: 'fallback', toolName: 'tool_fallback' },
+          },
+        },
+      ],
+    });
+
+    const wf = runner.buildWorkflowFromDefinition(def);
+    const root = wf.build({} as any) as any;
+
+    expect(root.kind).toBe('sequence');
+    expect(root.steps).toHaveLength(4);
+    expect(root.steps[0]).toMatchObject({
+      kind: 'tool',
+      id: 'retry_step',
+      retry: { maxAttempts: 3, backoffMs: 25, multiplier: 2 },
+    });
+    expect(root.steps[1]).toMatchObject({
+      kind: 'parallel',
+      id: 'parallel_group',
+      maxConcurrency: 2,
+      failFast: true,
+    });
+    expect(root.steps[1].steps.map((step: any) => step.id)).toEqual(['parallel_a', 'parallel_b']);
+    expect(root.steps[2]).toMatchObject({
+      kind: 'branch',
+      id: 'branch_group',
+      predicateId: 'always_true',
+    });
+    expect(root.steps[2].whenTrue.id).toBe('yes');
+    expect(root.steps[2].whenFalse.id).toBe('no');
+    expect(root.steps[3]).toMatchObject({ kind: 'fallback', id: 'fallback_group' });
+    expect(root.steps[3].primary.id).toBe('primary');
+    expect(root.steps[3].fallback.id).toBe('fallback');
+  });
+
+  it('buildWorkflowFromDefinition honors optional steps with fallback wrappers', () => {
+    const def = makeDef({
+      steps: [{ id: 'optional_step', toolName: 'unstable_tool', optional: true }],
+    });
+
+    const wf = runner.buildWorkflowFromDefinition(def);
+    const root = wf.build({} as any) as any;
+
+    expect(root.steps[0]).toMatchObject({
+      kind: 'fallback',
+      id: 'optional_step-optional',
+    });
+    expect(root.steps[0].primary).toMatchObject({
+      kind: 'tool',
+      id: 'optional_step',
+      toolName: 'unstable_tool',
+    });
+    expect(root.steps[0].fallback).toMatchObject({
+      kind: 'sequence',
+      id: 'optional_step-optional-skip',
+    });
+  });
+
   it('execute() returns ok=true on success', async () => {
     const def = makeDef();
     (executeExtensionWorkflow as any).mockResolvedValue({

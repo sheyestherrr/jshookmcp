@@ -9,11 +9,15 @@
  */
 
 import {
+  branchStep,
   defineWorkflow,
+  fallbackStep,
+  parallelStep,
   sequenceStep,
   toolStep,
   type WorkflowContract,
   type ToolNodeInput,
+  type WorkflowNode,
 } from '@server/workflows/WorkflowContract';
 import { executeExtensionWorkflow } from '@server/workflows/WorkflowEngine';
 import type { MCPServerContext } from '@server/MCPServer.context';
@@ -39,16 +43,7 @@ export class MacroRunner {
         .buildGraph(() =>
           sequenceStep(`${def.id}-root`, (seq) => {
             for (const step of def.steps) {
-              seq.step(
-                toolStep(step.id, step.toolName, (toolBuilder) => {
-                  toolBuilder
-                    .input((step.input as Record<string, ToolNodeInput>) ?? {})
-                    .timeout(step.timeoutMs ?? 0);
-                  if (step.inputFrom) {
-                    toolBuilder.inputFrom(step.inputFrom);
-                  }
-                }),
-              );
+              seq.step(this.buildNodeFromStep(step));
             }
           }),
         )
@@ -65,6 +60,85 @@ export class MacroRunner {
           });
         }),
     );
+  }
+
+  private buildNodeFromStep(step: MacroDefinition['steps'][number]): WorkflowNode {
+    const node = this.buildCoreNodeFromStep(step);
+    if (!step.optional) {
+      return node;
+    }
+
+    return fallbackStep(`${step.id}-optional`, (fallback) => {
+      fallback.primary(node);
+      fallback.fallback(sequenceStep(`${step.id}-optional-skip`));
+    });
+  }
+
+  private buildCoreNodeFromStep(step: MacroDefinition['steps'][number]): WorkflowNode {
+    const kindCount = [
+      typeof step.toolName === 'string' && step.toolName.length > 0,
+      Array.isArray(step.sequenceSteps),
+      Array.isArray(step.parallelSteps),
+      step.branchStep !== undefined,
+      step.fallbackStep !== undefined,
+    ].filter(Boolean).length;
+
+    if (kindCount !== 1) {
+      throw new Error(
+        `Macro step "${step.id}" must define exactly one of toolName, sequenceSteps, parallelSteps, branchStep, or fallbackStep`,
+      );
+    }
+
+    if (step.sequenceSteps) {
+      return sequenceStep(step.id, (sequence) => {
+        for (const child of step.sequenceSteps ?? []) {
+          sequence.step(this.buildNodeFromStep(child));
+        }
+      });
+    }
+
+    if (step.parallelSteps) {
+      return parallelStep(step.id, (parallel) => {
+        if (step.maxConcurrency !== undefined) {
+          parallel.maxConcurrency(step.maxConcurrency);
+        }
+        if (step.failFast !== undefined) {
+          parallel.failFast(step.failFast);
+        }
+        for (const child of step.parallelSteps ?? []) {
+          parallel.step(this.buildNodeFromStep(child));
+        }
+      });
+    }
+
+    if (step.branchStep) {
+      return branchStep(step.id, step.branchStep.predicateId, (branch) => {
+        branch.whenTrue(this.buildNodeFromStep(step.branchStep!.whenTrue));
+        if (step.branchStep?.whenFalse) {
+          branch.whenFalse(this.buildNodeFromStep(step.branchStep.whenFalse));
+        }
+      });
+    }
+
+    if (step.fallbackStep) {
+      return fallbackStep(step.id, (fallback) => {
+        fallback.primary(this.buildNodeFromStep(step.fallbackStep!.primary));
+        fallback.fallback(this.buildNodeFromStep(step.fallbackStep!.fallback));
+      });
+    }
+
+    return toolStep(step.id, step.toolName!, (toolBuilder) => {
+      toolBuilder.input((step.input as Record<string, ToolNodeInput>) ?? {});
+      if (step.timeoutMs !== undefined) {
+        toolBuilder.timeout(step.timeoutMs);
+      }
+      if (step.retry) {
+        toolBuilder.retry(step.retry);
+      }
+      if (step.inputFrom) {
+        toolBuilder.inputFrom(step.inputFrom);
+      }
+    });
   }
 
   /**
@@ -92,7 +166,7 @@ export class MacroRunner {
         displayName: def.displayName,
         ok: true,
         durationMs: result.durationMs,
-        stepsCompleted: def.steps.length,
+        stepsCompleted: progress.filter((p) => p.status === 'complete').length,
         totalSteps: def.steps.length,
         stepResults: result.stepResults,
         progress,

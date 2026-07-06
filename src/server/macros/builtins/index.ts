@@ -4,12 +4,9 @@ import { MACRO_BUILTIN_TIMEOUT_MS } from '@src/constants';
 /**
  * Default built-in macros shipped with jshookmcp.
  *
- * These are simple MacroDefinition data objects — the same format as
- * user-defined JSON macros in macros/. They exist here as TypeScript
- * constants for type safety, but follow the exact same schema.
- *
- * Complex workflow-based macros (DAG, BranchNode) should be registered
- * as extension workflows via the ExtensionManager, NOT placed here.
+ * These are MacroDefinition data objects — the same format as user-defined
+ * JSON macros in macros/. They exist here as TypeScript constants for type
+ * safety, but follow the exact same orchestration schema.
  */
 
 export const deobfuscateAstFlow: MacroDefinition = {

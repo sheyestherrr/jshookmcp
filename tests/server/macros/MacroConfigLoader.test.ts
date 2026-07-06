@@ -143,4 +143,115 @@ describe('MacroConfigLoader', () => {
     expect(result[0]!.steps[0]!.inputFrom).toEqual({ code: 'prev.code' });
     expect(result[0]!.steps[0]!.optional).toBe(true);
   });
+
+  it('loadFromDirectory() preserves nested orchestration fields', async () => {
+    const macro = {
+      id: 'rich',
+      displayName: 'Rich',
+      steps: [
+        {
+          id: 'parallel',
+          parallelSteps: [
+            {
+              id: 'a',
+              toolName: 'tool_a',
+              retry: { maxAttempts: 2, backoffMs: 10, multiplier: 2 },
+            },
+            { id: 'b', toolName: 'tool_b' },
+          ],
+          maxConcurrency: 2,
+          failFast: true,
+        },
+        {
+          id: 'branch',
+          branchStep: {
+            predicateId: 'always_true',
+            whenTrue: { id: 'yes', toolName: 'tool_yes' },
+            whenFalse: { id: 'no', toolName: 'tool_no' },
+          },
+        },
+        {
+          id: 'fallback',
+          fallbackStep: {
+            primary: { id: 'primary', toolName: 'tool_primary' },
+            fallback: { id: 'backup', toolName: 'tool_backup' },
+          },
+        },
+      ],
+    };
+    await writeFile(join(tempDir, 'rich.json'), JSON.stringify(macro));
+
+    const result = await MacroConfigLoader.loadFromDirectory(tempDir);
+
+    expect(result[0]!.steps[0]!.parallelSteps).toHaveLength(2);
+    expect(result[0]!.steps[0]!.parallelSteps?.[0]?.retry).toEqual({
+      maxAttempts: 2,
+      backoffMs: 10,
+      multiplier: 2,
+    });
+    expect(result[0]!.steps[0]!.maxConcurrency).toBe(2);
+    expect(result[0]!.steps[0]!.failFast).toBe(true);
+    expect(result[0]!.steps[1]!.branchStep?.whenTrue.id).toBe('yes');
+    expect(result[0]!.steps[2]!.fallbackStep?.fallback.id).toBe('backup');
+  });
+
+  it('validate() rejects ambiguous or incomplete orchestration steps', () => {
+    expect(
+      MacroConfigLoader.validate({
+        id: 'bad',
+        displayName: 'Bad',
+        steps: [
+          {
+            id: 'ambiguous',
+            toolName: 'tool',
+            parallelSteps: [{ id: 'child', toolName: 'other' }],
+          },
+        ],
+      }),
+    ).toBe(false);
+
+    expect(
+      MacroConfigLoader.validate({
+        id: 'bad',
+        displayName: 'Bad',
+        steps: [{ id: 'empty-parallel', parallelSteps: [] }],
+      }),
+    ).toBe(false);
+
+    expect(
+      MacroConfigLoader.validate({
+        id: 'bad',
+        displayName: 'Bad',
+        steps: [{ id: 'branch', branchStep: { whenTrue: { id: 'yes', toolName: 'tool' } } }],
+      }),
+    ).toBe(false);
+
+    expect(
+      MacroConfigLoader.validate({
+        id: 'bad',
+        displayName: 'Bad',
+        steps: [
+          {
+            id: 'parallel',
+            parallelSteps: [{ id: 'child', toolName: 'tool' }],
+            maxConcurrency: 0,
+          },
+        ],
+      }),
+    ).toBe(false);
+
+    expect(
+      MacroConfigLoader.validate({
+        id: 'bad',
+        displayName: 'Bad',
+        steps: [
+          {
+            id: 'retry',
+            toolName: 'tool',
+            retry: { maxAttempts: 0, backoffMs: -1 },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
 });

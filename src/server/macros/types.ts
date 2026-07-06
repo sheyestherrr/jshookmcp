@@ -5,6 +5,8 @@
  * calls using the existing WorkflowEngine infrastructure.
  */
 
+import type { RetryPolicy } from '@server/workflows/WorkflowContract';
+
 /** Progress report for a single macro step. */
 export interface MacroStepProgress {
   step: number;
@@ -39,14 +41,32 @@ export interface MacroDefinition {
   steps: MacroStepDefinition[];
 }
 
+export interface MacroBranchStepDefinition {
+  predicateId: string;
+  whenTrue: MacroStepDefinition;
+  whenFalse?: MacroStepDefinition;
+}
+
+export interface MacroFallbackStepDefinition {
+  primary: MacroStepDefinition;
+  fallback: MacroStepDefinition;
+}
+
 /** A single step within a macro definition. */
 export interface MacroStepDefinition {
   id: string;
-  toolName: string;
+  toolName?: string;
   input?: Record<string, unknown>;
   /** Reference a previous step's output field as input (e.g., { code: 'step_1.code' }). */
   inputFrom?: Record<string, string>;
   timeoutMs?: number;
+  retry?: RetryPolicy;
   /** If true, failure of this step doesn't stop the macro. */
   optional?: boolean;
+  sequenceSteps?: MacroStepDefinition[];
+  parallelSteps?: MacroStepDefinition[];
+  maxConcurrency?: number;
+  failFast?: boolean;
+  branchStep?: MacroBranchStepDefinition;
+  fallbackStep?: MacroFallbackStepDefinition;
 }

@@ -49,7 +49,7 @@ const SCORES = {
   'v8-inspector': [9.5, '19 tools, 23 scan-counted tests, Tier A+B+D+C all done'],
   wasm: [9.2, '12 tools, Phase 0 instances[0]→instanceIndex fix + Phase 2 MCP-safe wrappers'],
   webgpu: [9.1, '6 tools, 13 tests, Phase 1 command-capture condition wait'],
-  workflow: [9.1, '9 tools, Phase 2 MCP-safe wrappers'],
+  workflow: [9.5, '9 tools, Phase 3 macro DSL parallel/branch/fallback/retry orchestration'],
 };
 
 const DOMAIN_DIR = 'src/server/domains';

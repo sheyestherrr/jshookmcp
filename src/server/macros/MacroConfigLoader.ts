@@ -8,7 +8,34 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { logger } from '@utils/logger';
-import type { MacroDefinition } from './types';
+import type { MacroDefinition, MacroStepDefinition } from './types';
+
+interface MacroJsonStep {
+  id: string;
+  toolName?: string;
+  input?: Record<string, unknown>;
+  inputFrom?: Record<string, string>;
+  timeoutMs?: number;
+  retry?: {
+    maxAttempts: number;
+    backoffMs: number;
+    multiplier?: number;
+  };
+  optional?: boolean;
+  sequenceSteps?: MacroJsonStep[];
+  parallelSteps?: MacroJsonStep[];
+  maxConcurrency?: number;
+  failFast?: boolean;
+  branchStep?: {
+    predicateId: string;
+    whenTrue: MacroJsonStep;
+    whenFalse?: MacroJsonStep;
+  };
+  fallbackStep?: {
+    primary: MacroJsonStep;
+    fallback: MacroJsonStep;
+  };
+}
 
 interface MacroJsonSchema {
   id: string;
@@ -16,14 +43,7 @@ interface MacroJsonSchema {
   description?: string;
   tags?: string[];
   timeoutMs?: number;
-  steps: Array<{
-    id: string;
-    toolName: string;
-    input?: Record<string, unknown>;
-    inputFrom?: Record<string, string>;
-    timeoutMs?: number;
-    optional?: boolean;
-  }>;
+  steps: MacroJsonStep[];
 }
 
 /**
@@ -72,13 +92,82 @@ function validate(raw: unknown): raw is MacroJsonSchema {
   if (!Array.isArray(obj.steps) || obj.steps.length === 0) return false;
 
   for (const step of obj.steps) {
-    if (!step || typeof step !== 'object') return false;
-    const s = step as Record<string, unknown>;
-    if (typeof s.id !== 'string' || !s.id) return false;
-    if (typeof s.toolName !== 'string' || !s.toolName) return false;
+    if (!validateStep(step)) return false;
   }
 
   return true;
+}
+
+function validateStep(raw: unknown): raw is MacroJsonStep {
+  if (!raw || typeof raw !== 'object') return false;
+  const step = raw as Record<string, unknown>;
+  if (typeof step.id !== 'string' || !step.id) return false;
+
+  const kindCount = [
+    typeof step.toolName === 'string' && step.toolName.length > 0,
+    Array.isArray(step.sequenceSteps),
+    Array.isArray(step.parallelSteps),
+    isRecord(step.branchStep),
+    isRecord(step.fallbackStep),
+  ].filter(Boolean).length;
+
+  if (kindCount !== 1) return false;
+  if (step.retry !== undefined && !validateRetryPolicy(step.retry)) return false;
+  if (step.input !== undefined && !isRecord(step.input)) return false;
+  if (step.inputFrom !== undefined && !isStringRecord(step.inputFrom)) return false;
+  if (step.timeoutMs !== undefined && !isNonNegativeFiniteNumber(step.timeoutMs)) return false;
+  if (step.optional !== undefined && typeof step.optional !== 'boolean') return false;
+  if (step.maxConcurrency !== undefined && !isPositiveInteger(step.maxConcurrency)) return false;
+  if (step.failFast !== undefined && typeof step.failFast !== 'boolean') return false;
+
+  if (step.sequenceSteps !== undefined) {
+    if (!Array.isArray(step.sequenceSteps) || step.sequenceSteps.length === 0) return false;
+    return step.sequenceSteps.every((child) => validateStep(child));
+  }
+
+  if (step.parallelSteps !== undefined) {
+    if (!Array.isArray(step.parallelSteps) || step.parallelSteps.length === 0) return false;
+    return step.parallelSteps.every((child) => validateStep(child));
+  }
+
+  if (isRecord(step.branchStep)) {
+    if (typeof step.branchStep.predicateId !== 'string' || !step.branchStep.predicateId) {
+      return false;
+    }
+    if (!validateStep(step.branchStep.whenTrue)) return false;
+    return step.branchStep.whenFalse === undefined || validateStep(step.branchStep.whenFalse);
+  }
+
+  if (isRecord(step.fallbackStep)) {
+    return validateStep(step.fallbackStep.primary) && validateStep(step.fallbackStep.fallback);
+  }
+
+  return true;
+}
+
+function validateRetryPolicy(raw: unknown): boolean {
+  if (!isRecord(raw)) return false;
+  return (
+    isPositiveInteger(raw.maxAttempts) &&
+    isNonNegativeFiniteNumber(raw.backoffMs) &&
+    (raw.multiplier === undefined || isNonNegativeFiniteNumber(raw.multiplier))
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string');
+}
+
+function isPositiveInteger(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) > 0;
+}
+
+function isNonNegativeFiniteNumber(value: unknown): boolean {
+  return Number.isFinite(value) && Number(value) >= 0;
 }
 
 /**
@@ -91,14 +180,38 @@ function toDefinition(json: MacroJsonSchema): MacroDefinition {
     description: json.description ?? '',
     tags: json.tags ?? [],
     timeoutMs: json.timeoutMs,
-    steps: json.steps.map((s) => ({
-      id: s.id,
-      toolName: s.toolName,
-      input: s.input,
-      inputFrom: s.inputFrom,
-      timeoutMs: s.timeoutMs,
-      optional: s.optional,
-    })),
+    steps: json.steps.map(toStepDefinition),
+  };
+}
+
+function toStepDefinition(step: MacroJsonStep): MacroStepDefinition {
+  return {
+    id: step.id,
+    toolName: step.toolName,
+    input: step.input,
+    inputFrom: step.inputFrom,
+    timeoutMs: step.timeoutMs,
+    retry: step.retry,
+    optional: step.optional,
+    sequenceSteps: step.sequenceSteps?.map(toStepDefinition),
+    parallelSteps: step.parallelSteps?.map(toStepDefinition),
+    maxConcurrency: step.maxConcurrency,
+    failFast: step.failFast,
+    branchStep: step.branchStep
+      ? {
+          predicateId: step.branchStep.predicateId,
+          whenTrue: toStepDefinition(step.branchStep.whenTrue),
+          whenFalse: step.branchStep.whenFalse
+            ? toStepDefinition(step.branchStep.whenFalse)
+            : undefined,
+        }
+      : undefined,
+    fallbackStep: step.fallbackStep
+      ? {
+          primary: toStepDefinition(step.fallbackStep.primary),
+          fallback: toStepDefinition(step.fallbackStep.fallback),
+        }
+      : undefined,
   };
 }
 

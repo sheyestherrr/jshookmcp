@@ -4,7 +4,9 @@ import { tool } from '@server/registry/tool-builder';
 export const macroTools: Tool[] = [
   tool('run_macro', (t) =>
     t
-      .desc('Execute a registered macro by ID with inline progress and atomic bailout.')
+      .desc(
+        'Execute a registered macro with sequence, parallel, branch, fallback, and retry orchestration.',
+      )
       .string('macroId', 'Macro ID to execute')
       .prop('inputOverrides', {
         type: 'object',
