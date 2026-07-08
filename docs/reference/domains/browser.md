@@ -21,7 +21,7 @@
 - browser + instrumentation
 - browser + workflow
 
-## 工具清单（69）
+## 工具清单（72）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -34,6 +34,9 @@
 | `browser_attach_cdp_target` | 连接到浏览器中的特定目标，如某个 iframe 或 Worker。 |
 | `browser_detach_cdp_target` | 断开当前已附加的底层 CDP 目标会话，并恢复为常规页面绑定。 |
 | `browser_evaluate_cdp_target` | 在当前已附加的 CDP 目标会话中执行 JavaScript。 |
+| `browser_list_workers` | 通过 Target.getTargets 枚举 Service Worker / Shared Worker / 专用 Web Worker 目标。随后用 browser_worker_scripts(targetId=...) 导出某 worker 已加载的脚本——对分析 PWA / SW 承载的鉴权代码必不可少。 |
+| `browser_worker_scripts` | 为 worker 目标挂载 CDP 会话并导出其已解析的脚本（相当于 get_all_scripts，但作用域限定在 worker）。Debugger.enable 会重放 scriptParsed 事件，因此 worker 已加载的脚本也会被返回。 |
+| `browser_font_fingerprint` | 枚举本地已安装字体用于指纹分析。主路径是 Local Font Access API（queryLocalFonts，Chromium 103+）；不可用或被拒时回退到一组精简的 document.fonts.check 探针。返回检测到的字体集合、用于比对的稳定哈希，并可选地伪造字体指纹。 |
 | `browser_launch` | 启动浏览器。 |
 | `browser_close` | 关闭浏览器。 |
 | `browser_status` | 查看浏览器状态：是否运行中、打开了几个标签页、版本号。 |

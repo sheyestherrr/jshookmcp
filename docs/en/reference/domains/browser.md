@@ -21,7 +21,7 @@ Primary browser control and DOM interaction domain; the usual entry point for mo
 - browser + instrumentation
 - browser + workflow
 
-## Full tool list (69)
+## Full tool list (72)
 
 | Tool | Description |
 | --- | --- |
@@ -34,6 +34,9 @@ Primary browser control and DOM interaction domain; the usual entry point for mo
 | `browser_attach_cdp_target` | Attach to a CDP target by targetId. |
 | `browser_detach_cdp_target` | Detach the current CDP target session. |
 | `browser_evaluate_cdp_target` | Evaluate JS in the attached CDP target. |
+| `browser_list_workers` | Enumerate Service Worker / Shared Worker / dedicated Web Worker targets via Target.getTargets. Use browser_worker_scripts(targetId=...) afterwards to dump a worker's loaded scripts — essential for inspecting PWA / SW-backed auth code. |
+| `browser_worker_scripts` | Attach a CDP session to a worker target and dump its parsed scripts (equivalent to get_all_scripts, but scoped to a worker). Debugger.scriptParsed is replayed on Debugger.enable, so already-loaded worker scripts are returned. |
+| `browser_font_fingerprint` | Enumerate locally-installed fonts for fingerprint analysis. Primary path is the Local Font Access API (queryLocalFonts, Chromium 103+); when unavailable or denied, falls back to a small document.fonts.check probe set. Returns the detected font set, a stable hash for comparison, and optionally spoofs the font fingerprint. |
 | `browser_launch` | Launch Chromium/Camoufox or connect to a running browser. |
 | `browser_close` | Close the browser and release all resources. |
 | `browser_status` | Report browser status: running, tab count, version. |
