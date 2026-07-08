@@ -61,5 +61,5 @@ Request capture, response extraction, HAR export, safe replay, and performance t
 | `network_export_har` | Export captured network traffic as HAR. |
 | `network_replay_request` | Replay a captured network request with optional changes. |
 | `network_intercept` | Manage network interception rules. |
-| `network_tls_fingerprint` | Compute TLS/HTTP fingerprint hashes for bot detection. |
+| `network_tls_fingerprint` | Compute TLS/HTTP fingerprints for bot detection. compute_tls/compute_http build fingerprints from user-supplied lists; parse_client_hello parses a raw ClientHello record (hex) and emits JA3 + JA4 from the real wire bytes; analyze_request links a captured requestId. |
 | `network_bot_detect_analyze` | Analyze captured requests for bot-detection signals. |

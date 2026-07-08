@@ -71,15 +71,34 @@ VITEST_MAX_WORKERS=4 pnpm check      # 16145 passed | 30 skipped
 - **测试**：17 parser 单元 + 5 handler 集成。network 928/928，全量 16167/30。
 - **工具数** 577 不变；network 9.4→9.6。
 
-## NEXT PHASE DECISION — Session 29 候选
+## NEXT PHASE DECISION — Session 29
 
-1. **network bot-detect JA3/JA4 集成 (#4)**：当前 parse_client_hello 能算 JA3/JA4，但 bot_detect_analyze 还没纳入——纯补逻辑。
+### ⭐ memory 9.7→10：watchpoint/disassembly 跨平台 parity（macOS/Linux）
+
+**⚠️ 特殊约束 — 只写注释/占位，不要实现：**
+
+下一位接手 memory 域时，**只做以下事情**，不写任何实现代码：
+
+1. 读 `research/memory.md` 的 `find_accesses` 跨平台缺口
+2. 在 `src/modules/process/memory/` 相关文件里找到 macOS/Linux 的 `find_accesses` 分支（当前是 stub——没有 capstone 反汇编，只有 Windows 用 capstone）
+3. **只写注释**标记缺口位置——在每个 stub/fallback 处写 `// TODO(macOS): wire capstone disassembly — requires real capstone native binding linkage (see research/memory.md #1)`
+4. 在 handler 入口处加 `// NOTE: find_accesses disassembly only functional on Windows; macOS/Linux fallback to raw hex dump. Cross-platform parity tracked at research/memory.md #1.`
+5. 不加新测试（跨平台测试需要 macOS 真机跑，当前 Windows 跑不了）
+6. 不升级分数（9.7 不变，这只是注释/文档同步，不是 capability closure）
+7. **gate：** typecheck + lint + metadata:check 通过即可，不需要跑 memory 域测试（没改逻辑）
+8. **commit 格式：** `docs(memory): annotate cross-platform disassembly gaps for Mac parity work`
+9. **push 上去**，让 vmoranv 在 Mac 上 pull 下来真机写实现
+
+**为什么**：capstone native binding 在 Windows/Mac 上的 FFI 路径不同，vmoranv 手头有 Mac 真机用来调试跨平台 disassembly。这轮只标记缺口 + push，不要在 Windows 上猜测 Mac FFI 行为。
+
+### 其他候选
+
+1. **network bot-detect JA3/JA4 集成 (#4)**：当前 parse_client_hello 能算 JA3/JA4，但 bot_detect_analyze 还没纳入——纯补逻辑，Windows 可做。
 2. **sourcemap 9.4→9.6**：research #1（sourcesContent null 推断 source skeleton）或 #4（sourcemap_diff）。
 3. **browser 9.5→9.7**：research CDP all-origin cookies + launch enum validation。
-4. **memory 9.7→10**：research watchpoint/disassembly 跨平台 parity。
-5. 其余 9.2 域各自 research 的 P0/P1 真实 gap。
+4. 其余 9.2 域各自 research 的 P0/P1 真实 gap。
 
-下一位接手：读 `current-status.md` → 选一个域 → TDD → gate → 文档 → atomic commit。
+下一位接手：读 `current-status.md` → 按上面约束选 memory 或其他域 → TDD/gate/文档/commit。
 
 ---
 
