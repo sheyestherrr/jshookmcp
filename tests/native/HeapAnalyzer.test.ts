@@ -2,30 +2,11 @@
  * HeapAnalyzer — unit tests.
  *
  * Mocks Toolhelp32 Snapshot APIs to test heap enumeration, stats, and anomaly detection.
+ * Two tests (enumerateBlocks public API + snapshot failure) only work on Win32 where
+ * the koffi Toolhelp32 mock path is taken — they are skipped on Linux/macOS CI.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// Mock node:fs readFileSync so the Linux /proc/pid/maps fallback returns
-// deterministic synthetic data on any platform (fixes CI failures where
-// PID 1234 doesn't exist in the container).
-vi.mock('node:fs', async () => {
-  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
-  return {
-    ...actual,
-    default: actual,
-    readFileSync: (...args: Parameters<typeof actual.readFileSync>) => {
-      const path = String(args[0]);
-      if (path.startsWith('/proc/') && path.endsWith('/maps')) {
-        // Return a single synthetic [heap] region for PID 1234.
-        return `10000000-10002000 rw-p 00000000 00:00 0 [heap]`;
-      }
-      return actual.readFileSync(...args);
-    },
-  };
-});
-
-// ── Mock all native dependencies ──
 
 const state = vi.hoisted(() => ({
   snapshotHandle: 42n,
@@ -262,14 +243,19 @@ describe('HeapAnalyzer', () => {
     expect(anomalies.filter((anomaly) => anomaly.type === 'suspicious_size')).toHaveLength(2);
   });
 
-  it('enumerates blocks through the public API', async () => {
+  // These tests rely on the Win32 koffi Toolhelp32 mock path;
+  // on Linux/macOS HeapAnalyzer falls back to /proc/pid/maps which uses
+  // node:fs (hard to mock without breaking other tests' fs mocks).
+  const itWin32 = process.platform === 'win32' ? it : it.skip;
+
+  itWin32('enumerates blocks through the public API', async () => {
     const blocks = await analyzer.enumerateBlocks(1234, '0x100', { maxBlocks: 2 });
 
     expect(blocks).toHaveLength(2);
     expect(blocks[0]?.heapId).toBe('0x100');
   });
 
-  it('throws when heap snapshot creation fails', async () => {
+  itWin32('throws when heap snapshot creation fails', async () => {
     state.snapshotHandle = -1n;
 
     await expect(analyzer.enumerateHeaps(1234)).rejects.toThrow(
