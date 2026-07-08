@@ -208,6 +208,7 @@ export class AdvancedToolHandlers {
   handleHttpPlainRequest = (args: Record<string, unknown>) => this.raw.handleHttpPlainRequest(args);
   handleHttp2Probe = (args: Record<string, unknown>) => this.raw.handleHttp2Probe(args);
   handleHttp2FrameBuild = (args: Record<string, unknown>) => this.raw.handleHttp2FrameBuild(args);
+  handleHttp2FrameParse = (args: Record<string, unknown>) => this.raw.handleHttp2FrameParse(args);
   handleNetworkRttMeasure = (args: Record<string, unknown>) =>
     this.raw.handleNetworkRttMeasure(args);
   handleNetworkLatencyStats = (args: Record<string, unknown>) =>

@@ -131,6 +131,20 @@ export const transportTools: Tool[] = [
       .string('debugDataEncoding', 'Encoding for debugDataText: utf8 or ascii. Default: utf8')
       .requiredOpenWorld('frameType'),
   ),
+  tool('http2_frame_parse', (t) =>
+    t
+      .desc(
+        'Decode a raw HTTP/2 frame (hex string) back into its header fields and ' +
+          'type-specific payload (SETTINGS entries, PING opaque data, WINDOW_UPDATE increment, ' +
+          'RST_STREAM/GOAWAY error codes, GOAWAY debug data). Inverse of http2_frame_build. ' +
+          'Lenient: malformed payloads set decodeError but still return payloadHex.',
+      )
+      .string(
+        'frameHex',
+        'HTTP/2 frame as a hex string (9-byte header + payload). Whitespace tolerated.',
+      )
+      .requiredOpenWorld('frameHex'),
+  ),
   tool('dns_resolve', (t) =>
     t
       .desc(

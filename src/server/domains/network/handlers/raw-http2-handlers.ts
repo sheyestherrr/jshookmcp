@@ -13,7 +13,7 @@ import {
   parseStringArray as parseStringArrayHelper,
   parseOptionalBoolean as parseOptionalBooleanHelper,
 } from './raw-helpers';
-import { buildHttp2Frame } from '@server/domains/network/http2-raw';
+import { buildHttp2Frame, parseHttp2Frame } from '@server/domains/network/http2-raw';
 import type { Http2FrameBuildInput, Http2SettingsEntry } from '@server/domains/network/http2-raw';
 import { emitEvent, parseNumberArg } from './shared';
 import { isLikelyTextHttpBody } from '@server/domains/network/http-raw';
@@ -250,6 +250,27 @@ export class RawHttp2Handlers {
       typeCode: result.typeCode,
       streamId: result.streamId,
       flags: result.flags,
+      payloadBytes: result.payloadBytes,
+      timestamp: new Date().toISOString(),
+    });
+
+    return R.ok()
+      .merge(result as unknown as Record<string, unknown>)
+      .json();
+  }
+
+  async handleHttp2FrameParse(args: Record<string, unknown>) {
+    const frameHex = parseRawString(args.frameHex, 'frameHex', { allowEmpty: false });
+    if (!frameHex) {
+      throw new Error('frameHex is required');
+    }
+
+    const result = parseHttp2Frame(frameHex);
+
+    emitEvent(this.eventBus, 'network:http2_frame_parsed', {
+      frameType: result.frameType,
+      typeCode: result.typeCode,
+      streamId: result.streamId,
       payloadBytes: result.payloadBytes,
       timestamp: new Date().toISOString(),
     });

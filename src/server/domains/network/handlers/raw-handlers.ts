@@ -52,4 +52,8 @@ export class RawHandlers extends RawLatencyHandlers {
   handleHttp2FrameBuild(args: Record<string, unknown>) {
     return this.http2.handleHttp2FrameBuild(args);
   }
+
+  handleHttp2FrameParse(args: Record<string, unknown>) {
+    return this.http2.handleHttp2FrameParse(args);
+  }
 }

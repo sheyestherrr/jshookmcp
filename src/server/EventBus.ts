@@ -64,6 +64,13 @@ export interface ServerEventMap {
     success: boolean;
     timestamp: string;
   };
+  'network:http2_frame_parsed': {
+    frameType: string;
+    typeCode: number;
+    streamId: number;
+    payloadBytes: number;
+    timestamp: string;
+  };
   'v8:heap_captured': { snapshotId: string; sizeBytes: number; timestamp: string };
   'tls:keylog_started': { filePath: string; timestamp: string };
   'tls:probe_completed': { host: string; port: number; success: boolean; timestamp: string };

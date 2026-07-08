@@ -515,4 +515,152 @@ describe('extractAuthFromRequests', () => {
 
     expect(findings).toEqual([]);
   });
+
+  // -----------------------------------------------------------------------
+  // Modern signing schemes (AWS SigV4 / Aliyun ACS3 / DPoP / OAuth2 client_assertion)
+  // -----------------------------------------------------------------------
+  it('detects AWS SigV4 in the Authorization header as a signature finding', async () => {
+    const value =
+      'AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20260708/us-east-1/s3/aws4_request, ' +
+      'SignedHeaders=host;x-amz-date, Signature=f0e8d87c5b9a3b2a1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b';
+    const findings = extractAuthFromRequests([req({ headers: { authorization: value } })]);
+
+    expect(findings).toHaveLength(1);
+    const finding = getFinding(findings);
+    expect(finding.source).toBe('signature');
+    expect(finding.scheme).toBe('aws-sigv4');
+    expect(finding.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('does not double-report the SigV4 Authorization as a generic header finding', async () => {
+    const value =
+      'AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20260708/us-east-1/s3/aws4_request';
+    const findings = extractAuthFromRequests([req({ headers: { Authorization: value } })]);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.source).toBe('signature');
+  });
+
+  it('detects AWS presigned URL query params as signature findings', async () => {
+    const url =
+      `${TEST_URLS.api}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAEXAMPLE/20260708/us-east-1/s3/aws4_request` +
+      `&X-Amz-Signature=f0e8d87c5b9a3b2a1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b` +
+      `&X-Amz-Date=20260708T120000Z`;
+    const findings = extractAuthFromRequests([req({ url })]);
+
+    const signatures = findings.filter((f) => f.source === 'signature');
+    expect(signatures.length).toBeGreaterThan(0);
+    for (const f of signatures) {
+      expect(f.scheme).toBe('aws-sigv4');
+      expect(f.source).toBe('signature');
+    }
+  });
+
+  it('detects Aliyun ACS3 signature header', async () => {
+    const findings = extractAuthFromRequests([
+      req({ headers: { 'x-acs-signature': 'a'.repeat(40) } }),
+    ]);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.source).toBe('signature');
+    expect(findings[0]!.scheme).toBe('aliyun-acs3');
+  });
+
+  it('detects ACS3 in the Authorization header', async () => {
+    const value =
+      'ACS3-HMAC-SHA256 Credential=foo/bar, SignedHeaders=host, Signature=' + 'a'.repeat(40);
+    const findings = extractAuthFromRequests([req({ headers: { authorization: value } })]);
+
+    expect(findings[0]!.source).toBe('signature');
+    expect(findings[0]!.scheme).toBe('aliyun-acs3');
+  });
+
+  it('detects a DPoP proof header', async () => {
+    const jwt = 'eyJhbGciOiJFUzI1NiJ9.eyJ0b2tlbiI6Inh5eiJ9.signaturepart';
+    const findings = extractAuthFromRequests([req({ headers: { DPoP: jwt } })]);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.source).toBe('signature');
+    expect(findings[0]!.scheme).toBe('dpop');
+  });
+
+  it('detects OAuth2 client_assertion in a JSON body', async () => {
+    const findings = extractAuthFromRequests([
+      req({
+        postData: JSON.stringify({
+          grant_type: 'client_credentials',
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+          client_assertion: 'eyJhbGciOiJSUzI1NiJ9.payload.signature',
+        }),
+      }),
+    ]);
+
+    const sig = findings.find((f) => f.scheme === 'oauth2-client-assertion');
+    expect(sig).toBeDefined();
+    expect(sig!.source).toBe('signature');
+  });
+
+  it('detects OAuth2 client_assertion in a form-urlencoded body', async () => {
+    const body = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+      client_assertion: 'eyJhbGciOiJSUzI1NiJ9.payload.signature',
+    }).toString();
+    const findings = extractAuthFromRequests([req({ postData: body })]);
+
+    const sig = findings.find((f) => f.scheme === 'oauth2-client-assertion');
+    expect(sig).toBeDefined();
+    expect(sig!.source).toBe('signature');
+  });
+
+  it('also recovers generic token fields from a form-urlencoded body', async () => {
+    const body = new URLSearchParams({
+      token: 'abcdef0123456789verylongtoken',
+    }).toString();
+    const findings = extractAuthFromRequests([req({ postData: body })]);
+
+    expect(findings.some((f) => f.header === 'token' && f.source === 'body')).toBe(true);
+  });
+
+  it('does not classify a plain bearer token as a signature', async () => {
+    const findings = extractAuthFromRequests([
+      req({ headers: { authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig' } }),
+    ]);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.source).toBe('header');
+    expect(findings[0]!.scheme).toBeUndefined();
+  });
+
+  it('keeps signature findings sorted alongside other findings by confidence', async () => {
+    const findings = extractAuthFromRequests([
+      req({
+        headers: {
+          'x-api-key': 'a'.repeat(30),
+          authorization:
+            'AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20260708/us-east-1/s3/aws4_request, Signature=' +
+            'f0e8d87c5b9a3b2a1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b',
+        },
+      }),
+    ]);
+
+    for (let i = 1; i < findings.length; i++) {
+      expect(findings[i - 1]!.confidence).toBeGreaterThanOrEqual(findings[i]!.confidence);
+    }
+    const sources = findings.map((f) => f.source);
+    expect(sources).toContain('signature');
+    expect(sources).toContain('header');
+  });
+
+  it('dedupes identical signature values across requests', async () => {
+    const value =
+      'AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20260708/us-east-1/s3/aws4_request, Signature=' +
+      'f0e8d87c5b9a3b2a1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b';
+    const findings = extractAuthFromRequests([
+      req({ headers: { authorization: value } }),
+      req({ headers: { authorization: value } }),
+    ]);
+
+    expect(findings).toHaveLength(1);
+  });
 });

@@ -358,8 +358,8 @@
   "network": {
     "domain": "network",
     "dims": {
-      "d1_toolCount": 37,
-      "d2_testFiles": 37,
+      "d1_toolCount": 38,
+      "d2_testFiles": 38,
       "d3_coverageExcluded": [
         "src/server/domains/network/handlers.ts",
         "src/server/domains/network/handlers.impl.core.ts",
@@ -370,7 +370,7 @@
         "src/server/domains/network/handlers.impl.core.runtime.intercept.ts",
         "src/server/domains/network/handlers.impl.core.runtime.performance.ts"
       ],
-      "d4_bareCatch": 15,
+      "d4_bareCatch": 16,
       "d5_handleSafeRefs": 55,
       "d6_doc": {
         "hasClaude": true,

@@ -260,3 +260,130 @@ export function buildHttp2Frame(input: Http2FrameBuildInput): BuiltHttp2Frame {
     frameHex: frame.toString('hex'),
   };
 }
+
+export interface ParsedHttp2Frame {
+  frameType: SupportedHttp2FrameType;
+  typeCode: number;
+  streamId: number;
+  flags: number;
+  payloadBytes: number;
+  payloadHex: string;
+  settings?: Http2SettingsEntry[];
+  pingOpaqueDataHex?: string;
+  windowSizeIncrement?: number;
+  errorCode?: number;
+  lastStreamId?: number;
+  debugDataHex?: string;
+  decodeError?: string;
+}
+
+const HTTP2_FRAME_TYPE_BY_CODE: Record<number, SupportedHttp2FrameType> = {
+  0x0: 'DATA',
+  0x3: 'RST_STREAM',
+  0x4: 'SETTINGS',
+  0x6: 'PING',
+  0x7: 'GOAWAY',
+  0x8: 'WINDOW_UPDATE',
+};
+
+function normalizeHexInput(value: string, field: string): Buffer {
+  const normalized = value.replace(/\s+/g, '').trim();
+  if (normalized.length === 0) {
+    throw new Error(`${field} must be a non-empty hexadecimal string`);
+  }
+  if (normalized.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(normalized)) {
+    throw new Error(`${field} must be an even-length hexadecimal string`);
+  }
+  return Buffer.from(normalized, 'hex');
+}
+
+export function parseHttp2Frame(frameHex: string): ParsedHttp2Frame {
+  const buffer = normalizeHexInput(frameHex, 'frameHex');
+  if (buffer.length < 9) {
+    throw new Error('frameHex must be at least 9 bytes (9-byte header)');
+  }
+
+  const payloadLength = (buffer[0]! << 16) | (buffer[1]! << 8) | buffer[2]!;
+  const typeCode = buffer[3]!;
+  const flags = buffer[4]!;
+  const streamId = buffer.readUInt32BE(5) & 0x7fff_ffff;
+
+  const frameType: SupportedHttp2FrameType = HTTP2_FRAME_TYPE_BY_CODE[typeCode] ?? 'RAW';
+
+  if (9 + payloadLength > buffer.length) {
+    throw new Error(
+      `truncated frame: header declares ${String(payloadLength)} payload bytes but only ${String(buffer.length - 9)} remain`,
+    );
+  }
+
+  const payload = buffer.subarray(9, 9 + payloadLength);
+  const payloadHex = payload.toString('hex');
+
+  const result: ParsedHttp2Frame = {
+    frameType,
+    typeCode,
+    streamId,
+    flags,
+    payloadBytes: payload.length,
+    payloadHex,
+  };
+
+  // Lenient semantic decode — failures populate decodeError but never throw, so the
+  // raw payloadHex stays available for analysing malformed captures.
+  switch (frameType) {
+    case 'SETTINGS': {
+      if (payload.length % 6 !== 0) {
+        result.decodeError = `SETTINGS payload length ${String(payload.length)} is not a multiple of 6`;
+        break;
+      }
+      const entries: Http2SettingsEntry[] = [];
+      for (let i = 0; i < payload.length; i += 6) {
+        entries.push({
+          id: payload.readUInt16BE(i),
+          value: payload.readUInt32BE(i + 2),
+        });
+      }
+      result.settings = entries;
+      break;
+    }
+    case 'PING': {
+      if (payload.length !== 8) {
+        result.decodeError = `PING payload length ${String(payload.length)} is not 8`;
+        break;
+      }
+      result.pingOpaqueDataHex = payloadHex;
+      break;
+    }
+    case 'WINDOW_UPDATE': {
+      if (payload.length !== 4) {
+        result.decodeError = `WINDOW_UPDATE payload length ${String(payload.length)} is not 4`;
+        break;
+      }
+      result.windowSizeIncrement = payload.readUInt32BE(0) & 0x7fff_ffff;
+      break;
+    }
+    case 'RST_STREAM': {
+      if (payload.length !== 4) {
+        result.decodeError = `RST_STREAM payload length ${String(payload.length)} is not 4`;
+        break;
+      }
+      result.errorCode = payload.readUInt32BE(0);
+      break;
+    }
+    case 'GOAWAY': {
+      if (payload.length < 8) {
+        result.decodeError = `GOAWAY payload length ${String(payload.length)} is less than 8`;
+        break;
+      }
+      result.lastStreamId = payload.readUInt32BE(0) & 0x7fff_ffff;
+      result.errorCode = payload.readUInt32BE(4);
+      if (payload.length > 8) {
+        result.debugDataHex = payload.subarray(8).toString('hex');
+      }
+      break;
+    }
+    // DATA / RAW carry no structured payload — payloadHex is the result.
+  }
+
+  return result;
+}
