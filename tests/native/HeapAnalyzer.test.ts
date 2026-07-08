@@ -10,9 +10,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // deterministic synthetic data on any platform (fixes CI failures where
 // PID 1234 doesn't exist in the container).
 vi.mock('node:fs', async () => {
-  const actual = (await vi.importActual('node:fs')) as typeof import('node:fs');
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
   return {
     ...actual,
+    default: actual,
     readFileSync: (...args: Parameters<typeof actual.readFileSync>) => {
       const path = String(args[0]);
       if (path.startsWith('/proc/') && path.endsWith('/maps')) {
