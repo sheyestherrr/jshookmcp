@@ -574,5 +574,6 @@
   "nemu_session_info": "在不执行 native 代码的情况下检查一个仿真器会话，返回时间戳、导出符号、未解析导入、构造器故障和活动会话数。",
   "browser_list_workers": "通过 Target.getTargets 枚举 Service Worker / Shared Worker / 专用 Web Worker 目标。随后用 browser_worker_scripts(targetId=...) 导出某 worker 已加载的脚本——对分析 PWA / SW 承载的鉴权代码必不可少。",
   "browser_worker_scripts": "为 worker 目标挂载 CDP 会话并导出其已解析的脚本（相当于 get_all_scripts，但作用域限定在 worker）。Debugger.enable 会重放 scriptParsed 事件，因此 worker 已加载的脚本也会被返回。",
-  "browser_font_fingerprint": "枚举本地已安装字体用于指纹分析。主路径是 Local Font Access API（queryLocalFonts，Chromium 103+）；不可用或被拒时回退到一组精简的 document.fonts.check 探针。返回检测到的字体集合、用于比对的稳定哈希，并可选地伪造字体指纹。"
+  "browser_font_fingerprint": "枚举本地已安装字体用于指纹分析。主路径是 Local Font Access API（queryLocalFonts，Chromium 103+）；不可用或被拒时回退到一组精简的 document.fonts.check 探针。返回检测到的字体集合、用于比对的稳定哈希，并可选地伪造字体指纹。",
+  "http2_frame_parse": "解码原始 HTTP/2 帧（hex 字符串），还原头部字段与按类型解码的载荷（SETTINGS 条目、PING opaque data、WINDOW_UPDATE 窗口增量、RST_STREAM/GOAWAY 错误码、GOAWAY debug data）。是 http2_frame_build 的逆操作。宽松模式：畸形载荷会设置 decodeError 但仍返回 payloadHex。"
 }
