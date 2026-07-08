@@ -12,7 +12,7 @@ vi.mock('node:fs', () => ({
   readFileSync: (p: string) => mockReadFileSync(p),
 }));
 
-import { parseMinidump } from '@native/MinidumpParser';
+import { parseMinidump, resolveAddress, resolveAddressBatch } from '@native/MinidumpParser';
 
 beforeEach(() => {
   mockReadFileSync.mockReset();
@@ -132,5 +132,267 @@ describe('parseMinidump — stream directory loop', () => {
     expect(r.systemInfo?.processorArchitecture).toBe('x64');
     expect(r.systemInfo?.numberOfProcessors).toBe(4);
     expect(r.systemInfo?.buildNumber).toBe(19045);
+  });
+});
+
+describe('parseMinidump — thread list', () => {
+  it('parses ThreadListStream entries', () => {
+    // MINIDUMP_THREAD = 48 bytes: threadId(u32) suspendCount(u32) priorityClass(u32)
+    // priority(u32) teb(u64) stackStart(u64) stackMemSize(u32) alignment(u32)
+    // stackRva(u32) ctxRva(u32)
+    const THREAD_SZ = 48;
+    const threadData = Buffer.alloc(4 + THREAD_SZ * 2);
+    threadData.writeUInt32LE(2, 0); // count
+    // Thread 0 at offset 4
+    const t0 = 4;
+    threadData.writeUInt32LE(1234, t0);
+    threadData.writeUInt32LE(0, t0 + 4);
+    threadData.writeUInt32LE(32, t0 + 8);
+    threadData.writeUInt32LE(0, t0 + 12);
+    // teb at t0+16 (skip)
+    threadData.writeBigUInt64LE(BigInt(0x7ffe0000), t0 + 24); // stackStart
+    threadData.writeUInt32LE(4096, t0 + 32); // stackMemSize
+    threadData.writeUInt32LE(0, t0 + 36); // alignment
+    threadData.writeUInt32LE(0, t0 + 40); // stackRva
+    threadData.writeUInt32LE(999, t0 + 44); // ctxRva
+    // Thread 1 at offset 4 + 48 = 52
+    const t1 = 52;
+    threadData.writeUInt32LE(5678, t1);
+    threadData.writeUInt32LE(1, t1 + 4);
+    threadData.writeUInt32LE(16, t1 + 8);
+    threadData.writeUInt32LE(2, t1 + 12);
+    threadData.writeBigUInt64LE(BigInt(0x1000), t1 + 24);
+    threadData.writeUInt32LE(8192, t1 + 32);
+    threadData.writeUInt32LE(0, t1 + 36);
+    threadData.writeUInt32LE(0, t1 + 40);
+    threadData.writeUInt32LE(888, t1 + 44);
+    const dirOffset = 32;
+    const dataOffset = dirOffset + 12;
+    const buf = Buffer.concat([
+      header(1, dirOffset),
+      dirEntry(3, threadData.length, dataOffset),
+      threadData,
+    ]);
+    mockReadFileSync.mockReturnValue(buf);
+    const r = parseMinidump('/threads.dmp');
+    expect(r.threads).toHaveLength(2);
+    expect(r.threads[0]?.threadId).toBe(1234);
+    expect(r.threads[0]?.stackSize).toBe(4096);
+    expect(r.threads[1]?.threadId).toBe(5678);
+    expect(r.threads[1]?.priority).toBe(2);
+  });
+});
+
+describe('parseMinidump — module list', () => {
+  it('parses ModuleListStream with version info', () => {
+    // MINIDUMP_MODULE: base(u64) size(u32) checksum(u32) timestamp(u32) nameRva(u32)
+    // version(u16*4) + CV record(u32*4) + misc(u32*2) + reserved(u64*2) = 72 bytes
+    const MOD_SZ = 72;
+    const mod = Buffer.alloc(4 + MOD_SZ);
+    mod.writeUInt32LE(1, 0);
+    mod.writeBigUInt64LE(BigInt(0x7ff70000), 4);
+    mod.writeUInt32LE(0x100000, 12);
+    mod.writeUInt32LE(0, 16);
+    mod.writeUInt32LE(0, 20);
+    mod.writeUInt32LE(0xffffffff, 24); // nameRva → invalid → '(unknown)'
+    mod.writeUInt16LE(10, 28);
+    mod.writeUInt16LE(0, 30);
+    mod.writeUInt16LE(19041, 32);
+    mod.writeUInt16LE(5465, 34);
+    const dirOffset = 32;
+    const dataOffset = dirOffset + 12;
+    const buf = Buffer.concat([header(1, dirOffset), dirEntry(4, mod.length, dataOffset), mod]);
+    mockReadFileSync.mockReturnValue(buf);
+    const r = parseMinidump('/mod.dmp');
+    expect(r.modules).toHaveLength(1);
+    expect(r.modules[0]?.baseAddress).toBe('0x7ff70000');
+    expect(r.modules[0]?.size).toBe(0x100000);
+    expect(r.modules[0]?.name).toBe('(unknown)');
+    expect(r.modules[0]?.timestamp).toBe('n/a');
+    expect(r.modules[0]?.version).toBe('10.0.19041.5465');
+  });
+});
+
+describe('parseMinidump — memory lists', () => {
+  it('parses MemoryListStream (32-bit)', () => {
+    const mem = Buffer.alloc(4 + 20);
+    mem.writeUInt32LE(1, 0);
+    mem.writeBigUInt64LE(BigInt(0x10000000), 4);
+    mem.writeBigUInt64LE(BigInt(0x2000), 12);
+    mem.writeUInt32LE(500, 20);
+    const dirOffset = 32;
+    const dataOffset = dirOffset + 12;
+    const buf = Buffer.concat([header(1, dirOffset), dirEntry(5, mem.length, dataOffset), mem]);
+    mockReadFileSync.mockReturnValue(buf);
+    const r = parseMinidump('/mem.dmp');
+    expect(r.memoryRanges).toHaveLength(1);
+    expect(r.memoryRanges[0]?.startAddress).toBe('0x10000000');
+    expect(r.memoryRanges[0]?.size).toBe(0x2000);
+  });
+
+  it('parses Memory64ListStream', () => {
+    const m64 = Buffer.alloc(16 + 16);
+    m64.writeBigUInt64LE(BigInt(1), 0);
+    m64.writeBigUInt64LE(BigInt(0), 8);
+    m64.writeBigUInt64LE(BigInt(0x20000000), 16);
+    m64.writeBigUInt64LE(BigInt(0x4000), 24);
+    const dirOffset = 32;
+    const dataOffset = dirOffset + 12;
+    const buf = Buffer.concat([header(1, dirOffset), dirEntry(9, m64.length, dataOffset), m64]);
+    mockReadFileSync.mockReturnValue(buf);
+    const r = parseMinidump('/mem64.dmp');
+    expect(r.hasMemory64).toBe(true);
+    expect(r.memoryRanges).toHaveLength(1);
+    expect(r.memoryRanges[0]?.startAddress).toBe('0x20000000');
+    expect(r.memoryRanges[0]?.size).toBe(0x4000);
+  });
+});
+
+describe('parseMinidump — exception stream', () => {
+  it('parses ExceptionStream with params', () => {
+    const exc = Buffer.alloc(40 + 16);
+    exc.writeUInt32LE(5678, 0);
+    exc.writeUInt32LE(0, 4);
+    exc.writeUInt32LE(0xc0000005, 8);
+    exc.writeUInt32LE(0, 12);
+    exc.writeBigUInt64LE(BigInt(0), 16);
+    exc.writeBigUInt64LE(BigInt(0x7ffa1234), 24);
+    exc.writeUInt32LE(2, 32);
+    exc.writeUInt32LE(0, 36);
+    exc.writeBigUInt64LE(BigInt(0xdead0001), 40);
+    exc.writeBigUInt64LE(BigInt(0xdead0002), 48);
+    const dirOffset = 32;
+    const dataOffset = dirOffset + 12;
+    const buf = Buffer.concat([header(1, dirOffset), dirEntry(6, exc.length, dataOffset), exc]);
+    mockReadFileSync.mockReturnValue(buf);
+    const r = parseMinidump('/exc.dmp');
+    expect(r.exception).toBeDefined();
+    expect(r.exception?.exceptionCode).toBe('0xc0000005');
+    expect(r.exception?.threadId).toBe(5678);
+    expect(r.exception?.numParams).toBe(2);
+    expect(r.exception?.params).toHaveLength(2);
+  });
+});
+
+describe('resolveAddress', () => {
+  it('resolves to a module when address is within module range', () => {
+    const r = resolveAddress(
+      {
+        success: true,
+        filePath: '',
+        fileSize: 0,
+        streamCount: 0,
+        streams: [],
+        threads: [],
+        memoryRanges: [],
+        hasMemory64: false,
+        modules: [
+          {
+            baseAddress: '0x1000',
+            size: 100,
+            name: 'test.dll',
+            timestamp: 'n/a',
+            checksum: 0,
+            version: '1.0',
+          },
+        ],
+      },
+      '0x1050',
+    );
+    expect(r.found).toBe(true);
+    expect(r.module?.name).toBe('test.dll');
+    expect(r.offset).toBe(0x50);
+  });
+
+  it('resolves to a memory range when not in a module', () => {
+    const r = resolveAddress(
+      {
+        success: true,
+        filePath: '',
+        fileSize: 0,
+        streamCount: 0,
+        streams: [],
+        threads: [],
+        modules: [],
+        hasMemory64: false,
+        memoryRanges: [{ startAddress: '0x2000', size: 500, dataOffset: 100 }],
+      },
+      '0x2100',
+    );
+    expect(r.found).toBe(true);
+    expect(r.memoryRange?.startAddress).toBe('0x2000');
+    expect(r.offset).toBe(0x100);
+  });
+
+  it('returns not found for an address outside all ranges', () => {
+    const r = resolveAddress(
+      {
+        success: true,
+        filePath: '',
+        fileSize: 0,
+        streamCount: 0,
+        streams: [],
+        threads: [],
+        modules: [],
+        memoryRanges: [],
+        hasMemory64: false,
+      },
+      '0xffff',
+    );
+    expect(r.found).toBe(false);
+  });
+
+  it('handles non-hex input gracefully', () => {
+    const r = resolveAddress(
+      {
+        success: true,
+        filePath: '',
+        fileSize: 0,
+        streamCount: 0,
+        streams: [],
+        threads: [],
+        modules: [],
+        memoryRanges: [],
+        hasMemory64: false,
+      },
+      'not-an-address',
+    );
+    expect(r.found).toBe(false);
+    expect(r.address).toBe('not-an-address');
+  });
+});
+
+describe('resolveAddressBatch', () => {
+  it('resolves multiple addresses with queryIndex', () => {
+    const r = resolveAddressBatch(
+      {
+        success: true,
+        filePath: '',
+        fileSize: 0,
+        streamCount: 0,
+        streams: [],
+        threads: [],
+        memoryRanges: [],
+        hasMemory64: false,
+        modules: [
+          {
+            baseAddress: '0x1000',
+            size: 200,
+            name: 'a.dll',
+            timestamp: 'n/a',
+            checksum: 0,
+            version: '1',
+          },
+        ],
+      },
+      ['0x1050', '0x2000', '0x1080'],
+    );
+    expect(r).toHaveLength(3);
+    expect(r[0]?.queryIndex).toBe(0);
+    expect(r[0]?.found).toBe(true);
+    expect(r[1]?.queryIndex).toBe(1);
+    expect(r[1]?.found).toBe(false);
+    expect(r[2]?.queryIndex).toBe(2);
+    expect(r[2]?.found).toBe(true);
   });
 });
