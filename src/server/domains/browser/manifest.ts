@@ -64,6 +64,7 @@ const registrations = defineMethodRegistrations<H, (typeof toolDefinitions)[numb
     { tool: 'page_session_storage', method: 'handlePageSessionStorageDispatch' },
     { tool: 'browser_passkey_seed', method: 'handleBrowserPasskeySeed' },
     { tool: 'page_press_key', method: 'handlePagePressKey' },
+    { tool: 'page_handle_dialog', method: 'handlePageHandleDialog' },
     { tool: 'captcha_detect', method: 'handleCaptchaDetect' },
     { tool: 'captcha_wait', method: 'handleCaptchaWait' },
     { tool: 'captcha_config', method: 'handleCaptchaConfig' },

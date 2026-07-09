@@ -26,6 +26,12 @@ export interface CookieReadOptions {
   urls?: string[];
 }
 
+export interface DialogHandlerOptions {
+  accept?: boolean;
+  promptText?: string;
+  dismissAll?: boolean;
+}
+
 type PageCookie = Awaited<ReturnType<Page['cookies']>>[number];
 
 export interface ClickOptions {
@@ -596,6 +602,80 @@ export class PageController {
     const cookies = await this.getCookies();
     await page.deleteCookie(...cookies);
     logger.info('All cookies cleared');
+  }
+
+  async handleDialog(options: DialogHandlerOptions = {}): Promise<{
+    handled: boolean;
+    message: string;
+    type?: string;
+    dialogMessage?: string;
+  }> {
+    const page = await this.collector.getActivePage();
+    const accept = options.accept !== false;
+    const dismissAll = options.dismissAll !== false;
+    const promptText = options.promptText;
+
+    const handleSingle = (dialog: {
+      type: () => string;
+      message: () => string;
+      accept: (promptText?: string) => Promise<void>;
+      dismiss: () => Promise<void>;
+    }): Promise<{ type: string; dialogMessage: string }> => {
+      const dialogType = dialog.type();
+      const dialogMessage = dialog.message();
+      if (accept) {
+        if (dialogType === 'prompt' && promptText !== undefined) {
+          return dialog.accept(promptText).then(() => ({ type: dialogType, dialogMessage }));
+        }
+        return dialog.accept().then(() => ({ type: dialogType, dialogMessage }));
+      }
+      return dialog.dismiss().then(() => ({ type: dialogType, dialogMessage }));
+    };
+
+    if (dismissAll) {
+      page.on('dialog', async (dialog) => {
+        try {
+          await dialog.dismiss();
+        } catch {
+          // Dialog may already be closed
+        }
+      });
+      return {
+        handled: true,
+        message: 'Persistent dialog handler installed — all future dialogs will be auto-dismissed.',
+      };
+    }
+
+    try {
+      const result = await new Promise<{ type: string; dialogMessage: string }>(
+        (resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Timed out waiting for a dialog (30s). No dialog appeared.'));
+          }, 30_000);
+
+          page.once('dialog', async (dialog) => {
+            clearTimeout(timeout);
+            try {
+              resolve(await handleSingle(dialog));
+            } catch (err) {
+              reject(err);
+            }
+          });
+        },
+      );
+
+      const verb = accept ? 'accepted' : 'dismissed';
+      return {
+        handled: true,
+        message: `${verb} ${result.type} dialog${result.dialogMessage ? `: "${result.dialogMessage}"` : ''}`,
+        type: result.type,
+        dialogMessage: result.dialogMessage || undefined,
+      };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      logger.warn(`Dialog handler: ${errMsg}`);
+      return { handled: false, message: errMsg };
+    }
   }
 
   async setViewport(width: number, height: number): Promise<void> {

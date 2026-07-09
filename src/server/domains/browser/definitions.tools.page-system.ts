@@ -104,4 +104,20 @@ export const browserPageSystemTools: Tool[] = [
   tool('page_press_key', (t) =>
     t.desc('Simulate a key press by name.').string('key', 'Key name').requiredOpenWorld('key'),
   ),
+  tool('page_handle_dialog', (t) =>
+    t
+      .desc(
+        'Control how JavaScript dialogs (alert/confirm/prompt/beforeunload) are answered. ' +
+          'By default installs a persistent handler that auto-dismisses all dialogs. ' +
+          'Set dismissAll=false for one-shot handling of the next dialog.',
+      )
+      .boolean('accept', 'Accept (true) or dismiss (false) the dialog', { default: true })
+      .string('promptText', 'Response text for prompt dialogs (accept must be true)')
+      .boolean(
+        'dismissAll',
+        'Install a persistent handler that auto-dismisses all future dialogs',
+        { default: false },
+      )
+      .idempotent(),
+  ),
 ];

@@ -25,6 +25,7 @@ import { TabWorkflowHandlers } from '@server/domains/browser/handlers/tab-workfl
 import { DetailedDataHandlers } from '@server/domains/browser/handlers/detailed-data';
 import { TargetEvaluationHandlers } from '@server/domains/browser/handlers/target-evaluation';
 import { TargetControlHandlers } from '@server/domains/browser/handlers/target-control';
+import { PageDialogHandlers } from '@server/domains/browser/handlers/page-dialog';
 import { JsdomHandlers } from '@server/domains/browser/handlers/jsdom-tools';
 import { TabRegistry } from '@modules/browser/TabRegistry';
 import type { BrowserAttachRuntimeSnapshot } from '@server/runtime/ServerRuntimeState';
@@ -62,6 +63,7 @@ export interface BrowserHandlerModules {
   pageInteraction: PageInteractionHandlers;
   pageEvaluation: PageEvaluationHandlers;
   targetEvaluation: TargetEvaluationHandlers;
+  pageDialog: PageDialogHandlers;
   pageData: PageDataHandlers;
 
   consoleHandlers: ConsoleHandlers;
@@ -142,6 +144,10 @@ export function initializeBrowserHandlerModules(
     pageData: new PageDataHandlers({
       pageController: deps.pageController,
       ...commonDeps,
+    }),
+
+    pageDialog: new PageDialogHandlers({
+      pageController: deps.pageController,
     }),
 
     consoleHandlers: new ConsoleHandlers({

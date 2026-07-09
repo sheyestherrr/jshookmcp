@@ -385,6 +385,19 @@ describe('browser tool definitions', () => {
       expect(getInputSchema(tool).required).toContain('key');
     });
 
+    it('page_handle_dialog accepts optional accept/promptText/dismissAll', async () => {
+      const tool = getToolByName(browserPageSystemTools, 'page_handle_dialog');
+      const schema = getInputSchema(tool);
+      // No required fields — all params are optional with defaults
+      expect(schema.required).toBeUndefined();
+      const props = schema.properties;
+      expect(props).toHaveProperty('accept');
+      expect(props).toHaveProperty('promptText');
+      expect(props).toHaveProperty('dismissAll');
+      expect((props.accept as Record<string, unknown>).default).toBe(true);
+      expect((props.dismissAll as Record<string, unknown>).default).toBe(false);
+    });
+
     it('page_inject_script requires script', async () => {
       const tool = getToolByName(browserPageSystemTools, 'page_inject_script');
       expect(getInputSchema(tool).required).toContain('script');

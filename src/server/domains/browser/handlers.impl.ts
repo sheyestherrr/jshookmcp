@@ -32,6 +32,7 @@ import { IndexedDBDumpHandlers } from '@server/domains/browser/handlers/indexedd
 import { DetailedDataHandlers } from '@server/domains/browser/handlers/detailed-data';
 import { TargetEvaluationHandlers } from '@server/domains/browser/handlers/target-evaluation';
 import { TargetControlHandlers } from '@server/domains/browser/handlers/target-control';
+import { PageDialogHandlers } from '@server/domains/browser/handlers/page-dialog';
 import { type JSHeapSearchHandlers } from '@server/domains/browser/handlers/js-heap';
 import { type TabWorkflowHandlers } from '@server/domains/browser/handlers/tab-workflow';
 import { type JsdomHandlers } from '@server/domains/browser/handlers/jsdom-tools';
@@ -103,6 +104,7 @@ export class BrowserToolHandlers {
   private pageInteraction: PageInteractionHandlers;
   private pageEvaluation: PageEvaluationHandlers;
   private targetEvaluation: TargetEvaluationHandlers;
+  private pageDialog: PageDialogHandlers;
   private pageData: PageDataHandlers;
 
   private consoleHandlers: ConsoleHandlers;
@@ -192,6 +194,7 @@ export class BrowserToolHandlers {
     this.pageInteraction = modules.pageInteraction;
     this.pageEvaluation = modules.pageEvaluation;
     this.targetEvaluation = modules.targetEvaluation;
+    this.pageDialog = modules.pageDialog;
     this.pageData = modules.pageData;
 
     this.consoleHandlers = modules.consoleHandlers;
@@ -502,6 +505,10 @@ export class BrowserToolHandlers {
 
   async handlePagePressKey(args: Record<string, unknown>) {
     return this.pageInteraction.handlePagePressKey(args);
+  }
+
+  async handlePageHandleDialog(args: Record<string, unknown>) {
+    return this.pageDialog.handlePageHandleDialog(args);
   }
 
   // ── Page Evaluation ──
@@ -860,6 +867,7 @@ export {
   PageNavigationHandlers,
   PageInteractionHandlers,
   PageEvaluationHandlers,
+  PageDialogHandlers,
   PageDataHandlers,
   ConsoleHandlers,
   ScriptManagementHandlers,
