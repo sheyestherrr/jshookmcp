@@ -27,6 +27,8 @@ const registrations = defineMethodRegistrations<H, (typeof streamingTools)[numbe
     { tool: 'grpc_get_calls', method: 'handleGrpcGetCallsTool' },
     { tool: 'fetch_stream_monitor', method: 'handleFetchStreamMonitorTool' },
     { tool: 'fetch_stream_get_events', method: 'handleFetchStreamGetEventsTool' },
+    { tool: 'webrtc_monitor', method: 'handleWebRtcMonitorTool' },
+    { tool: 'webrtc_get_events', method: 'handleWebRtcGetEventsTool' },
   ],
 });
 

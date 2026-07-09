@@ -141,4 +141,35 @@ export const streamingTools: Tool[] = [
       .boolean('fullData', 'Include full captured event data when available', { default: false })
       .readOnly(),
   ),
+  tool('webrtc_monitor', (t) =>
+    t
+      .desc(
+        'Enable or disable capture of WebRTC data-channel traffic. Wraps RTCPeerConnection ' +
+          'in-page (no CDP coverage for RTCDataChannel): intercepts createDataChannel (local ' +
+          'channels) and the datachannel event (remote channels), capturing both outbound send() ' +
+          'and inbound message events. Use webrtc_get_events to read captured messages.',
+      )
+      .enum('action', ['enable', 'disable'], 'Monitor action', { default: 'enable' })
+      .string('urlFilter', 'Regex filter (reserved — currently informational)')
+      .number('maxEvents', 'Maximum messages in memory (default: 2000)', {
+        default: 2000,
+        minimum: 1,
+        maximum: 50000,
+      })
+      .boolean('persistent', 'Survive page navigations via evaluateOnNewDocument')
+      .openWorld(),
+  ),
+  tool('webrtc_get_events', (t) =>
+    t
+      .desc(
+        'Get messages captured by the WebRTC data-channel monitor. Set fullData=true to include ' +
+          'full message data. Filter by channel label and direction (sent/received).',
+      )
+      .string('label', 'Filter by data-channel label')
+      .enum('direction', ['sent', 'received'], 'Message direction filter')
+      .number('limit', 'Maximum messages', { default: 100, minimum: 1, maximum: 5000 })
+      .number('offset', 'Pagination offset', { default: 0, minimum: 0 })
+      .boolean('fullData', 'Include full captured message data when available', { default: false })
+      .readOnly(),
+  ),
 ];

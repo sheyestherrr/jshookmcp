@@ -12,6 +12,7 @@ import { WsHandlers } from './handlers/ws-handlers';
 import { SseHandlers } from './handlers/sse-handlers';
 import { GrpcHandlers } from './handlers/grpc-handlers';
 import { FetchStreamHandlers } from './handlers/fetch-stream-handlers';
+import { WebRtcHandlers } from './handlers/webrtc-handlers';
 
 export type {
   TextToolResponse,
@@ -36,6 +37,7 @@ export class StreamingToolHandlers {
   private sse: SseHandlers;
   private grpc: GrpcHandlers;
   private fetchStream: FetchStreamHandlers;
+  private webrtc: WebRtcHandlers;
 
   // Backward-compat aliases for tests that access (handler as any).xxx
   protected get wsConnections() {
@@ -61,6 +63,7 @@ export class StreamingToolHandlers {
     this.sse = new SseHandlers(this.state);
     this.grpc = new GrpcHandlers(this.state);
     this.fetchStream = new FetchStreamHandlers(this.state);
+    this.webrtc = new WebRtcHandlers(this.state);
   }
 
   // ── WebSocket ──
@@ -141,5 +144,20 @@ export class StreamingToolHandlers {
 
   async handleFetchStreamGetEventsTool(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => this.fetchStream.handleFetchStreamGetEvents(args));
+  }
+
+  // ── WebRTC data channels ──
+
+  async handleWebRtcMonitorTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const action = String(args['action'] ?? 'enable');
+      return action === 'disable'
+        ? this.webrtc.handleWebRtcMonitorDisable(args)
+        : this.webrtc.handleWebRtcMonitorEnable(args);
+    });
+  }
+
+  async handleWebRtcGetEventsTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => this.webrtc.handleWebRtcGetEvents(args));
   }
 }
