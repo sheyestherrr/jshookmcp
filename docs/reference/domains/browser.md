@@ -21,7 +21,7 @@
 - browser + instrumentation
 - browser + workflow
 
-## 工具清单（72）
+## 工具清单（73）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -70,6 +70,7 @@
 | `page_session_storage` | 读取、写入或清空当前域名下的 sessionStorage。 |
 | `browser_passkey_seed` | 向浏览器注入 WebAuthn/Passkey 虚拟凭据，用于 FIDO2 认证自动化测试。 |
 | `page_press_key` | 模拟按下键盘按键，如 Enter、Escape 或 ArrowDown。 |
+| `page_handle_dialog` | 控制 JavaScript 对话框（alert/confirm/prompt/beforeunload）的处理方式。默认安装持久处理器，自动关闭所有后续对话框；设置 dismissAll=false 则改为单次处理下一个对话框（带 30s 超时）。 |
 | `captcha_detect` | 使用 AI 视觉分析检测页面上是否有 CAPTCHA 验证码。 |
 | `captcha_wait` | 等待用户手动完成 CAPTCHA 验证码。 |
 | `captcha_config` | 配置 CAPTCHA 验证码的检测和自动处理行为。 |

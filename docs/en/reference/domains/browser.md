@@ -21,7 +21,7 @@ Primary browser control and DOM interaction domain; the usual entry point for mo
 - browser + instrumentation
 - browser + workflow
 
-## Full tool list (72)
+## Full tool list (73)
 
 | Tool | Description |
 | --- | --- |
@@ -70,6 +70,7 @@ Primary browser control and DOM interaction domain; the usual entry point for mo
 | `page_session_storage` | Read, write, or clear sessionStorage entries for the current origin. |
 | `browser_passkey_seed` | Seed a WebAuthn/Passkey credential into the browser for test automation. |
 | `page_press_key` | Simulate a key press by name. |
+| `page_handle_dialog` | Control how JavaScript dialogs (alert/confirm/prompt/beforeunload) are answered. By default installs a persistent handler that auto-dismisses all dialogs. Set dismissAll=false for one-shot handling of the next dialog. |
 | `captcha_detect` | Detect CAPTCHAs on the current page. |
 | `captcha_wait` | Block until the user manually solves the CAPTCHA. |
 | `captcha_config` | Configure CAPTCHA detection sensitivity and solver backend. |
