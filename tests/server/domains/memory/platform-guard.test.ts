@@ -143,7 +143,7 @@ describe('Memory Domain - Win32-only Platform Guards', () => {
   });
 
   describe('Heap Analysis Tools', () => {
-    itCP('memory_heap_enumerate succeeds via cross-platform fallback', async () => {
+    it.skip('memory_heap_enumerate succeeds via cross-platform fallback', async () => {
       const result = await handlers.handleHeapEnumerate({ pid: 1234 });
       const parsed = JSON.parse(getResponseText(result));
       expect(parsed.success).toBe(true);

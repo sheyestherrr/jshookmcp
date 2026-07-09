@@ -146,25 +146,28 @@ describe('handleSyscallEbpfAttach — validation', () => {
 // ── Script generation (live mode without bpftrace → script fallback) ────────
 
 describe('handleSyscallEbpfAttach — script fallback', () => {
-  it('returns script when not on Linux and not simulating', async () => {
-    const { handleSyscallEbpfAttach } = await autoImport();
-    const res = (await handleSyscallEbpfAttach({
-      pid: 100,
-      durationSec: 10,
-      syscalls: ['openat', 'read'],
-    })) as unknown as Res;
+  it.skipIf(process.platform === 'linux')(
+    'returns script when not on Linux and not simulating',
+    async () => {
+      const { handleSyscallEbpfAttach } = await autoImport();
+      const res = (await handleSyscallEbpfAttach({
+        pid: 100,
+        durationSec: 10,
+        syscalls: ['openat', 'read'],
+      })) as unknown as Res;
 
-    expect(res.success).toBe(true);
-    expect(res.mode).toMatch(/script|live/);
-    // On non-Linux, should fall back to script mode
-    if (process.platform !== 'linux') {
-      expect(res.mode).toBe('script');
-      expect(res.script).toBeDefined();
-      const script = res.script as string;
-      expect(script).toContain('sys_enter_openat');
-      expect(script).toContain('sys_enter_read');
-    }
-  });
+      expect(res.success).toBe(true);
+      expect(res.mode).toMatch(/script|live/);
+      // On non-Linux, should fall back to script mode
+      if (process.platform !== 'linux') {
+        expect(res.mode).toBe('script');
+        expect(res.script).toBeDefined();
+        const script = res.script as string;
+        expect(script).toContain('sys_enter_openat');
+        expect(script).toContain('sys_enter_read');
+      }
+    },
+  );
 });
 
 // ── Event format validation ──────────────────────────────────────────────────

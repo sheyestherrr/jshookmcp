@@ -71,9 +71,9 @@ describe('memory manifest platform filtering', () => {
     expect(manifest.domain).toBe('memory');
   });
 
-  it(`should have ${IS_WIN32 ? 33 : 22} tools on ${process.platform}`, async () => {
+  it(`should have ${IS_WIN32 ? 34 : 31} tools on ${process.platform}`, async () => {
     const manifest = await loadManifestWithPlatform();
-    const expected = IS_WIN32 ? 34 : 22;
+    const expected = IS_WIN32 ? 34 : 31;
     expect(manifest.registrations.length).toBe(expected);
   });
 
