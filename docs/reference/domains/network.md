@@ -21,7 +21,7 @@
 - browser + network
 - network + workflow
 
-## 工具清单（39）
+## 工具清单（41）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -49,6 +49,8 @@
 | `http2_frame_build` | 构建任意支持类型（DATA、SETTINGS、PING、WINDOW_UPDATE、RST_STREAM、GOAWAY、RAW）的原始 HTTP/2 二进制帧。返回 9 字节帧头和完整帧的十六进制字符串，可通过 tcp_write 或 tls_write 发送，用于协议级模糊测试与注入。 |
 | `http2_frame_parse` | 解码原始 HTTP/2 帧（hex 字符串），还原头部字段与按类型解码的载荷（SETTINGS 条目、PING opaque data、WINDOW_UPDATE 窗口增量、RST_STREAM/GOAWAY 错误码、GOAWAY debug data）。是 http2_frame_build 的逆操作。宽松模式：畸形载荷会设置 decodeError 但仍返回 payloadHex。 |
 | `network_http2_fingerprint` | 从捕获的 HTTP/2 客户端连接前言（SETTINGS 帧 + stream-0 WINDOW_UPDATE + 任意 PRIORITY 帧）计算 Akamai 风格的 HTTP/2 指纹。返回规范字符串 "&lt;settings&gt;\|&lt;window_update&gt;\|&lt;priority&gt;"、sha256 哈希及结构化字段。自动检测并跳过 24 字节连接前言魔数。零内置特征库——结构化字段为权威输出，"坏"由调用者判断。 |
+| `grpc_frame_parse` | 把捕获的 gRPC / gRPC-Web body 拆成长度前缀的消息流。每条消息 = 1 字节压缩标志 + 4 字节大端长度 + 载荷。检测 gRPC-Web trailer 帧（标志位 7）与压缩标志（位 0）。宽松模式：截断的尾部消息仍会带 warning 输出。每条消息同时给出 payloadHex 与 payloadBase64——把 payloadBase64 直接喂给 protobuf_decode_raw 即可完成 gRPC 解码链（捕获 body → grpc_frame_parse → protobuf_decode_raw）。 |
+| `grpc_frame_build` | 把一条或多条消息编码为 gRPC / gRPC-Web 长度前缀 body。是 grpc_frame_parse 的逆操作，用于构造测试或重放 body。每条消息接收 payloadHex 及可选的 compressed / isTrailer 标志。 |
 | `network_rtt_measure` | 测量到目标主机的网络往返时间（RTT），支持 TCP、TLS 和 HTTP 三种探测模式。多次迭代平滑抖动，返回 min/max/avg/p50/p95 统计数据。非回环目标需要显式授权。 |
 | `network_latency_stats` | 重复探测目标 URL 并计算延迟百分位统计（p50/p90/p95/p99）。 |
 | `network_traceroute` | 基于 ICMP 的路由追踪，逐跳返回 RTT 与错误分类。Windows 无需管理员权限；Linux/macOS 需要 root 或 CAP_NET_RAW。 |
