@@ -374,4 +374,53 @@ describe('AdvancedToolHandlers raw DNS/HTTP handlers', () => {
       );
     });
   });
+
+  describe('grpc_frame_parse / grpc_frame_build', () => {
+    it('parses a gRPC body into messages via the handler', async () => {
+      // flag=0, length=5, payload="Hello"
+      const body = parseJson<any>(
+        await handler.handleGrpcFrameParse({ data: '000000000548656c6c6f' }),
+      );
+      expect(body.success).toBe(true);
+      expect(body.frames).toHaveLength(1);
+      expect(body.frames[0].payloadHex).toBe('48656c6c6f');
+      expect(body.frames[0].payloadBase64).toBe('SGVsbG8=');
+      expect(body.warnings).toHaveLength(0);
+    });
+
+    it('accepts base64 input (CDP response body workflow)', async () => {
+      const hex = '000000000548656c6c6f';
+      const b64 = Buffer.from(hex, 'hex').toString('base64');
+      const body = parseJson<any>(
+        await handler.handleGrpcFrameParse({ data: b64, encoding: 'base64' }),
+      );
+      expect(body.frames[0].payloadHex).toBe('48656c6c6f');
+    });
+
+    it('builds a gRPC body and round-trips through parse', async () => {
+      const built = parseJson<any>(
+        await handler.handleGrpcFrameBuild({
+          messages: [{ payloadHex: '48656c6c6f' }, { payloadHex: '0102', compressed: 1 }],
+        }),
+      );
+      expect(built.success).toBe(true);
+      expect(built.messageCount).toBe(2);
+      const reparsed = parseJson<any>(await handler.handleGrpcFrameParse({ data: built.hex }));
+      expect(reparsed.frames[0].payloadHex).toBe('48656c6c6f');
+      expect(reparsed.frames[1].compressed).toBe(true);
+    });
+
+    it('throws when data is missing or encoding is invalid', async () => {
+      await expect(handler.handleGrpcFrameParse({})).rejects.toThrow('data is required');
+      await expect(
+        handler.handleGrpcFrameParse({ data: '00', encoding: 'binary' }),
+      ).rejects.toThrow('encoding must be one of');
+    });
+
+    it('throws when messages is not an array', async () => {
+      await expect(handler.handleGrpcFrameBuild({ messages: 'bad' })).rejects.toThrow(
+        'messages must be an array',
+      );
+    });
+  });
 });

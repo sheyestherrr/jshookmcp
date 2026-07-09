@@ -76,6 +76,16 @@ export interface ServerEventMap {
     frameCount: number;
     timestamp: string;
   };
+  'network:grpc_frame_parsed': {
+    messageCount: number;
+    totalBytes: number;
+    timestamp: string;
+  };
+  'network:grpc_frame_built': {
+    messageCount: number;
+    bytes: number;
+    timestamp: string;
+  };
   'v8:heap_captured': { snapshotId: string; sizeBytes: number; timestamp: string };
   'tls:keylog_started': { filePath: string; timestamp: string };
   'tls:probe_completed': { host: string; port: number; success: boolean; timestamp: string };

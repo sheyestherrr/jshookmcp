@@ -163,6 +163,45 @@ export const transportTools: Tool[] = [
       )
       .requiredOpenWorld('framesHex'),
   ),
+  tool('grpc_frame_parse', (t) =>
+    t
+      .desc(
+        'Split a captured gRPC / gRPC-Web body into its length-prefixed messages. Each message ' +
+          'is 1 compressed-flag byte + 4-byte big-endian length + payload. Detects gRPC-Web ' +
+          'trailer frames (flag bit 7) and the compression flag (bit 0). Lenient: a truncated ' +
+          'trailing message is still emitted with a warning. Each message exposes payloadHex and ' +
+          'payloadBase64 — feed payloadBase64 directly to protobuf_decode_raw to complete the ' +
+          'gRPC decode chain (capture body -> grpc_frame_parse -> protobuf_decode_raw).',
+      )
+      .string('data', 'gRPC body as hex (default) or base64. Whitespace tolerated.')
+      .string(
+        'encoding',
+        'Input encoding: hex (default) or base64. Use base64 for CDP response bodies.',
+      )
+      .requiredOpenWorld('data'),
+  ),
+  tool('grpc_frame_build', (t) =>
+    t
+      .desc(
+        'Encode one or more messages into a gRPC / gRPC-Web length-prefixed body. Inverse of ' +
+          'grpc_frame_parse — for constructing test or replay bodies. Each message takes ' +
+          'payloadHex plus optional compressed / isTrailer flags.',
+      )
+      .array(
+        'messages',
+        {
+          type: 'object',
+          properties: {
+            payloadHex: { type: 'string' },
+            compressed: { type: 'number' },
+            isTrailer: { type: 'number' },
+          },
+          required: ['payloadHex'],
+        },
+        'Array of { payloadHex, compressed?, isTrailer? }',
+      )
+      .requiredOpenWorld('messages'),
+  ),
   tool('dns_resolve', (t) =>
     t
       .desc(

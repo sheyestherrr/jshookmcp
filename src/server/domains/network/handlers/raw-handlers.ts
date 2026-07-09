@@ -5,16 +5,19 @@
 import type { EventBus, ServerEventMap } from '@server/EventBus';
 import { RawDnsHttpHandlers } from './raw-dns-http-handlers';
 import { RawHttp2Handlers } from './raw-http2-handlers';
+import { RawGrpcHandlers } from './raw-grpc-handlers';
 import { RawLatencyHandlers } from './raw-latency-handlers';
 
 export class RawHandlers extends RawLatencyHandlers {
   private readonly dnsHttp: RawDnsHttpHandlers;
   private readonly http2: RawHttp2Handlers;
+  private readonly grpc: RawGrpcHandlers;
 
   constructor(eventBus?: EventBus<ServerEventMap>) {
     super(eventBus);
     this.dnsHttp = new RawDnsHttpHandlers(eventBus);
     this.http2 = new RawHttp2Handlers(eventBus);
+    this.grpc = new RawGrpcHandlers(eventBus);
   }
 
   handleDnsResolve(args: Record<string, unknown>) {
@@ -59,5 +62,13 @@ export class RawHandlers extends RawLatencyHandlers {
 
   handleNetworkHttp2Fingerprint(args: Record<string, unknown>) {
     return this.http2.handleNetworkHttp2Fingerprint(args);
+  }
+
+  handleGrpcFrameParse(args: Record<string, unknown>) {
+    return this.grpc.handleGrpcFrameParse(args);
+  }
+
+  handleGrpcFrameBuild(args: Record<string, unknown>) {
+    return this.grpc.handleGrpcFrameBuild(args);
   }
 }
