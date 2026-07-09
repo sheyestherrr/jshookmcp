@@ -22,7 +22,7 @@
 | **测试** | **16216 passed / 30 skipped**（998 files passed；latest full check after Session 31 sourcemap inferMissing） |
 | **typecheck** | 0 errors（root + extension-sdk） |
 | **lint / format** | 全绿 |
-| **git — committed** | Through Session 31 `feat(sourcemap): reconstruct_tree inferMissing`。Session 30 `feat(network): integrate JA3/JA4 known-bad matching`。前置 3 个 review-fix atomic commit：`488af23d` fix(process) hollowing Linux skip + `2aee71e0` chore(registry) regenerate + `9d964a1b` docs sync。Session 29 memory 标注 `963e44f5` 已 push origin/master。 |
+| **git — committed** | Through `5233dfeb`（lychee exclude）。本轮 8 commit：`488af23d` hollowing Linux skip + `2aee71e0` regen + `9d964a1b` docs sync + `a006877e` Session 30 network bot-detect + `1b47f750` Session 31 sourcemap inferMissing + `e8a6ef3d` index sync + `2f502685` Linux CI fixes（memory-manifest 22→31 + platform-guard heap_enumerate + syscall-hook ebpf Linux skip）+ `5233dfeb` lychee exclude star-history。4 个 Actions workflow 全绿（CI/Docs Deploy/CodeQL/Repo Hygiene）。Session 29 `963e44f5` 已 push。 |
 | **git — dirty** | 核心文档（handoff/current-status/INDEX 等）已 tracked，正常 `git add`；仅新增 research/ 文件需 `git add -f`（.ccg/ 在 .gitignore L120）。 |
 
 最终验证命令：
@@ -111,6 +111,19 @@ VITEST_MAX_WORKERS=4 pnpm check      # 16145 passed | 30 skipped
 - **工具数** 577 不变（扩展现有工具）；`scripts/update-domain-scores.mjs`：sourcemap 9.4→9.6。
 - **诚实缺口**：skeleton 是 name+位置投影，不恢复真实 source 代码（需 sourcesContent）；v4 scopes 接入 reconstruct（research #5）仍未做。
 
+## CI 修复批次（2026-07-09，Session 31 后）— 4 个 Actions workflow 全绿
+
+Session 30 修 hollowing itWin32 后，CI 从长期红转绿，但暴露了一批被 hollowing failure 掩盖的预存 Linux CI 问题。本轮逐一修复，现在 CI / Docs Deploy / CodeQL / Repo Hygiene 全绿。
+
+- **`24e75906` platform-guard skip**：skip 3 个 itCP（heap_stats/heap_anomalies/integrity_check）——cross-platform fallback 读 /proc/pid/maps（CI 无 pid 1234）+ node:fs mock conflict，同 a9f6d927 HeapAnalyzer 根因。
+- **`2f502685` Linux CI 三连修**：
+  1. `memory-manifest-platform.test.ts`：22→31 tools on linux（E5-D 让 heap/PE cross-platform，WIN32_ONLY_TOOLS 只剩 3 个 breakpoint/find_accesses/speedhack，Linux 实际 31；test 期望 22 过时）。
+  2. `platform-guard.test.ts` heap_enumerate itCP→it.skip（第 4 个同根因 itCP，之前漏）。
+  3. `syscall-hook/ebpf-attach.test.ts`：'returns script when not on Linux' test 用 `it.skipIf(linux)`——test 本意非 Linux script fallback，Linux 上 handler 走 live mode，断言 success:true 无条件跑会 fail。
+- **`5233dfeb` lychee exclude star-history.com**：README/README.zh.md 的 star-history 图片 API 间歇 503（外部服务波动，非真坏链），多次 push 都让 Repo Hygiene lychee fail。`.lychee.toml` exclude 该域名。
+- **结果**：CI 5m56s success / Docs Deploy success / CodeQL success / Repo Hygiene 37s success。origin/master 8 commit（488af23d..5233dfeb）全绿。
+- **教训（#49）**：hollowing-detection Linux failure（4de821b2 起）长期掩盖了 memory-manifest/platform-guard/syscall-hook 的 Linux CI 问题——一个红 CI 会阻塞后续 test 的暴露。修 hollowing 后必须复查同批被掩盖的 failure，不能只修第一个红就收工。
+
 ## NEXT PHASE DECISION — Session 32
 
 ### ✅ sourcemap inferMissing（Session 31 已完成）
@@ -125,14 +138,28 @@ Session 30 闭合 research #4：network 9.6→9.8。HTTP/2 SETTINGS + Canvas/WGL
 
 Session 29 已在 4 处标注 `// TODO(macOS/Linux)` + `// NOTE`，指向 `research/memory.md #3`。**实现需 Mac 真机**——ptrace/mach_vm_protect FFI 在 Windows 上无法调试。**Windows session 不再碰**，除非有 Mac 真机环境。
 
-### ⭐ Session 32 候选（Windows 可做）
+### ⭐ Session 32 首选：browser #2 page_cookies cross-origin（correctness bug）
 
-1. **browser 9.5→9.7**：research CDP all-origin cookies + launch enum validation。
-2. **sourcemap 9.6→9.8**：research #4 sourcemap_diff（比较两版 source map）或 #5 v4 scopes 接入 reconstruct。
-3. **network 9.8→9.85+**：HTTP/2 SETTINGS fingerprint（Akamai）接入 bot-detect（Session 30 诚实缺口）。
-4. 其余 9.2 域各自 research 的 P0/P1 真实 gap（见 `domain-10-plan.md`）。
+**问题**：`page_cookies` `action:'get'` 用 `page.cookies()` 无 URL → Puppeteer 只返回当前页面 URL 的 cookies，漏掉 HttpOnly + cross-site cookies（ad-iframe / widget / CDN 设的）。这是 correctness bug（工具声称管理 cookies 但漏逆向最重要的一类）。
 
-下一位接手：读 `current-status.md` → 选上述候选或某个 9.2 域 → TDD/gate/文档/commit。
+**修法**：`page-data.ts:145-150` `action:'get'` 改用 CDP `Network.getAllCookies`（返回浏览器所有 origin 的 cookies）+ 可选 `urls?: string[]` filter（调用者可缩回 per-URL scope）。PageController 加 thin CDP helper（`src/modules/collector/` 目前无 `Network.getAllCookies` 引用，已确认）。
+
+**TDD**：
+1. 测试 `page_cookies({action:'get'})` 调 `Network.getAllCookies`（mock CDP）→ 返回所有 origin cookies（含 HttpOnly cross-site）
+2. 测试 `urls?: string[]` filter 缩回 per-URL scope
+3. 回归：`action:'set'/'clear'` 行为不变
+4. gate（targeted + metadata 577 不变 + typecheck + lint + scan）+ 文档 + atomic commit
+
+**工作量**：S（单 commit）。+0.1→9.6。若续做 #5 `page_handle_dialog`（S，+0.1）可达 9.7。
+
+### 其他候选
+
+1. **sourcemap #4 sourcemap_diff**（+0.2→9.8，纯逻辑 Windows 可做）
+2. **network HTTP/2 SETTINGS**（Session 30 诚实缺口延续，+0.05→9.85）
+3. **browser #5 page_handle_dialog**（S，+0.1，可续 browser 达 9.7）
+4. 其余 9.2 域各自 research 的 P0/P1 真实 gap（见 `domain-10-plan.md`）
+
+下一位接手：读 `current-status.md` → browser #2 首选 → TDD/gate/文档/commit。
 
 ---
 
