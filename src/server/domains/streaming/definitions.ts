@@ -75,4 +75,38 @@ export const streamingTools: Tool[] = [
       })
       .openWorld(),
   ),
+  tool('grpc_monitor', (t) =>
+    t
+      .desc(
+        'Enable or disable live capture of gRPC / gRPC-Web calls. gRPC calls are ' +
+          'detected by content-type application/grpc(-web)?(+proto)? on the HTTP/2 response. ' +
+          'On loadingFinished the response body is pulled (base64) and split into length-prefixed ' +
+          'messages; feed each message payloadBase64 to protobuf_decode_raw to complete the decode ' +
+          'chain. Must be enabled before navigating so requests are captured from the start.',
+      )
+      .enum('action', ['enable', 'disable'], 'Monitor action')
+      .string('urlFilter', 'Regex filter for the gRPC request URL (action=enable)')
+      .number('maxCalls', 'Maximum captured gRPC calls in memory (action=enable, default: 100)', {
+        default: 100,
+        minimum: 1,
+        maximum: 5000,
+      })
+      .required('action')
+      .destructive(),
+  ),
+  tool('grpc_get_calls', (t) =>
+    t
+      .desc(
+        'Get captured gRPC / gRPC-Web calls with parsed message summaries. Set fullMessages=true ' +
+          'to include the parsed message arrays (each carries payloadBase64 — feed to ' +
+          'protobuf_decode_raw). Without fullMessages only per-call counts and flags are returned.',
+      )
+      .string('urlFilter', 'Regex filter on the gRPC request URL')
+      .number('limit', 'Maximum calls to return', { default: 50, minimum: 1, maximum: 1000 })
+      .number('offset', 'Pagination offset', { default: 0, minimum: 0 })
+      .boolean('fullMessages', 'Include parsed message arrays (payloads) for each call', {
+        default: false,
+      })
+      .readOnly(),
+  ),
 ];

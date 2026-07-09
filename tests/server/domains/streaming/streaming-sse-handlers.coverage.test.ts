@@ -8,8 +8,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runInNewContext } from 'node:vm';
-import { RingBuffer } from '@utils/RingBuffer';
-import type { StreamingSharedState } from '@server/domains/streaming/handlers/shared';
+import {
+  createStreamingSharedState,
+  type StreamingSharedState,
+} from '@server/domains/streaming/handlers/shared';
 import { SseHandlers } from '@server/domains/streaming/handlers/sse-handlers';
 import { parseJson } from '@tests/server/domains/shared/mock-factories';
 import { buildTestUrl } from '@tests/shared/test-urls';
@@ -36,16 +38,7 @@ function createState(collectorOverrides: Record<string, unknown> = {}): Streamin
     getActivePage: vi.fn().mockResolvedValue(mockPage),
   } as unknown as StreamingSharedState['collector'];
 
-  return {
-    collector,
-    wsSession: null,
-    wsListeners: null,
-    wsConfig: { enabled: false, maxFrames: 1000 },
-    wsFramesByRequest: new Map(),
-    wsFrameOrder: new RingBuffer(1000),
-    wsConnections: new Map(),
-    sseConfig: { maxEvents: 2000 },
-  };
+  return createStreamingSharedState(collector);
 }
 
 describe('SseHandlers', () => {

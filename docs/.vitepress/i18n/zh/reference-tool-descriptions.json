@@ -580,5 +580,7 @@
   "sourcemap_diff": "对比两个 source map 版本：哪些源文件被新增/移除、每个源的 mapping segment 增减，以及超过可配置阈值（默认 1 行）的生成位置偏移。",
   "network_http2_fingerprint": "从捕获的 HTTP/2 客户端连接前言（SETTINGS 帧 + stream-0 WINDOW_UPDATE + 任意 PRIORITY 帧）计算 Akamai 风格的 HTTP/2 指纹。返回规范字符串 \"<settings>|<window_update>|<priority>\"、sha256 哈希及结构化字段。自动检测并跳过 24 字节连接前言魔数。零内置特征库——结构化字段为权威输出，\"坏\"由调用者判断。",
   "grpc_frame_parse": "把捕获的 gRPC / gRPC-Web body 拆成长度前缀的消息流。每条消息 = 1 字节压缩标志 + 4 字节大端长度 + 载荷。检测 gRPC-Web trailer 帧（标志位 7）与压缩标志（位 0）。宽松模式：截断的尾部消息仍会带 warning 输出。每条消息同时给出 payloadHex 与 payloadBase64——把 payloadBase64 直接喂给 protobuf_decode_raw 即可完成 gRPC 解码链（捕获 body → grpc_frame_parse → protobuf_decode_raw）。",
-  "grpc_frame_build": "把一条或多条消息编码为 gRPC / gRPC-Web 长度前缀 body。是 grpc_frame_parse 的逆操作，用于构造测试或重放 body。每条消息接收 payloadHex 及可选的 compressed / isTrailer 标志。"
+  "grpc_frame_build": "把一条或多条消息编码为 gRPC / gRPC-Web 长度前缀 body。是 grpc_frame_parse 的逆操作，用于构造测试或重放 body。每条消息接收 payloadHex 及可选的 compressed / isTrailer 标志。",
+  "grpc_monitor": "启用/停用 gRPC / gRPC-Web 调用的实时捕获。gRPC 调用通过 HTTP/2 响应的 content-type application/grpc(-web)?(+proto)? 检测。loadingFinished 时拉取响应 body（base64）并拆成长度前缀消息；把每条消息的 payloadBase64 喂给 protobuf_decode_raw 即完成解码链。必须在导航前启用，才能从头捕获请求。",
+  "grpc_get_calls": "获取已捕获的 gRPC / gRPC-Web 调用及解析出的消息摘要。设 fullMessages=true 返回解析后的消息数组（每条含 payloadBase64，可直接喂 protobuf_decode_raw）；不设则只返回每调用的消息计数与标志。"
 }

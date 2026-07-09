@@ -10,6 +10,7 @@ import { handleSafe, type ToolResponse } from '@server/domains/shared/ResponseBu
 import { createStreamingSharedState, type StreamingSharedState } from './handlers/shared';
 import { WsHandlers } from './handlers/ws-handlers';
 import { SseHandlers } from './handlers/sse-handlers';
+import { GrpcHandlers } from './handlers/grpc-handlers';
 
 export type {
   TextToolResponse,
@@ -23,6 +24,8 @@ export type {
   WsMonitorListeners,
   SseEventRecord,
   SseEnableResult,
+  GrpcCallRecord,
+  GrpcMonitorListeners,
 } from './handlers/shared';
 
 export class StreamingToolHandlers {
@@ -30,6 +33,7 @@ export class StreamingToolHandlers {
   protected state: StreamingSharedState;
   private ws: WsHandlers;
   private sse: SseHandlers;
+  private grpc: GrpcHandlers;
 
   // Backward-compat aliases for tests that access (handler as any).xxx
   protected get wsConnections() {
@@ -53,6 +57,7 @@ export class StreamingToolHandlers {
     this.state = createStreamingSharedState(collector);
     this.ws = new WsHandlers(this.state);
     this.sse = new SseHandlers(this.state);
+    this.grpc = new GrpcHandlers(this.state);
   }
 
   // ── WebSocket ──
@@ -102,4 +107,21 @@ export class StreamingToolHandlers {
   handleSseMonitorEnable = (args: Record<string, unknown>) => this.sse.handleSseMonitorEnable(args);
   handleSseGetEvents = (args: Record<string, unknown>) => this.sse.handleSseGetEvents(args);
   handleSseExportCapture = (args: Record<string, unknown>) => this.sse.handleSseExportCapture(args);
+
+  // ── gRPC ──
+
+  async handleGrpcMonitorTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => this.handleGrpcMonitorDispatch(args));
+  }
+
+  async handleGrpcGetCallsTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => this.grpc.handleGrpcGetCalls(args));
+  }
+
+  handleGrpcMonitorDispatch = (args: Record<string, unknown>) => {
+    const action = String(args['action'] ?? '');
+    return action === 'disable'
+      ? this.grpc.handleGrpcMonitorDisable(args)
+      : this.grpc.handleGrpcMonitorEnable(args);
+  };
 }

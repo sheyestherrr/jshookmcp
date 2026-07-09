@@ -4,6 +4,7 @@
 
 import type { CodeCollector } from '@server/domains/shared/modules/collector';
 import { RingBuffer } from '@utils/RingBuffer';
+import type { GrpcMessageFrame } from '@server/domains/network/grpc-raw';
 
 export type TextToolResponse = {
   content: [{ type: 'text'; text: string }];
@@ -65,6 +66,36 @@ export interface SseEnableResult {
   existingEvents: number;
 }
 
+// ── gRPC ──
+
+/** A captured gRPC / gRPC-Web call (one HTTP/2 request + response). */
+export interface GrpcCallRecord {
+  requestId: string;
+  url: string;
+  method: string;
+  /** HTTP response status (0 until responseReceived). */
+  status: number;
+  requestContentType: string | null;
+  responseContentType: string | null;
+  createdTimestamp: number;
+  finishedTimestamp: number | null;
+  requestBodyBytes: number;
+  responseBodyBytes: number;
+  /** Messages parsed from the response body (primary RE target; reliably base64 via getResponseBody). */
+  responseMessages: GrpcMessageFrame[];
+  /** Messages parsed from the request body (best-effort; CDP request-body encoding is less reliable for binary). */
+  requestMessages: GrpcMessageFrame[];
+  warnings: string[];
+  /** Set when Network.getResponseBody failed for this call. */
+  bodyError: string | null;
+}
+
+export interface GrpcMonitorListeners {
+  requestWillBeSent: CdpEventHandler;
+  responseReceived: CdpEventHandler;
+  loadingFinished: CdpEventHandler;
+}
+
 export interface StreamingSharedState {
   collector: CodeCollector;
 
@@ -92,6 +123,19 @@ export interface StreamingSharedState {
   >;
 
   sseConfig: { maxEvents: number; urlFilterRaw?: string };
+
+  grpcSession: CdpSessionLike | null;
+  grpcListeners: GrpcMonitorListeners | null;
+  grpcConfig: {
+    enabled: boolean;
+    maxCalls: number;
+    urlFilterRaw?: string;
+    urlFilter?: RegExp;
+  };
+  /** requestId → captured call (insertion order = capture order). */
+  grpcCalls: Map<string, GrpcCallRecord>;
+  /** requestIds in capture order, for ring-buffer cap enforcement. */
+  grpcCallOrder: RingBuffer<string>;
 }
 
 export function createStreamingSharedState(collector: CodeCollector): StreamingSharedState {
@@ -104,7 +148,18 @@ export function createStreamingSharedState(collector: CodeCollector): StreamingS
     wsFrameOrder: new RingBuffer<WsFrameOrderEntry>(1000),
     wsConnections: new Map(),
     sseConfig: { maxEvents: 2000 },
+    grpcSession: null,
+    grpcListeners: null,
+    grpcConfig: { enabled: false, maxCalls: 100 },
+    grpcCalls: new Map(),
+    grpcCallOrder: new RingBuffer<string>(100),
   };
+}
+
+/** True for application/grpc, application/grpc+proto, application/grpc-web(+proto). */
+export function isGrpcContentType(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  return value.trim().toLowerCase().startsWith('application/grpc');
 }
 
 // ── Shared helpers ──

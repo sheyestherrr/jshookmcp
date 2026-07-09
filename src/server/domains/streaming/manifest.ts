@@ -23,6 +23,8 @@ const registrations = defineMethodRegistrations<H, (typeof streamingTools)[numbe
     { tool: 'sse_monitor_enable', method: 'handleSseMonitorEnableTool' },
     { tool: 'sse_get_events', method: 'handleSseGetEventsTool' },
     { tool: 'sse_export_capture', method: 'handleSseExportCaptureTool' },
+    { tool: 'grpc_monitor', method: 'handleGrpcMonitorTool' },
+    { tool: 'grpc_get_calls', method: 'handleGrpcGetCallsTool' },
   ],
 });
 
