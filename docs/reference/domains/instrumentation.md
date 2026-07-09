@@ -26,7 +26,7 @@
 | 工具 | 说明 |
 | --- | --- |
 | `instrumentation_session` | 管理 instrumentation 会话，将 Hook、拦截和 Trace 收拢为统一的可查询容器。 |
-| `instrumentation_session_export` | 待补充中文：Export an instrumentation session snapshot to an artifacts JSON file. |
+| `instrumentation_session_export` | 将插桩会话快照导出为 JSON artifacts 文件 |
 | `instrumentation_operation` | 管理 instrumentation 会话内的操作（Hook、拦截、Trace）。 |
 | `instrumentation_artifact` | 管理 instrumentation 操作捕获的产物（参数、返回值、拦截数据等）。 |
 | `instrumentation_hook_preset` | 在会话内应用预设的 Hook 模板，自动记录捕获到的数据。 |

@@ -67,13 +67,16 @@
 | 25 | (network http2-parse + auth-signatures) | network Phase 3: `http2_frame_parse` (lenient inverse of http2_frame_build, decodeError for malformed payloads) + `extract_auth` signing-scheme recognition (AWS SigV4 header + presigned query, Aliyun ACS3, DPoP, OAuth2 client_assertion; new `source: 'signature'` + `scheme` field; form-urlencoded body fallback). 576→577 tools, 16099→16129 tests. |
 | 26 | (sourcemap indexed + reverse-lookup) | sourcemap Phase 3: indexed (sectioned) source map flattening (`flattenIndexedSourceMap`, sources/names dedupe + offset-remapped mappings) transparent to all parsers + `sourcemap_lookup` reverse mode (original source:line:col → generated position, debugger-breakpoint style). No new tool count (577 unchanged), 16129→16140 tests. |
 | 27 | (syscall-hook dtrace-pair + ETW multi-provider) | syscall-hook Phase 3: `parseDTraceLine` entry/return probe pairing via `dtracePendingEntries` buffer (captures returnValue + duration, emits best-effort return-only on unmatched entry) + `captureWithDTrace` now emits both `:entry`/`:return` probes with monotonic `timestamp` printf + `ETW_PROVIDERS` const map (kernel-process/network/file/image GUIDs) + `buildEtwProviderArgs` + `etwProviders` option threaded through `syscall_start_monitor` (legacy NT Kernel Logger session preserved when omitted). No new tool count (577 unchanged), 16140→16145 tests. |
+| 28 | (network parse_client_hello JA3+JA4) | network Phase 3: `parseClientHello` (RFC 5246 §7.4.1.2 ClientHello wire-byte parser, lenient) + `computeJa3` (Salesforce MD5) + `computeJa4FromClientHello` (FoxIO JA4) → new `network_tls_fingerprint` mode `parse_client_hello` (enum 3→4, required `clientHelloHex`). network 9.4→9.6. No new tool count (577 unchanged), 16145→16167 tests. |
+| 29 | (memory cross-platform gap annotation) | memory: annotated `memory_find_accesses` cross-platform disassembly/breakpoint stubs (**annotation only — NOT implementation**). `// TODO(macOS/Linux)` + `// NOTE` added at: `handlers/find-accesses.ts` (handleFindAccesses entry + `bpEngine` null check), `manifest.ts` (`WIN32_ONLY_TOOLS` set + `null, // hardwareBreakpointEngine` else-branch), `handlers.impl.ts` (`makeDisassemblerAdapter` JSDoc). All point to `research/memory.md #3` (Linux ptrace INT3+SIGTRAP / macOS mach_vm_protect+EXC_BAD_ACCESS parity). Corrected handoff's `#1` typo → `#3` (#1 = instruction-bytes bug, already FIXED Phase 0) + corrected "capstone native binding" misconception (capstone is WASM, cross-platform; real gap = bpEngine). Score unchanged (9.7). No tools/tests/logic change. typecheck + lint + metadata(577) green. |
 
 ## Next 10/10 work
 
 The remaining work is no longer a single wrapper or metadata pass. Treat every
 next increment as a feature-plus-adversarial-test slice:
 
-1. Pick one 9.2 domain and close a real missing capability from its research file.
+1. **首选（Session 30）**：network bot-detect JA3/JA4 集成（research #4）——Session 28 已让 `parse_client_hello` 算 JA3/JA4，但 `bot_detect_analyze` 还没纳入。纯补逻辑、Windows 可做、ROI 高。network 9.6→9.8（虽非 9.2 域，属"闭合遗留缺口"例外）。
+   **次选**：Pick one 9.2 domain and close a real missing capability from its research file.
 2. Add strict schema/runtime validation for every new input path.
 3. Add focused success, negative, and boundary tests.
 4. Run targeted tests, `pnpm metadata:check`, `node scripts/scan-domain-audit.mjs`,

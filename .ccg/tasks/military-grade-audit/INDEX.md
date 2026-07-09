@@ -113,7 +113,7 @@
 | graphql | 9.4 | 6 | `research/graphql.md` | **DONE** Apollo Federation `_service.sdl` introspection |
 | instrumentation | 9.2 | 16 | `research/instrumentation.md` | **DONE** session export + stop/status + strict operation/artifact validation |
 | maintenance | 9.3 | 13 | `research/maintenance.md` | **DONE** sandbox hardening + category-aware artifact cleanup/routing |
-| memory | 9.7 | 34 | `research/memory.md` | **P0 ✅ find_accesses wired readMemory+capstone+pid** |
+| memory | 9.7 | 34 | `research/memory.md` | **P0 ✅ find_accesses wired readMemory+capstone+pid**；跨平台 stub 已标注 (Session 29，等 Mac 真机接 ptrace/mach) |
 | mojo-ipc | 9.2 | 6 | `research/mojo-ipc.md` | **DONE** encode/filter surface + expanded decoder/header metadata + field labels |
 | native-bridge | 9.5 | 6 | `research/native-bridge.md` | **DONE** runtime manifest + Rizin/Binary Ninja parity |
 | native-emulator | 9.2 | 22 | `research/native-emulator.md` | **DONE** session diagnostics + strict Java mock values；next: SIMD/crypto depth |

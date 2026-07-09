@@ -1,6 +1,6 @@
-# 全域军工级审计 — Handoff（2026-07-08 · session 28 · network parse_client_hello JA3+JA4 real ClientHello）
+# 全域军工级审计 — Handoff（2026-07-08 · session 29 · memory cross-platform disassembly gap annotation）
 
-> ⚠️ **.ccg/ 已在 .gitignore 中，handoff 只在本地留存。**
+> ⚠️ **.ccg/ 在 .gitignore（L120），但核心文档（handoff/current-status/INDEX 等 6 个）已 tracked，修改正常 `git add` 即可；仅新增 research/ 等文件需 `git add -f`。**
 > 本文件是下一位 agent 的入口。所有路径相对项目根 `D:\coding\reverse\jshookmcp\`。
 >
 > **导航顺序（必读）**：
@@ -10,7 +10,7 @@
 > 4. 读 `.ccg/tasks/military-grade-audit/domain-10-plan.md`
 > 5. 按要做的域读 `.ccg/tasks/military-grade-audit/research/<domain>.md`
 >
-> **重要澄清**：当前不是全域 10/10。已完成的是 P0/P1 功能项、34 份 research/profile、Phase 2 wrapper pass、Phase 3 大批 feature、Session 23 strict input contract pass、Session 24 browser worker+font、Session 25 network http2-parse+auth-signatures、Session 26 sourcemap indexed+reverse-lookup、Session 27 syscall-hook dtrace-pairing+ETW multi-provider、Session 28 network parse_client_hello JA3+JA4 real ClientHello。当前 34 域人工平均约 9.38；最低分组 9.2。诚实 10/10 仍需真实 feature closure + adversarial/boundary 覆盖 + 跨平台 parity。
+> **重要澄清**：当前不是全域 10/10。已完成的是 P0/P1 功能项、34 份 research/profile、Phase 2 wrapper pass、Phase 3 大批 feature、Session 23 strict input contract pass、Session 24 browser worker+font、Session 25 network http2-parse+auth-signatures、Session 26 sourcemap indexed+reverse-lookup、Session 27 syscall-hook dtrace-pairing+ETW multi-provider、Session 28 network parse_client_hello JA3+JA4 real ClientHello、Session 29 memory find_accesses 跨平台 disassembly/breakpoint stub 注释标注（annotation-only，未实现，等 Mac 真机接 ptrace/mach_vm_protect）。当前 34 域人工平均约 9.38；最低分组 9.2。诚实 10/10 仍需真实 feature closure + adversarial/boundary 覆盖 + 跨平台 parity。
 
 ---
 
@@ -22,8 +22,8 @@
 | **测试** | **16167 passed / 30 skipped**（997 files passed；latest full check after network parse_client_hello (JA3+JA4) session） |
 | **typecheck** | 0 errors（root + extension-sdk） |
 | **lint / format** | 全绿 |
-| **git — committed** | Through `5a63f1f2 feat(syscall-hook): dtrace return-probe pairing + ETW multi-provider capture`。本轮 network parse_client_hello (JA3+JA4) 变更待 atomic commit。 |
-| **git — dirty** | `.ccg/` 是 gitignored，本次需要 `git add -f .ccg/tasks/military-grade-audit/...` 才能把 CCG 文档 commit 上去。 |
+| **git — committed** | Through `4de821b2`（最近 5 个为 Linux CI mock 修复：HeapAnalyzer node:fs mock + hollowing skip）。Session 29 memory src 标注已落地为 `963e44f5`（已 push origin/master）。本轮待 atomic commit：CCG 文档同步 + hollowing-detection Linux test skip 补全 + generated-domains 重生成。 |
+| **git — dirty** | 核心文档（handoff/current-status/INDEX 等）已 tracked，正常 `git add`；仅新增 research/ 文件需 `git add -f`（.ccg/ 在 .gitignore L120）。 |
 
 最终验证命令：
 
@@ -71,34 +71,39 @@ VITEST_MAX_WORKERS=4 pnpm check      # 16145 passed | 30 skipped
 - **测试**：17 parser 单元 + 5 handler 集成。network 928/928，全量 16167/30。
 - **工具数** 577 不变；network 9.4→9.6。
 
-## NEXT PHASE DECISION — Session 29
+## Session 29（2026-07-08）：memory — cross-platform disassembly gap annotation（NOT implementation）
 
-### ⭐ memory 9.7→10：watchpoint/disassembly 跨平台 parity（macOS/Linux）
+完成 handoff Session 29 首选任务：为 `memory_find_accesses` 的跨平台 disassembly/breakpoint stub 标注缺口位置。**纯注释，不写实现代码**——等 vmoranv 在 Mac 真机上 pull 下来接 ptrace/mach_vm_protect native engine。
 
-**⚠️ 特殊约束 — 只写注释/占位，不要实现：**
+- **标注位置**（4 处，全部 `// TODO(macOS/Linux)` + `// NOTE`，指向 `research/memory.md #3`）：
+  1. `handlers/find-accesses.ts` `handleFindAccesses` 入口：NOTE（disassembly Win32-only，macOS/Linux fallback raw hex）+ TODO（wire cross-platform bpEngine：Linux ptrace INT3+SIGTRAP / macOS mach_vm_protect+EXC_BAD_ACCESS，+ process_vm_readv/mach_vm_read reader）
+  2. `manifest.ts` `null, // hardwareBreakpointEngine`（else 分支）：补 research #3 引用
+  3. `manifest.ts` `WIN32_ONLY_TOOLS` 注释：补 ptrace/mach parity 说明 + research #3
+  4. `handlers.impl.ts` `makeDisassemblerAdapter` JSDoc：补跨平台说明（capstone WASM 本身跨平台无需 binding，gap 是 bpEngine）
+- **handoff 笔误修正**：原 handoff 注释模板写 "see research/memory.md #1" + "requires real capstone native binding linkage"——两处不准。#1 是 instruction-bytes bug（Phase 0 已 FIXED），跨平台 parity 真正条目是 **#3**；capstone 是 WASM 跨平台、**不需 native binding**，真正缺的是 bpEngine。已用准确引用 #3 + 准确技术内容。
+- **约束遵守**：不加新测试、不升分（9.7 不变）、不加工具（577 不变）、不改逻辑。
+- **gate**：typecheck 0 errors + lint 全绿 + metadata:check 577 in sync。未跑 memory 域测试（handoff 第 7 步：没改逻辑，不必跑）。
+- **commit 格式**（handoff 第 8 步）：`docs(memory): annotate cross-platform disassembly gaps for Mac parity work`
 
-下一位接手 memory 域时，**只做以下事情**，不写任何实现代码：
+## NEXT PHASE DECISION — Session 30
 
-1. 读 `research/memory.md` 的 `find_accesses` 跨平台缺口
-2. 在 `src/modules/process/memory/` 相关文件里找到 macOS/Linux 的 `find_accesses` 分支（当前是 stub——没有 capstone 反汇编，只有 Windows 用 capstone）
-3. **只写注释**标记缺口位置——在每个 stub/fallback 处写 `// TODO(macOS): wire capstone disassembly — requires real capstone native binding linkage (see research/memory.md #1)`
-4. 在 handler 入口处加 `// NOTE: find_accesses disassembly only functional on Windows; macOS/Linux fallback to raw hex dump. Cross-platform parity tracked at research/memory.md #1.`
-5. 不加新测试（跨平台测试需要 macOS 真机跑，当前 Windows 跑不了）
-6. 不升级分数（9.7 不变，这只是注释/文档同步，不是 capability closure）
-7. **gate：** typecheck + lint + metadata:check 通过即可，不需要跑 memory 域测试（没改逻辑）
-8. **commit 格式：** `docs(memory): annotate cross-platform disassembly gaps for Mac parity work`
-9. **push 上去**，让 vmoranv 在 Mac 上 pull 下来真机写实现
+### ✅ memory 跨平台 parity stub 标注（Session 29 已完成）
 
-**为什么**：capstone native binding 在 Windows/Mac 上的 FFI 路径不同，vmoranv 手头有 Mac 真机用来调试跨平台 disassembly。这轮只标记缺口 + push，不要在 Windows 上猜测 Mac FFI 行为。
+Session 29 已在 4 处标注 `// TODO(macOS/Linux)` + `// NOTE`（find-accesses.ts / manifest.ts / handlers.impl.ts），指向 `research/memory.md #3`。**实现需 Mac 真机**——ptrace(Linux) / mach_vm_protect(macOS) FFI 在 Windows 上无法调试。vmoranv 在 Mac 上 pull 后按 TODO 注释接 native bpEngine + process_vm_readv/mach_vm_read reader，再移除 `WIN32_ONLY_TOOLS` 过滤。**Windows session 不再碰这个**，除非有 Mac 真机环境。
+
+> 注：原 Session 29 约束模板有 2 处笔误已修正——①"see research/memory.md #1"应为 **#3**（#1 是 instruction-bytes bug，Phase 0 已 FIXED）；②"requires real capstone native binding linkage"不准（capstone 是 WASM 跨平台，无需 native binding，真正缺的是 bpEngine）。
+
+### ⭐ network bot-detect JA3/JA4 集成（#4，纯逻辑 Windows 可做）— Session 30 首选
+
+Session 28 已让 `parse_client_hello` 能算 JA3/JA4，但 `bot_detect_analyze` 还没纳入——把 TLS 指纹哈希接入 bot 检测信号集。纯补逻辑，Windows 可做，闭合 network research #4。network 9.6→9.8。
 
 ### 其他候选
 
-1. **network bot-detect JA3/JA4 集成 (#4)**：当前 parse_client_hello 能算 JA3/JA4，但 bot_detect_analyze 还没纳入——纯补逻辑，Windows 可做。
-2. **sourcemap 9.4→9.6**：research #1（sourcesContent null 推断 source skeleton）或 #4（sourcemap_diff）。
-3. **browser 9.5→9.7**：research CDP all-origin cookies + launch enum validation。
-4. 其余 9.2 域各自 research 的 P0/P1 真实 gap。
+1. **sourcemap 9.4→9.6**：research #1（sourcesContent null 推断 source skeleton）或 #4（sourcemap_diff）。
+2. **browser 9.5→9.7**：research CDP all-origin cookies + launch enum validation。
+3. 其余 9.2 域各自 research 的 P0/P1 真实 gap（见 `domain-10-plan.md`）。
 
-下一位接手：读 `current-status.md` → 按上面约束选 memory 或其他域 → TDD/gate/文档/commit。
+下一位接手：读 `current-status.md` → 选 network bot-detect 或其他域 → TDD/gate/文档/commit。
 
 ---
 
@@ -516,5 +521,5 @@ Full rationale is in `current-status.md`. Do not regenerate score history only t
 - **#47**：feature 前先读既有测试是否锁了错误行为，改源码+翻断言到正确行为，再跑全量看影响面
 - **#48**（Session 17 新）：对抗性 review agent 被中断但其 scratch 测试文件救了命——别急着删，跑出 JSON 结果后再清理
 - **MSYS_NO_PATHCONV**：commit 时不全局 export，否则 lefthook corepack 钩子全挂
-- **CCG docs first**：`.ccg/tasks/military-grade-audit` 是本地忽略目录，提交时要 `git add -f`；不能只改 `scripts/update-domain-scores.mjs`
+- **CCG docs first**：`.ccg/tasks/military-grade-audit` 在 .gitignore（L120），但核心文档已 tracked（正常 `git add`，仅新增 research/ 需 `git add -f`）；不能只改 `scripts/update-domain-scores.mjs`
 - **NEVER `git push --no-verify`**：fix failing hooks，push 必须过全预推检查
