@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { filterPoolSlots } from '@modules/dart-inspector/pool-filter';
 
 const SLOTS = [
-  { kind: 'string', preview: 'https://api.example.com', offset: 0 },
+  { kind: 'string', preview: 'api-response-endpoint', offset: 0 },
   { kind: 'smi', preview: '42', offset: 8 },
   { kind: 'string', preview: 'AES-256-Key', offset: 16 },
   { kind: 'functionRef', offset: 24 },
@@ -19,7 +19,7 @@ describe('filterPoolSlots', () => {
   it('filters by value substring (case-insensitive)', () => {
     const r = filterPoolSlots(SLOTS, { valueContains: 'API' });
     expect(r).toHaveLength(1);
-    expect(r[0]!.preview).toBe('https://api.example.com');
+    expect(r[0]!.preview).toBe('api-response-endpoint');
   });
 
   it('combines type + value predicates', () => {
