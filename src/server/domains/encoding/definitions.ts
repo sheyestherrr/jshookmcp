@@ -84,9 +84,20 @@ export const encodingTools: Tool[] = [
   ),
   tool('protobuf_decode_raw', (t) =>
     t
-      .desc('Decode protobuf bytes without a schema.')
+      .desc(
+        'Decode protobuf bytes. Raw wire-format walk by default (field numbers/wire types); with schemaText/schemaPath + messageName, typed decode via protobufjs (field numbers -> names).',
+      )
       .string('data', 'Base64-encoded protobuf payload')
       .number('maxDepth', 'Maximum recursive decode depth', { default: 5, minimum: 1, maximum: 20 })
+      .string(
+        'schemaText',
+        'Optional .proto schema source. When provided with messageName, decodes typed fields instead of raw wire numbers.',
+      )
+      .string('schemaPath', 'Optional path to a .proto file (used only if schemaText is absent).')
+      .string(
+        'messageName',
+        'Fully-qualified message type name to decode (e.g. "Person"). Required for schema mode.',
+      )
       .required('data')
       .query(),
   ),

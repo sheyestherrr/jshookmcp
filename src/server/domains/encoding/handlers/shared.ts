@@ -650,6 +650,53 @@ export function assessEntropy(entropy: number, buffer: Buffer): EntropyAssessmen
   return 'random';
 }
 
+/**
+ * Chi-square goodness-of-fit against a uniform byte distribution.
+ * Low (~0) = bytes look uniformly distributed; high = skewed (structured/repeating).
+ * For N bytes the expected count per bucket is N/256; χ² = Σ (O−E)²/E.
+ * Pairs with Shannon entropy: a gzip stream or PNG IDAT can show high Shannon
+ * but a skewed chi-square revealing it is not cryptographically random.
+ */
+export function calculateChiSquare(buffer: Buffer): number {
+  if (buffer.length === 0) return 0;
+  const freq: number[] = Array.from({ length: 256 }, () => 0);
+  for (const value of buffer.values()) freq[value]! += 1;
+  const expected = buffer.length / 256;
+  let chiSquare = 0;
+  for (let byte = 0; byte < 256; byte += 1) {
+    const diff = freq[byte]! - expected;
+    chiSquare += (diff * diff) / expected;
+  }
+  return Number(chiSquare.toFixed(6));
+}
+
+/**
+ * Serial correlation coefficient (ENT-style) of adjacent bytes.
+ * Range roughly −1..1: random data ≈ 0; strongly structured/periodic data
+ * approaches ±1 (e.g. a monotonic counter → near +1). Needs ≥2 bytes.
+ */
+export function calculateSerialCorrelation(buffer: Buffer): number {
+  if (buffer.length < 2) return 0;
+  const n = buffer.length;
+  let sumAdjacent = 0; // Σ b[i]·b[i+1] over the n−1 adjacent pairs
+  let sumSquares = 0; // Σ b[i]² over all n bytes
+  let sumFirst = 0; // Σ b[i] for i = 0..n−2
+  let sumSecond = 0; // Σ b[i] for i = 1..n−1
+  for (let i = 0; i < n - 1; i += 1) {
+    const current = buffer[i]!;
+    const next = buffer[i + 1]!;
+    sumAdjacent += current * next;
+    sumSquares += current * current;
+    sumFirst += current;
+    sumSecond += next;
+  }
+  sumSquares += buffer[n - 1]! * buffer[n - 1]!;
+  const denominator = n * sumSquares - sumFirst * sumFirst;
+  if (denominator === 0) return 0;
+  const numerator = n * sumAdjacent - sumFirst * sumSecond;
+  return Number((numerator / denominator).toFixed(6));
+}
+
 function printableRatio(buffer: Buffer): number {
   if (buffer.length === 0) return 1;
   let printable = 0;

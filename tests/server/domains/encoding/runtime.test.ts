@@ -484,6 +484,30 @@ describe('EncodingToolHandlers (handlers.impl.core.runtime)', () => {
       expect(body.byteLength).toBeGreaterThan(0);
     });
 
+    it('includes chi-square and serial-correlation randomness metrics', async () => {
+      // repeating single byte: heavily skewed (high chi-square) + near-+1 correlation
+      const repeating = Buffer.alloc(64, 0x41).toString('base64');
+      const rep = parseJson<any>(
+        await handlers.handleBinaryEntropyAnalysis({ source: 'base64', data: repeating }),
+      );
+      expect(typeof rep.chiSquare).toBe('number');
+      expect(rep.chiSquare).toBeGreaterThan(1000);
+      expect(typeof rep.serialCorrelation).toBe('number');
+      expect(rep.serialCorrelation).toBeGreaterThan(0.4); // identical bytes -> strongly positive ((n-1)/(2n-1) ≈ 0.5)
+
+      // uniform spread (a permutation of 0..255): chi-square drops to ~0
+      const spread = Buffer.from(Array.from({ length: 256 }, (_, i) => (i * 7919) & 0xff)).toString(
+        'base64',
+      );
+      const spr = parseJson<any>(
+        await handlers.handleBinaryEntropyAnalysis({ source: 'base64', data: spread }),
+      );
+      expect(spr.chiSquare).toBeLessThan(rep.chiSquare);
+      expect(spr.chiSquare).toBeLessThan(10); // near-uniform byte distribution
+      // serial correlation stays bounded in [-1, 1]
+      expect(Math.abs(spr.serialCorrelation)).toBeLessThanOrEqual(1);
+    });
+
     it('analyzes entropy for hex data', async () => {
       const data = '48656c6c6f20576f726c64';
       const body = parseJson<any>(
@@ -582,6 +606,46 @@ describe('EncodingToolHandlers (handlers.impl.core.runtime)', () => {
       expect(body.fields[0].wireType).toBe(0);
       expect(body.fields[0].value).toBe(150);
       expect(body.error).toBeNull();
+    });
+
+    it('decodes typed fields with a .proto schema (schemaText + messageName)', async () => {
+      const protobuf = (await import('protobufjs')).default;
+      const schema =
+        'syntax="proto2"; message Person { optional string name = 1; optional int32 age = 2; }';
+      const Person = protobuf.parse(schema).root.lookupType('Person');
+      const data = Buffer.from(Person.encode({ name: 'Alice', age: 30 }).finish()).toString(
+        'base64',
+      );
+
+      const body = parseJson<any>(
+        await handlers.handleProtobufDecodeRaw({ data, schemaText: schema, messageName: 'Person' }),
+      );
+      expect(body.success).toBe(true);
+      expect(body.schema).toBe(true);
+      expect(body.messageName).toBe('Person');
+      expect(body.decoded.name).toBe('Alice');
+      expect(body.decoded.age).toBe(30);
+    });
+
+    it('falls back to raw wire-format when no schema/messageName given', async () => {
+      const data = Buffer.from([0x08, 0x96, 0x01]).toString('base64');
+      const body = parseJson<any>(await handlers.handleProtobufDecodeRaw({ data }));
+      expect(body.schema).toBe(false);
+      expect(body.fields).toHaveLength(1);
+      expect(body.fields[0].fieldNumber).toBe(1);
+    });
+
+    it('errors on unknown message name in schema mode', async () => {
+      const schema = 'syntax="proto2"; message Person { optional string name = 1; }';
+      const data = Buffer.from([0x08, 0x01]).toString('base64');
+      const body = parseJson<any>(
+        await handlers.handleProtobufDecodeRaw({
+          data,
+          schemaText: schema,
+          messageName: 'NoSuchType',
+        }),
+      );
+      expect(body.success).toBe(false);
     });
 
     it('defaults maxDepth to 5', async () => {

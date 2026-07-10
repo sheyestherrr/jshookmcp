@@ -53,6 +53,8 @@ import {
   calculateByteFrequency,
   calculateBlockEntropies,
   assessEntropy,
+  calculateChiSquare,
+  calculateSerialCorrelation,
   tryParseJson,
 } from './handlers/shared';
 
@@ -386,6 +388,8 @@ export class EncodingToolHandlers {
         byteLength: buffer.length,
         blockSize,
         overallEntropy,
+        chiSquare: calculateChiSquare(buffer),
+        serialCorrelation: calculateSerialCorrelation(buffer),
         blockEntropies: calculateBlockEntropies(buffer, blockSize),
         byteFrequency: calculateByteFrequency(buffer).slice(0, 20),
         assessment: assessEntropy(overallEntropy, buffer),
@@ -403,10 +407,42 @@ export class EncodingToolHandlers {
       const maxDepthRaw = argNumber(args, 'maxDepth', 5);
       const maxDepth = Math.max(1, Math.min(20, Math.trunc(maxDepthRaw || 5)));
       const buffer = decodeBase64String(data);
+
+      // Schema mode: decode with a .proto schema (field numbers -> names/types)
+      // via protobufjs. Lazily imported to keep the raw-walk path dependency-free.
+      const schemaText = argString(args, 'schemaText', '');
+      const schemaPath = argString(args, 'schemaPath', '');
+      const messageName = argString(args, 'messageName', '');
+      if ((schemaText || schemaPath) && messageName) {
+        const protobuf = (await import('protobufjs')).default;
+        const root =
+          schemaPath && !schemaText
+            ? await protobuf.load(schemaPath)
+            : protobuf.parse(schemaText).root;
+        const MessageType = root.lookupType(messageName);
+        const message = MessageType.decode(buffer);
+        const decoded = MessageType.toObject(message, {
+          longs: String,
+          bytes: String,
+          enums: String,
+          defaults: true,
+        });
+        return ok({
+          success: true,
+          schema: true,
+          messageName,
+          byteLength: buffer.length,
+          decoded,
+          fields: null,
+          error: null,
+        });
+      }
+
       const parsed = parseProtobufMessage(buffer, 0, maxDepth);
 
       return ok({
         success: parsed.error === undefined,
+        schema: false,
         byteLength: buffer.length,
         maxDepth,
         parsedBytes: parsed.bytesConsumed,
