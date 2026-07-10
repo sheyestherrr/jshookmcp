@@ -17,6 +17,7 @@
 
 import type { ExecutionContext } from '../cpu/ExecutionContext';
 import { reverseBits, reverseBytes, countLeadingZeros } from '../utils/BitOperations';
+import { computeArmCrc32 } from '../crc32';
 
 const MASK64 = (1n << 64n) - 1n;
 const MASK32 = (1n << 32n) - 1n;
@@ -433,6 +434,26 @@ export function execDataProcessingRegister(ctx: ExecutionContext, insn: number):
       default:
         break;
     }
+  }
+
+  // CRC32 / CRC32C (ARMv8): CRC32B/H/W/X + CRC32CB/CH/CW/CX.
+  // bits[30:21] = 0b0110101100 (0x1AC); size 11 (CRC32X/CRC32CX) requires sf=1.
+  // Bit12 selects CRC32 (0) vs CRC32C Castagnoli (1); bits[11:10] = operand size.
+  if (((insn >>> 21) & 0x3ff) === 0b0110101100) {
+    const sf = insn >>> 31;
+    const c = (insn >>> 12) & 1;
+    const size = (insn >>> 10) & 0b11;
+    const rm = (insn >>> 16) & 0b11111;
+    const rn = (insn >>> 5) & 0b11111;
+    const rd = insn & 0b11111;
+    if (size === 0b11 && sf !== 1) {
+      throw new Error('CRC32: 64-bit operand (size=11) requires sf=1');
+    }
+    const sizeBytes = 1 << size;
+    const acc = Number(ctx.readGpr(rn) & MASK32);
+    const result = computeArmCrc32(acc, ctx.readGpr(rm), sizeBytes, c === 1);
+    ctx.writeGpr(rd, BigInt(result));
+    return true;
   }
 
   return false;
