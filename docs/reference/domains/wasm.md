@@ -35,4 +35,4 @@ WebAssembly dump、反汇编、反编译、优化与离线执行域。
 | `wasm_to_c` | 将 .wasm 文件转换为 C 源码和头文件（wasm2c/WABT）。 |
 | `wasm_detect_obfuscation` | 检测 .wasm 文件中的混淆模式（控制流平坦、死代码、不透明谓词、常量编码）。 |
 | `wasm_instrument_trace` | 为 .wasm 模块生成 JS 插桩包装，追踪调用、内存和控制流。 |
-| `wasm_string_extract` | 待补充中文：Extract printable strings from a .wasm binary, grouped by section, with name-section function-name recovery and classification (url/base64/hex-hash/file-path). Wasm-aware alternative to generic binary strings tools. |
+| `wasm_string_extract` | 从 .wasm 二进制中提取可打印字符串，按 section 分组，支持 name section 函数名恢复与分类（url/base64/hex-hash/file-path）。是通用二进制字符串工具的 wasm 专用替代。 |

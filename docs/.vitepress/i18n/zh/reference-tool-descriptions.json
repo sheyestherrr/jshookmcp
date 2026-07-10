@@ -588,7 +588,7 @@
   "webrtc_monitor": "启用/停用 WebRTC 数据通道流量捕获。在页面内包装 RTCPeerConnection（RTCDataChannel 无 CDP 支持）：拦截 createDataChannel（本地通道）与 datachannel 事件（远端通道），同时捕获出站 send() 与入站 message。用 webrtc_get_events 读取捕获的消息。",
   "webrtc_get_events": "读取 WebRTC 数据通道监控捕获的消息。设 fullData=true 返回完整消息数据。可按通道 label 与方向（sent/received）过滤。",
   "debugger_disassemble": "反汇编当前暂停位置（或指定 scriptId）的 V8 字节码/指令。自动从当前暂停调用帧解析目标 scriptId——在混淆/VM 代码中暂停时很有用，可据此判断是否步入。原生字节码需 V8 natives 语法；当原生提取不可用时，设置 includeSourceFallback 可从源码派生伪字节码。",
-  "trace_get_samples": "待补充中文：Query recorded CPU profile samples. mode=\"top\" returns the hottest functions by self time (per-function rollup); mode=\"function\" returns samples for one function; mode=\"window\" returns samples near a timestamp. Ships NO hardcoded hot-function library — ordering is pure data projection, the caller decides what counts as hot.",
-  "wasm_string_extract": "待补充中文：Extract printable strings from a .wasm binary, grouped by section, with name-section function-name recovery and classification (url/base64/hex-hash/file-path). Wasm-aware alternative to generic binary strings tools.",
-  "webgpu_shader_source_capture": "待补充中文：Capture WGSL shader sources a running app compiles via GPUDevice.createShaderModule — the only artifact revealing what a compute/render pipeline computes (e.g. physics vs. cryptominer). Pairs with webgpu_capture_commands to reconstruct what data each draw/dispatch operated on."
+  "trace_get_samples": "查询已记录的 CPU profile 采样：mode=top 返回按自用时间最热的函数（按函数聚合）；mode=function 返回单个函数的采样；mode=window 返回某时间戳附近的采样。不内置热点函数库——排序纯粹基于数据投影，由调用者判断何为热点。",
+  "wasm_string_extract": "从 .wasm 二进制中提取可打印字符串，按 section 分组，支持 name section 函数名恢复与分类（url/base64/hex-hash/file-path）。是通用二进制字符串工具的 wasm 专用替代。",
+  "webgpu_shader_source_capture": "捕获运行中应用通过 GPUDevice.createShaderModule 编译的 WGSL shader 源码——这是揭示计算/渲染管线实际运算内容（如物理 vs. 挖矿）的唯一产物。配合 webgpu_capture_commands 可重建每次 draw/dispatch 操作的数据。"
 }
