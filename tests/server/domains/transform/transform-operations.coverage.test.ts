@@ -238,6 +238,41 @@ describe('transform-operations', () => {
       );
     });
 
+    it('folds unary !literal in constant_fold', async () => {
+      expect(applyTransforms('var a = !0;', ['constant_fold']).transformed).toContain('true');
+      expect(applyTransforms('var b = !1;', ['constant_fold']).transformed).toContain('false');
+      expect(applyTransforms('var c = !true;', ['constant_fold']).transformed).toContain('false');
+      expect(applyTransforms('var d = !false;', ['constant_fold']).transformed).toContain('true');
+    });
+
+    it('folds bitwise-not integer literal in constant_fold', async () => {
+      expect(applyTransforms('var x = ~5;', ['constant_fold']).transformed).toContain('-6');
+      expect(applyTransforms('var y = ~0;', ['constant_fold']).transformed).toContain('-1');
+    });
+
+    it('simplifies always-true if guards (unwraps consequent, drops else) in dead_code_remove', async () => {
+      const r1 = applyTransforms('if(true){keep();}else{drop();}', ['dead_code_remove']);
+      expect(r1.transformed).toContain('keep');
+      expect(r1.transformed).not.toContain('drop');
+      const r2 = applyTransforms('if(1){only();}', ['dead_code_remove']);
+      expect(r2.transformed).toContain('only');
+      const r3 = applyTransforms('if(!0){yes();}', ['dead_code_remove']);
+      expect(r3.transformed).toContain('yes');
+    });
+
+    it('folds arithmetic producing negative results without crashing', async () => {
+      // 3 - 5 = -2; previously t.numericLiteral(-2) threw (babel rejects negative NumericLiteral)
+      expect(applyTransforms('var x = 3 - 5;', ['constant_fold']).transformed).toContain('-2');
+      expect(applyTransforms('var y = 2 - 10;', ['constant_fold']).transformed).toContain('-8');
+    });
+
+    it('folds bitwise binary integer operations in constant_fold', async () => {
+      expect(applyTransforms('var a = 5 & 3;', ['constant_fold']).transformed).toContain('1');
+      expect(applyTransforms('var b = 1 | 2;', ['constant_fold']).transformed).toContain('3');
+      expect(applyTransforms('var c = 5 ^ 3;', ['constant_fold']).transformed).toContain('6');
+      expect(applyTransforms('var d = 8 >> 1;', ['constant_fold']).transformed).toContain('4');
+    });
+
     it('renames _0x bindings without touching property names or template raw text', async () => {
       const code = 'var _0xabc = 1; obj._0xabc = _0xabc; const text = `_0xabc:${_0xabc}`;';
       const result = applyTransforms(code, ['rename_vars']);

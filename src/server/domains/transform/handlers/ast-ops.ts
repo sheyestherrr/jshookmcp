@@ -77,6 +77,18 @@ function foldNumeric(left: number, operator: string, right: number): number | nu
       return right === 0 ? null : left / right;
     case '%':
       return right === 0 ? null : left % right;
+    case '&':
+      return left & right;
+    case '|':
+      return left | right;
+    case '^':
+      return left ^ right;
+    case '<<':
+      return left << right;
+    case '>>':
+      return left >> right;
+    case '>>>':
+      return left >>> right;
     default:
       return null;
   }
@@ -94,7 +106,7 @@ export function transformConstantFoldAst(code: string): string {
           if (folded === null || !isFiniteNumericResult(folded)) return;
           const normalized = Number.isInteger(folded) ? folded : Number(folded.toFixed(12));
           markChanged();
-          path.replaceWith(t.numericLiteral(normalized));
+          path.replaceWith(t.valueToNode(normalized));
           path.skip();
           return;
         }
@@ -106,6 +118,33 @@ export function transformConstantFoldAst(code: string): string {
         ) {
           markChanged();
           path.replaceWith(t.stringLiteral(`${node.left.value}${node.right.value}`));
+          path.skip();
+        }
+      },
+      UnaryExpression(path) {
+        const node = path.node;
+        if (!t.isUnaryExpression(node)) return;
+        const arg = node.argument;
+        // !literal -> boolean (obfuscator canonical !0=true / !1=false)
+        if (node.operator === '!') {
+          let boolValue: boolean | null = null;
+          if (t.isBooleanLiteral(arg)) boolValue = !arg.value;
+          else if (t.isNumericLiteral(arg)) boolValue = arg.value === 0;
+          else if (t.isStringLiteral(arg)) boolValue = arg.value.length === 0;
+          else if (t.isNullLiteral(arg)) boolValue = true;
+          if (boolValue !== null) {
+            markChanged();
+            path.replaceWith(t.booleanLiteral(boolValue));
+            path.skip();
+            return;
+          }
+        }
+        // ~integer -> valueToNode (bitwise NOT; result may be negative, so use
+        // valueToNode which emits a negated NumericLiteral rather than the
+        // invalid t.numericLiteral(<negative>))
+        if (node.operator === '~' && t.isNumericLiteral(arg) && Number.isInteger(arg.value)) {
+          markChanged();
+          path.replaceWith(t.valueToNode(~arg.value));
           path.skip();
         }
       },
@@ -326,14 +365,24 @@ export function transformDeadCodeRemoveAst(code: string): string {
   return transformOnce(code, (markChanged) => ({
     IfStatement(path) {
       const node = path.node;
-      if (!t.isIfStatement(node) || !isAlwaysFalse(node.test)) return;
-      markChanged();
-      if (node.alternate) {
-        path.replaceWithMultiple(replacementStatements(node.alternate));
-      } else {
-        path.remove();
+      if (!t.isIfStatement(node)) return;
+      // dead branch: if(falsy) -> drop consequent, keep alternate
+      if (isAlwaysFalse(node.test)) {
+        markChanged();
+        if (node.alternate) {
+          path.replaceWithMultiple(replacementStatements(node.alternate));
+        } else {
+          path.remove();
+        }
+        path.skip();
+        return;
       }
-      path.skip();
+      // always-true guard: if(truthy){A}else{B} -> A (drop the redundant guard + else)
+      if (isAlwaysTrue(node.test)) {
+        markChanged();
+        path.replaceWithMultiple(replacementStatements(node.consequent));
+        path.skip();
+      }
     },
   }));
 }
