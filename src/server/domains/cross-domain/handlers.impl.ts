@@ -565,7 +565,9 @@ export class CrossDomainHandlers {
   }
 
   async handleEvidenceStats(): Promise<ToolResponse> {
-    return asJsonResponse(this.evidenceBridge.getStats());
+    const base = this.evidenceBridge.getStats();
+    const snapshot = this.evidenceBridge.exportGraph();
+    return asJsonResponse({ ...base, ...computeEvidenceGraphQuality(snapshot) });
   }
 }
 
@@ -612,6 +614,76 @@ function edgeConfidence(edge: EvidenceGraphSnapshot['edges'][number]): number {
   if (confidence === 'medium') return 0.6;
   if (confidence === 'low') return 0.3;
   return 1;
+}
+
+/**
+ * Quality metrics layered on top of `getStats()` so analysts can gauge evidence
+ * signal vs. noise without exporting the whole graph: edge-type breakdown,
+ * confidence distribution (high/medium/low/unannotated), mean confidence, count
+ * of orphan nodes with no edges, and the highest-degree hub nodes.
+ */
+export function computeEvidenceGraphQuality(snapshot: EvidenceGraphSnapshot): {
+  edgesByType: Record<string, number>;
+  confidenceBuckets: { high: number; medium: number; low: number; none: number };
+  avgConfidence: number;
+  orphanNodeCount: number;
+  topNodesByDegree: Array<{ nodeId: string; label: string; type: string; degree: number }>;
+} {
+  const edgesByType: Record<string, number> = {};
+  const confidenceBuckets = { high: 0, medium: 0, low: 0, none: 0 };
+  let confidenceSum = 0;
+  let confidenceSamples = 0;
+  const degree = new Map<string, number>();
+  const connected = new Set<string>();
+
+  for (const edge of snapshot.edges) {
+    edgesByType[edge.type] = (edgesByType[edge.type] ?? 0) + 1;
+    connected.add(edge.source);
+    connected.add(edge.target);
+    degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
+    degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
+
+    const meta = edge.metadata ?? {};
+    const hasConfidence =
+      typeof meta['confidence'] === 'number' ||
+      typeof meta['confidence'] === 'string' ||
+      typeof meta['matchScore'] === 'number';
+    if (!hasConfidence) {
+      confidenceBuckets.none += 1;
+      continue;
+    }
+    const c = edgeConfidence(edge);
+    confidenceSum += c;
+    confidenceSamples += 1;
+    if (c >= 0.7) confidenceBuckets.high += 1;
+    else if (c >= 0.4) confidenceBuckets.medium += 1;
+    else confidenceBuckets.low += 1;
+  }
+
+  const orphanNodeCount = snapshot.nodes.filter((n) => !connected.has(n.id)).length;
+
+  const nodeById = new Map(snapshot.nodes.map((n) => [n.id, n]));
+  const topNodesByDegree = [...degree.entries()]
+    .toSorted((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([nodeId, deg]) => {
+      const node = nodeById.get(nodeId);
+      return {
+        nodeId,
+        label: node?.label ?? nodeId,
+        type: node?.type ?? 'unknown',
+        degree: deg,
+      };
+    });
+
+  return {
+    edgesByType,
+    confidenceBuckets,
+    avgConfidence:
+      confidenceSamples > 0 ? Number((confidenceSum / confidenceSamples).toFixed(4)) : 0,
+    orphanNodeCount,
+    topNodesByDegree,
+  };
 }
 
 function filterEvidenceSnapshot(

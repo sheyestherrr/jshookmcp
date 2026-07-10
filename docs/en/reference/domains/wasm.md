@@ -19,7 +19,7 @@ WebAssembly dump, disassembly, decompilation, optimization, and offline executio
 - browser + wasm
 - core + wasm
 
-## Full tool list (12)
+## Full tool list (13)
 
 | Tool | Description |
 | --- | --- |
@@ -35,3 +35,4 @@ WebAssembly dump, disassembly, decompilation, optimization, and offline executio
 | `wasm_to_c` | Transpile .wasm bytecode to C source and header files. |
 | `wasm_detect_obfuscation` | Detect WASM obfuscation: opaque predicates, control-flow flattening, bogus ops. |
 | `wasm_instrument_trace` | Generate a JS instrumentation wrapper for a .wasm module. |
+| `wasm_string_extract` | Extract printable strings from a .wasm binary, grouped by section, with name-section function-name recovery and classification (url/base64/hex-hash/file-path). Wasm-aware alternative to generic binary strings tools. |
