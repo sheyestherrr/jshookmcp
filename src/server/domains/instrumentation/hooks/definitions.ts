@@ -62,6 +62,13 @@ export const hookPresetTools: Tool[] = [
             type: 'string',
             description: 'Hook body snippet inserted into the preset wrapper.',
           },
+          mutateReturn: {
+            type: 'string',
+            description:
+              'Optional JS expression that mutates a hooked call return value. May reference __result (the ' +
+              'original return). When set, the wrapper exposes __mutateReturn(result); wrap the original call ' +
+              'in your body, e.g. `return __mutateReturn(_orig.call(this, code));`. Ships NO hardcoded mutation.',
+          },
         },
         required: ['id', 'body'],
         description:
@@ -76,6 +83,7 @@ export const hookPresetTools: Tool[] = [
             id: { type: 'string' },
             description: { type: 'string' },
             body: { type: 'string' },
+            mutateReturn: { type: 'string' },
           },
           required: ['id', 'body'],
         },

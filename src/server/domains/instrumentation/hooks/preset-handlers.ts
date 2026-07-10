@@ -19,6 +19,7 @@ interface InlineCustomTemplate {
   id?: string;
   description?: string;
   body?: string;
+  mutateReturn?: string;
 }
 
 export class HookPresetToolHandlers {
@@ -191,10 +192,11 @@ export class HookPresetToolHandlers {
       if (PRESETS[id]) {
         throw new Error(`Custom template id conflicts with built-in preset: ${id}`);
       }
+      const mutateReturn = template.mutateReturn?.trim() || undefined;
       customPresets[id] = {
         description: template.description?.trim() || `Custom inline preset: ${id}`,
         buildCode: (captureStack, logToConsole) =>
-          buildHookCode(id, body, captureStack, logToConsole),
+          buildHookCode(id, body, captureStack, logToConsole, mutateReturn),
       };
     }
     return customPresets;

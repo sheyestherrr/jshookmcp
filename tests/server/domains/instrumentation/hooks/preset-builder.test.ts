@@ -85,6 +85,26 @@ describe('buildHookCode', () => {
     });
   });
 
+  describe('mutateReturn parameter', () => {
+    it('injects a __mutateReturn helper when a mutateReturn expression is supplied', async () => {
+      const code = buildHookCode('mut', SAMPLE_BODY, false, false, '__result + 1');
+      expect(code).toContain(
+        'const __mutateReturn = function(__result) { return (__result + 1); };',
+      );
+    });
+
+    it('omits the __mutateReturn helper when mutateReturn is omitted (back-compatible)', async () => {
+      const code = buildHookCode('nomut', SAMPLE_BODY, false, false);
+      expect(code).not.toContain('__mutateReturn');
+    });
+
+    it('embeds the caller-supplied expression verbatim (no hardcoded mutation)', async () => {
+      const expr = '__result.slice(0, 16)';
+      const code = buildHookCode('expr', SAMPLE_BODY, false, false, expr);
+      expect(code).toContain(`return (${expr});`);
+    });
+  });
+
   it('replaces all {{STACK_CODE}} and {{LOG_FN}} placeholders in multi-occurrence body', async () => {
     const multiBody = `
     fn1() { {{STACK_CODE}} {{LOG_FN}} }

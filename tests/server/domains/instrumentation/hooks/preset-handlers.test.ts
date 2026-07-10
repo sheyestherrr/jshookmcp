@@ -148,5 +148,32 @@ describe('HookPresetToolHandlers', () => {
       // @ts-expect-error
       expect(res.content[0].text).toContain('conflicts with built-in preset');
     });
+
+    it('threads customTemplate.mutateReturn into the generated hook code', async () => {
+      const res = await handlers.handleHookPreset({
+        preset: 'mut-custom',
+        customTemplate: {
+          id: 'mut-custom',
+          body: 'const _o = window.foo; window.foo = function() { return __mutateReturn(_o()); };',
+          mutateReturn: '__result + 1',
+        },
+      });
+      // @ts-expect-error
+      expect(res.content[0].text).toContain('"success": true');
+      expect(pageMock.evaluate).toHaveBeenCalledTimes(1);
+      const generated = pageMock.evaluate.mock.calls[0]![0] as string;
+      // __mutateReturn helper injected + caller expression embedded verbatim
+      expect(generated).toContain('__mutateReturn');
+      expect(generated).toContain('return (__result + 1)');
+    });
+
+    it('omits __mutateReturn helper when customTemplate has no mutateReturn', async () => {
+      await handlers.handleHookPreset({
+        preset: 'no-mut',
+        customTemplate: { id: 'no-mut', body: 'console.log();' },
+      });
+      const generated = pageMock.evaluate.mock.calls[0]![0] as string;
+      expect(generated).not.toContain('__mutateReturn');
+    });
   });
 });
