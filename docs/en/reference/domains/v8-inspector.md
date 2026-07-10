@@ -20,11 +20,11 @@ V8 inspector domain providing heap snapshot analysis, CPU profiling, and memory 
 - v8-inspector + browser
 - v8-inspector + debugger
 
-## Full tool list (19)
+## Full tool list (22)
 
 | Tool | Description |
 | --- | --- |
-| `v8_heap_snapshot_capture` | Capture a V8 heap snapshot for offline analysis. |
+| `v8_heap_snapshot_capture` | Capture a V8 heap snapshot for offline analysis. The snapshot is persisted to artifacts/heap-snapshots/ (data + sidecar meta) so it survives a server restart; set persist=false to keep it in-memory only. |
 | `v8_heap_snapshot_analyze` | Analyze a heap snapshot: class histogram (object count/sizes by constructor), statistics (total objects, detached DOM nodes), optional dominator tree, and leak detection. |
 | `v8_heap_diff` | Compare two heap snapshots to find allocation changes. |
 | `v8_object_inspect` | Inspect a live JS object by objectId with property enumeration. |
@@ -43,3 +43,6 @@ V8 inspector domain providing heap snapshot analysis, CPU profiling, and memory 
 | `v8_heap_sampling` | Collect a V8 allocation sampling profile via CDP HeapProfiler. Starts sampling for a capture window (default 5s), then returns the aggregated allocation call tree: per-function self/total bytes + sample count, sorted by total bytes allocated. Useful for finding hot allocation sites without a full heap snapshot. Requires browser/page CDP context. |
 | `v8_allocation_track` | Track live V8 allocations via CDP HeapProfiler object tracking. Starts allocation tracking for a capture window (default 3s), then returns currently-live objects seen during the window with their allocation stack (top frame + size). Useful for finding objects that survive GC during a specific interaction. Requires browser/page CDP context and V8 natives for full stack resolution. |
 | `v8_weakrefs_inspect` | Enumerate WeakRef and FinalizationRegistry instances in the page via Runtime.evaluate. Inspects registered finalization callbacks and live WeakRef targets, reporting how many WeakRefs are dereferenced vs cleared and which FinalizationRegistry callbacks have pending entries. Useful for diagnosing cleanup logic in long-lived pages. Requires browser/page CDP context. |
+| `v8_heap_snapshot_list` | List V8 heap snapshots — both in-memory (current session) and persisted to artifacts/heap-snapshots/ (survive a server restart). Reports id, capture time, size, source (in-memory/persisted), simulated flag, and expiry status, plus aggregate stats. Snapshot payloads are NOT returned (only metadata). |
+| `v8_heap_snapshot_delete` | Delete persisted V8 heap snapshot artifact files (.heapsnapshot data + .meta.json sidecar) and drop the matching in-memory cache entry. Use deleteAll=true to remove every persisted snapshot. Does not affect the live V8 heap. |
+| `v8_heap_snapshot_export` | Export a heap snapshot as a complete .heapsnapshot JSON file under artifacts/heap-snapshots/, loadable by the Chrome DevTools Memory panel. The file path is returned; the snapshot content is written to disk, not injected into the response (it can be very large). |

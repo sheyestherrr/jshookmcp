@@ -20,7 +20,7 @@ V8 检查器域，提供堆快照分析、CPU 分析和内存检查。
 - v8-inspector + browser
 - v8-inspector + debugger
 
-## 工具清单（19）
+## 工具清单（22）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -43,3 +43,6 @@ V8 检查器域，提供堆快照分析、CPU 分析和内存检查。
 | `v8_heap_sampling` | 通过 CDP HeapProfiler 收集 V8 分配采样 profile。在采集窗口内（默认 5 秒）启动采样，返回聚合的分配调用树：每个函数的 self/total 字节 + 采样数，按总分配字节排序。用于定位热点分配站点而无需完整堆快照。需要浏览器/页面 CDP 上下文。 |
 | `v8_allocation_track` | 通过 CDP HeapProfiler 对象追踪跟踪 V8 实时分配。在采集窗口内（默认 3 秒）启动分配追踪，返回窗口期间仍存活的已分配对象（顶部帧 + 大小）。用于发现在特定交互期间经历 GC 仍存活的对象。需要浏览器/页面 CDP 上下文，完整栈解析需 V8 natives。 |
 | `v8_weakrefs_inspect` | 通过 Runtime.evaluate 枚举页面中的 WeakRef 和 FinalizationRegistry 实例。检查已注册的终结回调和存活的 WeakRef 目标，报告多少 WeakRef 已 deref、多少已清除，以及哪些 FinalizationRegistry 有待处理条目。用于诊断长生命周期页面的清理逻辑。需要浏览器/页面 CDP 上下文。 |
+| `v8_heap_snapshot_list` | 列出 V8 堆快照——含内存中（当前会话）与持久化到 artifacts/heap-snapshots/（重启后仍保留）的快照，返回 ID、捕获时间、大小、来源、模拟标记、过期状态及聚合统计。仅返回元数据，不含快照内容。 |
+| `v8_heap_snapshot_delete` | 删除持久化的 V8 堆快照文件（.heapsnapshot 数据 + .meta.json 侧车），同时清除内存中对应缓存条目。设置 deleteAll=true 可删除全部持久化快照，不影响运行中的 V8 堆。 |
+| `v8_heap_snapshot_export` | 将堆快照导出为完整的 .heapsnapshot JSON 文件，存入 artifacts/heap-snapshots/，可由 Chrome DevTools Memory 面板加载。返回文件路径，快照内容写入磁盘而非注入响应（文件可能很大）。 |
