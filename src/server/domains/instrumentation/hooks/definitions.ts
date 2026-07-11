@@ -19,6 +19,14 @@ export const aiHookTools: Tool[] = [
         'Hook identifier (required for inject/get_data/toggle; optional for clear/export)',
       )
       .string('code', 'Hook code to inject (required for action=inject)')
+      .number(
+        'maxMatches',
+        'Auto-unhook guard (action=inject only): after the hook fires this many calls the injected guard flips metadata.enabled=false. Hook code must call window.__aiHookUnhookGuard(hookId, value) per call.',
+      )
+      .string(
+        'unhookPredicate',
+        'Auto-unhook guard (action=inject only): JS expression compiled in-page as new Function("value", src); truthy result flips metadata.enabled=false. Hook code must call window.__aiHookUnhookGuard(hookId, value) per call.',
+      )
       .enum(
         'method',
         ['evaluateOnNewDocument', 'evaluate'],

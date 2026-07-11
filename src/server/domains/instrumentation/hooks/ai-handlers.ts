@@ -4,7 +4,60 @@ import {
   evaluateOnNewDocumentWithTimeout,
 } from '@modules/collector/PageController';
 import { logger } from '@utils/logger';
-import { argString, argStringRequired, argBool } from '@server/domains/shared/parse-args';
+import {
+  argString,
+  argStringRequired,
+  argBool,
+  argNumber,
+} from '@server/domains/shared/parse-args';
+
+export interface UnhookGuardOptions {
+  /** Auto-unhook after this many intercepted calls. */
+  maxMatches?: number;
+  /** JS expression source compiled in-page as `new Function('value', src)`; truthy ⇒ unhook. */
+  unhookPredicate?: string;
+}
+
+/**
+ * Build the in-page bootstrap that initialises `__aiHookMetadata[hookId]` with
+ * match tracking + installs a global `__aiHookUnhookGuard(hookId, value)`
+ * helper. Returns '' when neither option is supplied (byte-identical inject).
+ *
+ * The user's hook code is expected to call `__aiHookUnhookGuard(hookId, value)`
+ * per intercepted call; on the Nth match (or a truthy predicate) the guard
+ * flips `metadata.enabled = false`, records `unhookedAt`, and returns true so
+ * the hook can restore the original. This is an opt-in convention — `ai_hook`
+ * injects arbitrary JS, so auto-wrapping the user code is not possible.
+ */
+export function buildUnhookGuardBootstrap(hookId: string, opts: UnhookGuardOptions): string {
+  if (opts.maxMatches === undefined && !opts.unhookPredicate) {
+    return '';
+  }
+  const maxMatchesLit = typeof opts.maxMatches === 'number' ? String(opts.maxMatches) : 'undefined';
+  const predicateCompile = opts.unhookPredicate
+    ? `__m.unhookPredicate = new Function('value', ${JSON.stringify(opts.unhookPredicate)});`
+    : '';
+  const id = JSON.stringify(hookId);
+  return `(function(){
+  globalThis.__aiHookMetadata = globalThis.__aiHookMetadata || {};
+  var __m = globalThis.__aiHookMetadata[${id}] = globalThis.__aiHookMetadata[${id}] || {};
+  __m.matchCount = 0;
+  __m.maxMatches = ${maxMatchesLit};
+  ${predicateCompile}
+  globalThis.__aiHookUnhookGuard = globalThis.__aiHookUnhookGuard || function(id, value){
+    var m = globalThis.__aiHookMetadata && globalThis.__aiHookMetadata[id];
+    if (!m) return false;
+    m.matchCount = (m.matchCount || 0) + 1;
+    if (typeof m.maxMatches === 'number' && m.matchCount >= m.maxMatches) {
+      m.enabled = false; m.unhookedAt = (typeof performance!=='undefined'?performance.now():Date.now()); return true;
+    }
+    if (typeof m.unhookPredicate === 'function') {
+      try { if (m.unhookPredicate(value)) { m.enabled = false; m.unhookedAt = (typeof performance!=='undefined'?performance.now():Date.now()); return true; } } catch(e) {}
+    }
+    return false;
+  };
+})();`;
+}
 
 export class AIHookToolHandlers {
   private injectedHooks: Map<string, { code: string; injectionTime: number }> = new Map();
@@ -36,8 +89,12 @@ export class AIHookToolHandlers {
   async handleAIHookInject(args: Record<string, unknown>) {
     try {
       const hookId = argStringRequired(args, 'hookId');
-      const code = argStringRequired(args, 'code');
+      const userCode = argStringRequired(args, 'code');
       const method = argString(args, 'method', 'evaluate') as 'evaluateOnNewDocument' | 'evaluate';
+      const maxMatches = argNumber(args, 'maxMatches');
+      const unhookPredicate = argString(args, 'unhookPredicate');
+      const guardBootstrap = buildUnhookGuardBootstrap(hookId, { maxMatches, unhookPredicate });
+      const code = guardBootstrap ? `${guardBootstrap}\n${userCode}` : userCode;
 
       if (this.hasAttachedTargetSession()) {
         if (method === 'evaluateOnNewDocument') {
@@ -73,6 +130,8 @@ export class AIHookToolHandlers {
                 success: true,
                 hookId,
                 message: `Hook (: ${method})`,
+                unhookGuard:
+                  guardBootstrap !== '' ? { maxMatches: maxMatches ?? null, enabled: true } : null,
                 injectionTime: new Date().toISOString(),
               },
               null,
