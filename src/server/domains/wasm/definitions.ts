@@ -138,4 +138,22 @@ export const wasmTools: Tool[] = [
       })
       .required('inputPath'),
   ),
+  tool('wasm_diff', (t) =>
+    t
+      .desc(
+        'Patch-diff two .wasm binaries (original vs. patched) for vulnerability research: disassembles both via wasm2wat and emits a structured function-level diff (added/removed/changed) plus a per-function WAT line-level unified diff. The full diff is written to an artifact; the response carries summaries and previews.',
+      )
+      .string('inputPathA', 'Path to the first .wasm file (e.g. original)')
+      .string('inputPathB', 'Path to the second .wasm file (e.g. patched)')
+      .string(
+        'outputPath',
+        'Custom output file path for the full JSON diff. If omitted, auto-generates in artifacts/wasm/',
+      )
+      .boolean(
+        'semantic',
+        'Normalize transient local/temp names so pure renumbering is not reported as a change',
+        { default: false },
+      )
+      .required('inputPathA', 'inputPathB'),
+  ),
 ];

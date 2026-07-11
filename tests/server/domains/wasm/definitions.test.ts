@@ -35,8 +35,8 @@ describe('wasm/definitions', () => {
     expect(wasmTools.length).toBeGreaterThan(0);
   });
 
-  it('exports exactly 13 tools', async () => {
-    expect(wasmTools).toHaveLength(13);
+  it('exports exactly 14 tools', async () => {
+    expect(wasmTools).toHaveLength(14);
   });
 
   it('contains all expected tool names', async () => {

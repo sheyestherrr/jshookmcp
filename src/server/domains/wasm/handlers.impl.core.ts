@@ -115,4 +115,10 @@ export class WasmToolHandlers {
   handleWasmStringExtract(args: Record<string, unknown>) {
     return this.externalTools.handleWasmStringExtract(args);
   }
+  handleWasmDiffTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleWasmDiff(args));
+  }
+  handleWasmDiff(args: Record<string, unknown>) {
+    return this.externalTools.handleWasmDiff(args);
+  }
 }

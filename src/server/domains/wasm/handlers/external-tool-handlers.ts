@@ -3,18 +3,21 @@ import { ExternalAnalysisHandlers } from './external-analysis-handlers';
 import { ExternalConversionHandlers } from './external-conversion-handlers';
 import { ExternalRuntimeHandlers } from './external-runtime-handlers';
 import { StringExtractHandlers } from './string-extract-handlers';
+import { DiffHandlers } from './diff-handlers';
 
 export class ExternalToolHandlers {
   private readonly conversion: ExternalConversionHandlers;
   private readonly runtime: ExternalRuntimeHandlers;
   private readonly analysis: ExternalAnalysisHandlers;
   private readonly stringExtract: StringExtractHandlers;
+  private readonly diff: DiffHandlers;
 
   constructor(state: WasmSharedState) {
     this.conversion = new ExternalConversionHandlers(state);
     this.runtime = new ExternalRuntimeHandlers(state);
     this.analysis = new ExternalAnalysisHandlers(state);
     this.stringExtract = new StringExtractHandlers(state);
+    this.diff = new DiffHandlers(state);
   }
 
   handleWasmDisassemble(args: Record<string, unknown>) {
@@ -51,5 +54,9 @@ export class ExternalToolHandlers {
 
   handleWasmStringExtract(args: Record<string, unknown>) {
     return this.stringExtract.handleWasmStringExtract(args);
+  }
+
+  handleWasmDiff(args: Record<string, unknown>) {
+    return this.diff.handleWasmDiff(args);
   }
 }
