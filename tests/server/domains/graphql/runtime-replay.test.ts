@@ -11,6 +11,12 @@ import { GraphQLToolHandlersRuntime } from '@server/domains/graphql/handlers.imp
 import type { BrowserFetchResult } from '@server/domains/graphql/handlers.impl.core.runtime.shared';
 import { TEST_URLS, withPath } from '@tests/shared/test-urls';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- test helper: inspect the serialized body sent to page.evaluate
+function requestBodyOf(mockCalls: any): any {
+  const input = mockCalls[0][1] as { body: string };
+  return JSON.parse(input.body);
+}
+
 describe('GraphQLToolHandlersRuntime (replay)', () => {
   const page = {
     evaluate: vi.fn(),
@@ -161,7 +167,7 @@ describe('GraphQLToolHandlersRuntime (replay)', () => {
       expect(body.responseHeaders).toEqual({ 'content-type': 'application/json' });
     });
 
-    it('passes variables to page.evaluate', async () => {
+    it('serializes variables into the request body', async () => {
       const browserResult: BrowserFetchResult = {
         ok: true,
         status: 200,
@@ -179,12 +185,7 @@ describe('GraphQLToolHandlersRuntime (replay)', () => {
         useBrowser: true,
       });
 
-      expect(page.evaluate).toHaveBeenCalledWith(
-        expect.any(Function),
-        expect.objectContaining({
-          variables: { id: '123' },
-        }),
-      );
+      expect(requestBodyOf(page.evaluate.mock.calls).variables).toEqual({ id: '123' });
     });
 
     it('defaults variables to empty object when not provided', async () => {
@@ -204,15 +205,10 @@ describe('GraphQLToolHandlersRuntime (replay)', () => {
         useBrowser: true,
       });
 
-      expect(page.evaluate).toHaveBeenCalledWith(
-        expect.any(Function),
-        expect.objectContaining({
-          variables: {},
-        }),
-      );
+      expect(requestBodyOf(page.evaluate.mock.calls).variables).toEqual({});
     });
 
-    it('passes operationName when provided', async () => {
+    it('passes operationName into the body and echoes it in the response', async () => {
       const browserResult: BrowserFetchResult = {
         ok: true,
         status: 200,
@@ -232,12 +228,7 @@ describe('GraphQLToolHandlersRuntime (replay)', () => {
         }),
       );
 
-      expect(page.evaluate).toHaveBeenCalledWith(
-        expect.any(Function),
-        expect.objectContaining({
-          operationName: 'GetUser',
-        }),
-      );
+      expect(requestBodyOf(page.evaluate.mock.calls).operationName).toBe('GetUser');
       expect(body.operationName).toBe('GetUser');
     });
 
@@ -264,7 +255,7 @@ describe('GraphQLToolHandlersRuntime (replay)', () => {
       expect(body.operationName).toBeNull();
     });
 
-    it('passes custom headers to page.evaluate', async () => {
+    it('passes custom headers through', async () => {
       const browserResult: BrowserFetchResult = {
         ok: true,
         status: 200,
@@ -288,6 +279,224 @@ describe('GraphQLToolHandlersRuntime (replay)', () => {
           headers: { Authorization: 'Bearer xyz' },
         }),
       );
+    });
+  });
+
+  // ── APQ (persisted query) ───────────────────────────────────────────
+
+  describe('Apollo persisted-query (APQ)', () => {
+    it('adds extensions.persistedQuery to the single-op body', async () => {
+      page.evaluate.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        responseText: '{}',
+        responseJson: { data: { ok: true } },
+        responseHeaders: {},
+      });
+
+      await handlers.handleGraphqlReplay({
+        endpoint: withPath(TEST_URLS.root, 'graphql'),
+        query: 'query { ok }',
+        persistedQuery: { sha256Hash: 'abc123', version: 1 },
+        useBrowser: true,
+      });
+
+      const parsed = requestBodyOf(page.evaluate.mock.calls);
+      expect(parsed.extensions.persistedQuery).toEqual({ sha256Hash: 'abc123', version: 1 });
+      // query is still sent so the server can cache it on a miss
+      expect(parsed.query).toBe('query { ok }');
+    });
+
+    it('defaults APQ version to 1 when omitted', async () => {
+      page.evaluate.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        responseText: '{}',
+        responseJson: {},
+        responseHeaders: {},
+      });
+
+      await handlers.handleGraphqlReplay({
+        endpoint: withPath(TEST_URLS.root, 'graphql'),
+        query: 'query { ok }',
+        persistedQuery: { sha256Hash: 'deadbeef' },
+        useBrowser: true,
+      });
+
+      expect(requestBodyOf(page.evaluate.mock.calls).extensions.persistedQuery).toEqual({
+        sha256Hash: 'deadbeef',
+        version: 1,
+      });
+    });
+
+    it('ignores a persistedQuery without a sha256Hash', async () => {
+      page.evaluate.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        responseText: '{}',
+        responseJson: {},
+        responseHeaders: {},
+      });
+
+      await handlers.handleGraphqlReplay({
+        endpoint: withPath(TEST_URLS.root, 'graphql'),
+        query: 'query { ok }',
+        persistedQuery: { version: 1 },
+        useBrowser: true,
+      });
+
+      expect(requestBodyOf(page.evaluate.mock.calls).extensions).toBeUndefined();
+    });
+  });
+
+  // ── batch replay ────────────────────────────────────────────────────
+
+  describe('batch replay', () => {
+    it('builds a JSON array body and reports batchSize', async () => {
+      page.evaluate.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        responseText: '[]',
+        responseJson: [{ data: { a: 1 } }, { data: { b: 2 } }],
+        responseHeaders: {},
+      });
+
+      const body = parseJson<any>(
+        await handlers.handleGraphqlReplay({
+          endpoint: withPath(TEST_URLS.root, 'graphql'),
+          batch: [{ query: 'query A { a }', variables: { x: 1 } }, { query: 'query B { b }' }],
+          useBrowser: true,
+        }),
+      );
+
+      const sent = requestBodyOf(page.evaluate.mock.calls);
+      expect(Array.isArray(sent)).toBe(true);
+      expect(sent).toHaveLength(2);
+      expect(sent[0]).toEqual({ query: 'query A { a }', variables: { x: 1 }, operationName: null });
+      expect(sent[1]).toEqual({ query: 'query B { b }', variables: {}, operationName: null });
+      expect(body.mode).toBe('batch');
+      expect(body.batchSize).toBe(2);
+    });
+
+    it('does not require a top-level query in batch mode', async () => {
+      page.evaluate.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        responseText: '[]',
+        responseJson: [],
+        responseHeaders: {},
+      });
+
+      const body = parseJson<any>(
+        await handlers.handleGraphqlReplay({
+          endpoint: withPath(TEST_URLS.root, 'graphql'),
+          batch: [{ query: 'query { ok }' }],
+          useBrowser: true,
+        }),
+      );
+
+      expect(body.success).toBe(true);
+      expect(body.batchSize).toBe(1);
+    });
+
+    it('rejects a batch item missing a query', async () => {
+      const response = await handlers.handleGraphqlReplay({
+        endpoint: withPath(TEST_URLS.root, 'graphql'),
+        batch: [{ variables: { x: 1 } }],
+        useBrowser: true,
+      });
+      const body = parseJson<any>(response);
+      expect((response as any).isError).toBe(true);
+      expect(body.error).toContain('non-empty query');
+    });
+
+    it('rejects non-object batch items', async () => {
+      const response = await handlers.handleGraphqlReplay({
+        endpoint: withPath(TEST_URLS.root, 'graphql'),
+        batch: ['not an object'],
+        useBrowser: true,
+      });
+      const body = parseJson<any>(response);
+      expect((response as any).isError).toBe(true);
+      expect(body.error).toContain('batch items must be objects');
+    });
+  });
+
+  // ── GraphQL errors structuring ──────────────────────────────────────
+
+  describe('GraphQL errors structuring', () => {
+    it('surfaces a structured graphqlErrors array from a single-op response', async () => {
+      page.evaluate.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        responseText: '{}',
+        responseJson: {
+          data: { user: null },
+          errors: [{ message: 'Not authorized', path: ['user'] }],
+        },
+        responseHeaders: {},
+      });
+
+      const body = parseJson<any>(
+        await handlers.handleGraphqlReplay({
+          endpoint: withPath(TEST_URLS.root, 'graphql'),
+          query: 'query { user { name } }',
+          useBrowser: true,
+        }),
+      );
+
+      expect(body.hasGraphqlErrors).toBe(true);
+      expect(body.graphqlErrors).toEqual([{ message: 'Not authorized', path: ['user'] }]);
+    });
+
+    it('reports hasGraphqlErrors=false when errors array is empty', async () => {
+      page.evaluate.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        responseText: '{}',
+        responseJson: { data: { ok: true }, errors: [] },
+        responseHeaders: {},
+      });
+
+      const body = parseJson<any>(
+        await handlers.handleGraphqlReplay({
+          endpoint: withPath(TEST_URLS.root, 'graphql'),
+          query: 'query { ok }',
+          useBrowser: true,
+        }),
+      );
+
+      expect(body.hasGraphqlErrors).toBe(false);
+      expect(body.graphqlErrors).toEqual([]);
+    });
+
+    it('omits graphqlErrors when the response has no errors field', async () => {
+      page.evaluate.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        responseText: '{}',
+        responseJson: { data: { ok: true } },
+        responseHeaders: {},
+      });
+
+      const body = parseJson<any>(
+        await handlers.handleGraphqlReplay({
+          endpoint: withPath(TEST_URLS.root, 'graphql'),
+          query: 'query { ok }',
+          useBrowser: true,
+        }),
+      );
+
+      expect(body.graphqlErrors).toBeUndefined();
+      expect(body.hasGraphqlErrors).toBeUndefined();
     });
   });
 
@@ -457,6 +666,7 @@ describe('GraphQLToolHandlersRuntime (replay)', () => {
       expect(body.endpoint).toBe(withPath(TEST_URLS.root, 'graphql'));
       expect(body.status).toBe(200);
       expect(body.statusText).toBe('OK');
+      expect(body.mode).toBe('single');
     });
 
     it('includes responseLength for JSON', async () => {

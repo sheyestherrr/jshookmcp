@@ -406,4 +406,66 @@ describe('GraphQLToolHandlersExtract', () => {
       expect(body.queries[0].variables).toBeNull();
     });
   });
+
+  // ── query shape enrichment ──────────────────────────────────────────
+
+  describe('query shape enrichment', () => {
+    it('enriches each extracted query with a structural shape', async () => {
+      const extraction = {
+        scannedRecords: 1,
+        totalExtracted: 1,
+        extracted: [
+          {
+            source: 'test',
+            url: withPath(TEST_URLS.root, 'graphql'),
+            method: 'POST',
+            operationName: 'Deep',
+            query: 'query Deep { user { friends { name } } }',
+            variables: null,
+            timestamp: null,
+            contentType: 'application/json',
+          },
+        ] as ExtractedGraphQLQuery[],
+      };
+      page.evaluate.mockResolvedValueOnce(extraction);
+
+      const body = parseJson<any>(await handlers.handleGraphqlExtractQueries({}));
+
+      const shape = body.queries[0].shape;
+      expect(shape).toBeDefined();
+      expect(shape.operationType).toBe('query');
+      expect(shape.operationName).toBe('Deep');
+      expect(shape.depth).toBe(3);
+      expect(shape.breadthByLevel).toEqual([1, 1, 1]);
+      expect(shape.costScore).toBeGreaterThan(0);
+      expect(shape.hasCycle).toBe(false);
+      // top-level convenience field mirrors operationType
+      expect(body.queries[0].operationType).toBe('query');
+    });
+
+    it('still returns a shape (unknown) for a truncated/non-graphql body', async () => {
+      const extraction = {
+        scannedRecords: 1,
+        totalExtracted: 1,
+        extracted: [
+          {
+            source: 'test',
+            url: withPath(TEST_URLS.root, 'graphql'),
+            method: 'POST',
+            operationName: null,
+            query: 'not a real query',
+            variables: null,
+            timestamp: null,
+            contentType: 'text/plain',
+          },
+        ] as ExtractedGraphQLQuery[],
+      };
+      page.evaluate.mockResolvedValueOnce(extraction);
+
+      const body = parseJson<any>(await handlers.handleGraphqlExtractQueries({}));
+
+      expect(body.queries[0].shape.operationType).toBe('unknown');
+      expect(body.queries[0].shape.totalFields).toBe(0);
+    });
+  });
 });

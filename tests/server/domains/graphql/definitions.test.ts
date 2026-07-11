@@ -150,8 +150,22 @@ describe('graphql definitions', () => {
       expect(tool).toBeDefined();
     });
 
-    it('has endpoint and query as required', async () => {
-      expect(tool.inputSchema.required).toEqual(['endpoint', 'query']);
+    it('requires only endpoint (query is optional when batch is supplied)', async () => {
+      expect(tool.inputSchema.required).toEqual(['endpoint']);
+    });
+
+    it('exposes a persistedQuery (APQ) property', async () => {
+      const persistedQuery = (tool.inputSchema.properties as any).persistedQuery;
+      expect(persistedQuery).toBeDefined();
+      expect(persistedQuery.type).toBe('object');
+      expect(persistedQuery.required).toEqual(['sha256Hash']);
+    });
+
+    it('exposes a batch property', async () => {
+      const batch = (tool.inputSchema.properties as any).batch;
+      expect(batch).toBeDefined();
+      expect(batch.type).toBe('array');
+      expect(batch.items.required).toEqual(['query']);
     });
 
     it('has variables property', async () => {

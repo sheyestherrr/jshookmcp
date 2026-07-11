@@ -18,6 +18,7 @@ import {
 } from '@server/domains/graphql/handlers.impl.core.runtime.shared';
 import type { ExtractedGraphQLQuery } from '@server/domains/graphql/handlers.impl.core.runtime.shared';
 import { evaluateWithTimeout } from '@modules/collector/PageController';
+import { analyzeQueryShape } from '@server/domains/graphql/handlers/query-shape';
 
 type GraphQLConsoleMonitorLike = {
   getFetchRequests?: () => Promise<unknown[]>;
@@ -492,6 +493,7 @@ export class ExtractHandlers {
       const queries = dedupedExtracted.slice(0, limit).map((item, index) => {
         const queryPreview = createPreview(item.query, GRAPHQL_MAX_QUERY_CHARS);
         const variablesPreview = serializeForPreview(item.variables, GRAPHQL_MAX_PREVIEW_CHARS);
+        const shape = analyzeQueryShape(item.query);
 
         const normalized: Record<string, unknown> = {
           index,
@@ -499,11 +501,13 @@ export class ExtractHandlers {
           url: item.url,
           method: item.method,
           operationName: item.operationName,
+          operationType: shape.operationType,
           contentType: item.contentType,
           timestamp: item.timestamp,
           queryLength: item.query.length,
           queryPreview: queryPreview.preview,
           queryTruncated: queryPreview.truncated,
+          shape,
         };
 
         if (!queryPreview.truncated) {

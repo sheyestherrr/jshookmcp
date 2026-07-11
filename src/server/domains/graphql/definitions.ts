@@ -47,9 +47,11 @@ export const graphqlTools: Tool[] = [
   ),
   tool('graphql_replay', (t) =>
     t
-      .desc('Replay a GraphQL operation with optional variables.')
+      .desc(
+        'Replay a GraphQL operation with optional variables, batch array, or Apollo persisted-query (APQ) extensions.',
+      )
       .string('endpoint', 'GraphQL endpoint URL')
-      .string('query', 'GraphQL query/mutation string')
+      .string('query', 'GraphQL query/mutation string (required unless batch is provided)')
       .prop('variables', {
         type: 'object',
         description: 'GraphQL variables',
@@ -67,7 +69,33 @@ export const graphqlTools: Tool[] = [
           'false to force a Node-side fetch.',
         { default: true },
       )
-      .requiredOpenWorld('endpoint', 'query'),
+      .prop('persistedQuery', {
+        type: 'object',
+        description:
+          'Apollo persisted-query (APQ) extension block. Adds extensions.persistedQuery { sha256Hash, version } to the body so traffic using APQ / Relay_preload replays faithfully.',
+        properties: {
+          sha256Hash: { type: 'string', description: 'The APQ query hash (sha256)' },
+          version: { type: 'integer', description: 'APQ version (defaults to 1)' },
+        },
+        required: ['sha256Hash'],
+        additionalProperties: false,
+      })
+      .prop('batch', {
+        type: 'array',
+        description:
+          'Batch replay: array of operations. When set, the request body is a JSON array and the server response is an array. Each item is { query, variables?, operationName? }.',
+        items: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+            variables: { type: 'object', additionalProperties: true },
+            operationName: { type: 'string' },
+          },
+          required: ['query'],
+          additionalProperties: false,
+        },
+      })
+      .requiredOpenWorld('endpoint'),
   ),
   tool('graphql_enum_schema', (t) =>
     t
