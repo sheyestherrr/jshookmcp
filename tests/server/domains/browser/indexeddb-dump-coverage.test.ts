@@ -43,11 +43,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
 
       await handlers.handleIndexedDBDump({});
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: '',
-        store: '',
-        maxRecords: 100,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: '',
+          store: '',
+          maxRecords: 100,
+        }),
+      );
     });
   });
 
@@ -63,11 +66,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
         await handlers.handleIndexedDBDump({ database: 'myDb' }),
       );
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: 'myDb',
-        store: '',
-        maxRecords: 100,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: 'myDb',
+          store: '',
+          maxRecords: 100,
+        }),
+      );
       expect(body.myDb.users).toEqual([{ id: 1 }]);
     });
 
@@ -80,11 +86,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
         await handlers.handleIndexedDBDump({ store: 'targetStore' }),
       );
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: '',
-        store: 'targetStore',
-        maxRecords: 100,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: '',
+          store: 'targetStore',
+          maxRecords: 100,
+        }),
+      );
       expect(body.myDb.targetStore).toEqual([{ key: 'val' }]);
     });
 
@@ -97,11 +106,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
         await handlers.handleIndexedDBDump({ maxRecords: 2 }),
       );
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: '',
-        store: '',
-        maxRecords: 2,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: '',
+          store: '',
+          maxRecords: 2,
+        }),
+      );
       expect(body.db.store).toHaveLength(2);
     });
 
@@ -116,11 +128,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
         maxRecords: 50,
       });
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: 'specificDb',
-        store: 'specificStore',
-        maxRecords: 50,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: 'specificDb',
+          store: 'specificStore',
+          maxRecords: 50,
+        }),
+      );
     });
   });
 
@@ -375,11 +390,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
 
       await handlers.handleIndexedDBDump({ store: 'myStore' });
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: '',
-        store: 'myStore',
-        maxRecords: 100,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: '',
+          store: 'myStore',
+          maxRecords: 100,
+        }),
+      );
     });
 
     it('uses empty string for store when only database is provided', async () => {
@@ -387,11 +405,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
 
       await handlers.handleIndexedDBDump({ database: 'myDb' });
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: 'myDb',
-        store: '',
-        maxRecords: 100,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: 'myDb',
+          store: '',
+          maxRecords: 100,
+        }),
+      );
     });
 
     it('uses default maxRecords when only database and store are provided', async () => {
@@ -399,11 +420,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
 
       await handlers.handleIndexedDBDump({ database: 'db', store: 'store' });
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: 'db',
-        store: 'store',
-        maxRecords: 100,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: 'db',
+          store: 'store',
+          maxRecords: 100,
+        }),
+      );
     });
 
     it('uses maxRecords of 1 to get single record', async () => {
@@ -415,11 +439,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
         await handlers.handleIndexedDBDump({ maxRecords: 1 }),
       );
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: '',
-        store: '',
-        maxRecords: 1,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: '',
+          store: '',
+          maxRecords: 1,
+        }),
+      );
       expect(body.db.store).toEqual([{ only: 'one' }]);
     });
 
@@ -428,11 +455,14 @@ describe('IndexedDBDumpHandlers — coverage expansion', () => {
 
       await handlers.handleIndexedDBDump({ maxRecords: 10000 });
 
-      expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-        database: '',
-        store: '',
-        maxRecords: 10000,
-      });
+      expect(page.evaluate).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          database: '',
+          store: '',
+          maxRecords: 10000,
+        }),
+      );
     });
   });
 

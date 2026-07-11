@@ -97,10 +97,34 @@ export const browserSecurityStateTools: Tool[] = [
   ),
   tool('indexeddb_dump', (t) =>
     t
-      .desc('Export all IndexedDB databases and records for offline analysis.')
+      .desc(
+        'Export IndexedDB databases and records. Supports keyRange queries (IDBKeyRange.bound/lower/upper), indexName (query a specific index), count (count-only mode), and cursor pagination (stream large stores in batches).',
+      )
       .string('database', 'Database name')
       .string('store', 'Object store name')
       .number('maxRecords', 'Max records per store', { default: 100 })
+      .string('indexName', 'Query a specific index on the object store')
+      .boolean('count', 'Return only {count} of matching records (no record fetch)', {
+        default: false,
+      })
+      .object(
+        'keyRange',
+        {
+          lower: { type: 'string' },
+          upper: { type: 'string' },
+          lowerOpen: { type: 'boolean' },
+          upperOpen: { type: 'boolean' },
+        },
+        'IDBKeyRange bounds. lower/upper accepted as strings (IndexedDB casts to the index key type).',
+      )
+      .object(
+        'cursor',
+        {
+          offset: { type: 'number' },
+          batchSize: { type: 'number' },
+        },
+        'Stream a batch via openCursor instead of getAll. Returns {records, hasMore, nextOffset}.',
+      )
       .query(),
   ),
   tool('camoufox_geolocation', (t) =>

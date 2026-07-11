@@ -25,6 +25,11 @@ interface CollectorMock {
       options?: { includeSource?: boolean; maxScripts?: number },
     ) => Promise<Record<string, unknown>>
   >;
+  getAttachedTargetSession: Mock<
+    () => {
+      send: Mock<(method: string, params?: Record<string, unknown>) => Promise<unknown>>;
+    } | null
+  >;
 }
 
 interface ConsoleMonitorMock {
@@ -43,6 +48,7 @@ function createDeps() {
     detachCdpTarget: vi.fn(async () => false),
     getAttachedTargetInfo: vi.fn(() => null),
     dumpTargetScripts: vi.fn(async () => ({})),
+    getAttachedTargetSession: vi.fn(() => null),
   };
 
   const consoleMonitor: ConsoleMonitorMock = {
@@ -293,5 +299,123 @@ describe('TargetControlHandlers', () => {
       maxScripts: 50,
     });
     expect(body._nextStepHint).toContain('Scripts include source');
+  });
+
+  // ── B4: Service Worker event hooks (CDP arg-level, verified:false) ──
+
+  it('delivers a push message via CDP ServiceWorker.deliverPushMessage', async () => {
+    const send = vi.fn(async () => undefined);
+    collector.getAttachedTargetSession.mockReturnValueOnce({ send });
+
+    const body = parseJson<any>(
+      await handlers.handleServiceWorkerDeliverPush({
+        origin: 'https://app.example',
+        registrationId: 'reg-42',
+        data: '{"event":"test"}',
+      }),
+    );
+
+    expect(body.success).toBe(true);
+    expect(body.delivered).toBe(true);
+    expect(body.scope).toBe('cdp-arg-level');
+    expect(body.verified).toBe(false);
+    expect(body.origin).toBe('https://app.example');
+    expect(body.registrationId).toBe('reg-42');
+    expect(send).toHaveBeenCalledWith('ServiceWorker.enable');
+    expect(send).toHaveBeenCalledWith('ServiceWorker.deliverPushMessage', {
+      origin: 'https://app.example',
+      registrationId: 'reg-42',
+      data: '{"event":"test"}',
+    });
+  });
+
+  it('requires origin and registrationId for deliverPush', async () => {
+    const body = parseJson<any>(
+      await handlers.handleServiceWorkerDeliverPush({ origin: 'https://x' }),
+    );
+
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/origin and registrationId/i);
+    expect(collector.getAttachedTargetSession).not.toHaveBeenCalled();
+  });
+
+  it('requires an attached CDP session for deliverPush', async () => {
+    collector.getAttachedTargetSession.mockReturnValueOnce(null);
+
+    const body = parseJson<any>(
+      await handlers.handleServiceWorkerDeliverPush({
+        origin: 'https://x',
+        registrationId: 'r1',
+      }),
+    );
+
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/No attached CDP target session/i);
+  });
+
+  it('dispatches a sync event via CDP ServiceWorker.dispatchSyncEvent', async () => {
+    const send = vi.fn(async () => undefined);
+    collector.getAttachedTargetSession.mockReturnValueOnce({ send });
+
+    const body = parseJson<any>(
+      await handlers.handleServiceWorkerDispatchSync({
+        origin: 'https://app.example',
+        registrationId: 'reg-42',
+        tag: 'sync-messages',
+        lastChance: true,
+      }),
+    );
+
+    expect(body.success).toBe(true);
+    expect(body.dispatched).toBe(true);
+    expect(body.scope).toBe('cdp-arg-level');
+    expect(body.verified).toBe(false);
+    expect(body.tag).toBe('sync-messages');
+    expect(body.lastChance).toBe(true);
+    expect(send).toHaveBeenCalledWith('ServiceWorker.enable');
+    expect(send).toHaveBeenCalledWith('ServiceWorker.dispatchSyncEvent', {
+      origin: 'https://app.example',
+      registrationId: 'reg-42',
+      tag: 'sync-messages',
+      lastChance: true,
+    });
+  });
+
+  it('requires origin and registrationId for dispatchSync', async () => {
+    const body = parseJson<any>(await handlers.handleServiceWorkerDispatchSync({}));
+
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/origin and registrationId/i);
+  });
+
+  it('requires an attached CDP session for dispatchSync', async () => {
+    collector.getAttachedTargetSession.mockReturnValueOnce(null);
+
+    const body = parseJson<any>(
+      await handlers.handleServiceWorkerDispatchSync({
+        origin: 'https://x',
+        registrationId: 'r1',
+      }),
+    );
+
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/No attached CDP target session/i);
+  });
+
+  it('returns failure when CDP send throws for deliverPush', async () => {
+    const send = vi.fn(async () => {
+      throw new Error('cdp protocol error');
+    });
+    collector.getAttachedTargetSession.mockReturnValueOnce({ send });
+
+    const body = parseJson<any>(
+      await handlers.handleServiceWorkerDeliverPush({
+        origin: 'https://x',
+        registrationId: 'r1',
+      }),
+    );
+
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('cdp protocol error');
   });
 });

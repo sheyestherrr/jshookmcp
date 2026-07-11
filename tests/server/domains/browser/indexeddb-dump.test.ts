@@ -31,11 +31,14 @@ describe('IndexedDBDumpHandlers', () => {
     const body = parseJson<BrowserStatusResponse>(await handlers.handleIndexedDBDump({}));
 
     expect(getActivePage).toHaveBeenCalledOnce();
-    expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-      database: '',
-      store: '',
-      maxRecords: 100,
-    });
+    expect(page.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        database: '',
+        store: '',
+        maxRecords: 100,
+      }),
+    );
     expect(body).toEqual({
       success: true,
       appDb: {
@@ -59,11 +62,14 @@ describe('IndexedDBDumpHandlers', () => {
       }),
     );
 
-    expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), {
-      database: 'analyticsDb',
-      store: 'events',
-      maxRecords: 10,
-    });
+    expect(page.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        database: 'analyticsDb',
+        store: 'events',
+        maxRecords: 10,
+      }),
+    );
     expect(body.analyticsDb.events).toEqual([{ id: 9, type: 'click' }]);
   });
 

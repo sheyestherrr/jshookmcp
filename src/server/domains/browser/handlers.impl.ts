@@ -423,6 +423,14 @@ export class BrowserToolHandlers {
     return this.targetControl.handleBrowserWorkerScripts(args);
   }
 
+  async handleServiceWorkerDeliverPush(args: Record<string, unknown>) {
+    return this.targetControl.handleServiceWorkerDeliverPush(args);
+  }
+
+  async handleServiceWorkerDispatchSync(args: Record<string, unknown>) {
+    return this.targetControl.handleServiceWorkerDispatchSync(args);
+  }
+
   async handleBrowserAttach(args: Record<string, unknown>) {
     if (this.activeDriver === 'camoufox' && this.camoufoxManager) {
       await this.closeCamoufox();
@@ -586,13 +594,15 @@ export class BrowserToolHandlers {
         return this.pageData.handlePageGetLocalStorage(args);
       case 'set':
         return this.pageData.handlePageSetLocalStorage(args);
+      case 'delete':
+        return this.pageData.handlePageDeleteLocalStorage(args);
       case 'clear':
         return this.pageData.handlePageClearLocalStorage();
       default:
         return asErrorResponse(
           new ToolError(
             'VALIDATION',
-            `Invalid action: "${action}". Expected one of: get, set, clear`,
+            `Invalid action: "${action}". Expected one of: get, set, delete, clear`,
             {
               toolName: 'page_local_storage',
             },
@@ -608,19 +618,25 @@ export class BrowserToolHandlers {
         return this.pageData.handlePageGetSessionStorage(args);
       case 'set':
         return this.pageData.handlePageSetSessionStorage(args);
+      case 'delete':
+        return this.pageData.handlePageDeleteSessionStorage(args);
       case 'clear':
         return this.pageData.handlePageClearSessionStorage();
       default:
         return asErrorResponse(
           new ToolError(
             'VALIDATION',
-            `Invalid action: "${action}". Expected one of: get, set, clear`,
+            `Invalid action: "${action}". Expected one of: get, set, delete, clear`,
             {
               toolName: 'page_session_storage',
             },
           ),
         );
     }
+  }
+
+  async handlePageStorageInfo(args: Record<string, unknown>) {
+    return this.pageData.handlePageStorageInfo(args);
   }
 
   async handleBrowserPasskeySeed(args: Record<string, unknown>) {

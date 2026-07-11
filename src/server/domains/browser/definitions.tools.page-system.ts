@@ -87,19 +87,27 @@ export const browserPageSystemTools: Tool[] = [
   ),
   tool('page_local_storage', (t) =>
     t
-      .desc('Read, write, or clear localStorage entries for the current origin.')
-      .enum('action', ['get', 'set', 'clear'], 'Action')
-      .string('key', 'Key (for set/get)')
+      .desc('Read, write, delete, or clear localStorage entries for the current origin.')
+      .enum('action', ['get', 'set', 'delete', 'clear'], 'Action')
+      .string('key', 'Key (for set/get/delete)')
       .string('value', 'Value (for set)')
       .required('action'),
   ),
   tool('page_session_storage', (t) =>
     t
-      .desc('Read, write, or clear sessionStorage entries for the current origin.')
-      .enum('action', ['get', 'set', 'clear'], 'Action')
-      .string('key', 'Key (for set/get)')
+      .desc('Read, write, delete, or clear sessionStorage entries for the current origin.')
+      .enum('action', ['get', 'set', 'delete', 'clear'], 'Action')
+      .string('key', 'Key (for set/get/delete)')
       .string('value', 'Value (for set)')
       .required('action'),
+  ),
+  tool('page_storage_info', (t) =>
+    t
+      .desc(
+        'Query navigator.storage.estimate() for {usage, quota} and navigator.storage.persisted() ' +
+          'to inspect the origin storage budget and persistence status (offline/PWA reverse engineering).',
+      )
+      .query(),
   ),
   tool('page_press_key', (t) =>
     t.desc('Simulate a key press by name.').string('key', 'Key name').requiredOpenWorld('key'),
@@ -119,5 +127,28 @@ export const browserPageSystemTools: Tool[] = [
         { default: false },
       )
       .idempotent(),
+  ),
+  tool('service_worker_deliver_push', (t) =>
+    t
+      .desc(
+        'Deliver a synthetic push message to a service worker via CDP ' +
+          'ServiceWorker.deliverPushMessage. Requires an attached CDP session on a SW target.',
+      )
+      .string('origin', 'Origin of the service worker registration')
+      .string('registrationId', 'Service worker registration ID')
+      .string('data', 'Push message payload data')
+      .required('origin', 'registrationId'),
+  ),
+  tool('service_worker_dispatch_sync', (t) =>
+    t
+      .desc(
+        'Dispatch a Background Sync event to a service worker via CDP ' +
+          'ServiceWorker.dispatchSyncEvent. Requires an attached CDP session on a SW target.',
+      )
+      .string('origin', 'Origin of the service worker registration')
+      .string('registrationId', 'Service worker registration ID')
+      .string('tag', 'Sync tag (identifies the sync event)', { default: '' })
+      .boolean('lastChance', 'Whether this is the last retry attempt', { default: false })
+      .required('origin', 'registrationId'),
   ),
 ];

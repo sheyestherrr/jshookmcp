@@ -42,8 +42,8 @@ function createDatabase(
       if (!store) throw new Error(`Missing store: ${storeName}`);
       return {
         objectStore() {
-          return {
-            getAll() {
+          const api = {
+            getAll(_range?: unknown) {
               const request = createAsyncRequest<unknown[]>();
               queueMicrotask(() => {
                 if (store.error !== undefined) {
@@ -54,7 +54,27 @@ function createDatabase(
               });
               return request.req;
             },
+            count(_range?: unknown) {
+              const request = createAsyncRequest<number>();
+              queueMicrotask(() => {
+                if (store.error !== undefined) {
+                  request.reject(store.error);
+                  return;
+                }
+                request.resolve((store.records ?? []).length);
+              });
+              return request.req;
+            },
+            index(_name: string) {
+              return api;
+            },
+            openCursor(_range?: unknown) {
+              const request = createAsyncRequest<unknown>();
+              queueMicrotask(() => request.resolve(null));
+              return request.req;
+            },
           };
+          return api;
         },
       };
     },
@@ -86,6 +106,73 @@ function createHandler(indexedDBMock: any) {
 describe('IndexedDBDumpHandlers runtime coverage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('count mode returns {count} without fetching records (B1)', async () => {
+    const targetDb = createDatabase('targetDb', {
+      users: { records: [{ id: 1 }, { id: 2 }, { id: 3 }] },
+    });
+    const indexedDBMock = {
+      databases: vi.fn(async () => [{ name: 'targetDb', version: 1 }]),
+      open: vi.fn(() => {
+        const r = createAsyncRequest<any>();
+        queueMicrotask(() => r.resolve(targetDb));
+        return r.req;
+      }),
+    };
+    const { handlers } = createHandler(indexedDBMock);
+
+    const parsed = parseJson<any>(
+      await handlers.handleIndexedDBDump({ database: 'targetDb', store: 'users', count: true }),
+    );
+    expect(parsed.targetDb.users.count).toBe(3);
+  });
+
+  it('indexName queries a specific index (B1)', async () => {
+    const targetDb = createDatabase('targetDb', {
+      users: { records: [{ id: 1, name: 'a' }] },
+    });
+    const indexedDBMock = {
+      databases: vi.fn(async () => [{ name: 'targetDb', version: 1 }]),
+      open: vi.fn(() => {
+        const r = createAsyncRequest<any>();
+        queueMicrotask(() => r.resolve(targetDb));
+        return r.req;
+      }),
+    };
+    const { handlers } = createHandler(indexedDBMock);
+
+    const parsed = parseJson<any>(
+      await handlers.handleIndexedDBDump({
+        database: 'targetDb',
+        store: 'users',
+        indexName: 'name_idx',
+      }),
+    );
+    expect(parsed.targetDb.users).toHaveLength(1);
+  });
+
+  it('cursor mode returns {records, hasMore} (B2)', async () => {
+    const targetDb = createDatabase('targetDb', { users: { records: [] } });
+    const indexedDBMock = {
+      databases: vi.fn(async () => [{ name: 'targetDb', version: 1 }]),
+      open: vi.fn(() => {
+        const r = createAsyncRequest<any>();
+        queueMicrotask(() => r.resolve(targetDb));
+        return r.req;
+      }),
+    };
+    const { handlers } = createHandler(indexedDBMock);
+
+    const parsed = parseJson<any>(
+      await handlers.handleIndexedDBDump({
+        database: 'targetDb',
+        store: 'users',
+        cursor: { offset: 0, batchSize: 10 },
+      }),
+    );
+    expect(parsed.targetDb.users.records).toEqual([]);
+    expect(parsed.targetDb.users.hasMore).toBe(false);
   });
 
   it('filters databases and stores, respects versioned open, and truncates records', async () => {

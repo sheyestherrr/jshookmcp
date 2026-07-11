@@ -23,6 +23,7 @@ describe('PageDataHandlers', () => {
       getSessionStorage: vi.fn(),
       setSessionStorage: vi.fn(),
       clearSessionStorage: vi.fn(),
+      evaluate: vi.fn(),
     };
     handlers = new PageDataHandlers({
       pageController,
@@ -464,6 +465,101 @@ describe('PageDataHandlers', () => {
     const body = parseJson<BrowserStatusResponse>(
       await handlers.handlePageSetLocalStorage({ key: 'k', value: 'v' }),
     );
+    expect(body.success).toBe(false);
+  });
+
+  // ── B3: storage delete-entry ──
+
+  it('deletes a localStorage entry via action=delete', async () => {
+    pageController.evaluate.mockResolvedValue(undefined);
+
+    const body = parseJson<BrowserStatusResponse>(
+      await handlers.handlePageDeleteLocalStorage({ key: 'staleToken' }),
+    );
+
+    expect(pageController.evaluate).toHaveBeenCalledWith('localStorage.removeItem("staleToken")');
+    expect(body).toEqual({ success: true, key: 'staleToken', deleted: true });
+  });
+
+  it('rejects localStorage delete with an empty key', async () => {
+    const body = parseJson<BrowserStatusResponse>(
+      await handlers.handlePageDeleteLocalStorage({ key: '  ' }),
+    );
+
+    expect(pageController.evaluate).not.toHaveBeenCalled();
+    expect(body.success).toBe(false);
+    expect(body.message).toContain('localStorage key');
+  });
+
+  it('returns failure when localStorage.removeItem evaluate fails', async () => {
+    pageController.evaluate.mockRejectedValue(new Error('no page'));
+
+    const body = parseJson<BrowserStatusResponse>(
+      await handlers.handlePageDeleteLocalStorage({ key: 'k' }),
+    );
+    expect(body.success).toBe(false);
+  });
+
+  it('deletes a sessionStorage entry via action=delete', async () => {
+    pageController.evaluate.mockResolvedValue(undefined);
+
+    const body = parseJson<BrowserStatusResponse>(
+      await handlers.handlePageDeleteSessionStorage({ key: 'tempState' }),
+    );
+
+    expect(pageController.evaluate).toHaveBeenCalledWith('sessionStorage.removeItem("tempState")');
+    expect(body).toEqual({ success: true, key: 'tempState', deleted: true });
+  });
+
+  it('rejects sessionStorage delete with an empty key', async () => {
+    const body = parseJson<BrowserStatusResponse>(
+      await handlers.handlePageDeleteSessionStorage({ key: '' }),
+    );
+
+    expect(pageController.evaluate).not.toHaveBeenCalled();
+    expect(body.success).toBe(false);
+    expect(body.message).toContain('sessionStorage key');
+  });
+
+  // ── B3: page_storage_info ──
+
+  it('returns storage estimate and persisted status', async () => {
+    pageController.evaluate.mockResolvedValue({
+      supported: true,
+      usage: 2048,
+      quota: 1048576,
+      persisted: true,
+    });
+
+    const body = parseJson<BrowserStatusResponse>(await handlers.handlePageStorageInfo({}));
+
+    expect(body).toEqual({
+      success: true,
+      supported: true,
+      usage: 2048,
+      quota: 1048576,
+      persisted: true,
+    });
+  });
+
+  it('returns supported=false when Storage API is unavailable', async () => {
+    pageController.evaluate.mockResolvedValue({
+      supported: false,
+      usage: null,
+      quota: null,
+      persisted: null,
+    });
+
+    const body = parseJson<BrowserStatusResponse>(await handlers.handlePageStorageInfo({}));
+
+    expect(body.supported).toBe(false);
+    expect(body.usage).toBeNull();
+  });
+
+  it('returns failure when storage estimate evaluate fails', async () => {
+    pageController.evaluate.mockRejectedValue(new Error('page gone'));
+
+    const body = parseJson<BrowserStatusResponse>(await handlers.handlePageStorageInfo({}));
     expect(body.success).toBe(false);
   });
 });

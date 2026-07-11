@@ -336,4 +336,92 @@ export class TargetControlHandlers {
       return R.fail(error instanceof Error ? error.message : String(error)).build();
     }
   }
+
+  async handleServiceWorkerDeliverPush(args: Record<string, unknown>): Promise<ToolResponse> {
+    try {
+      const origin = argString(args, 'origin', '');
+      const registrationId = argString(args, 'registrationId', '');
+      const data = argString(args, 'data', '');
+      if (!origin || !registrationId) {
+        return R.fail(
+          'origin and registrationId are required. Call browser_list_workers to find a ' +
+            'service worker target, then use ServiceWorker.register to obtain the registrationId.',
+        ).build();
+      }
+
+      const session = this.deps.collector.getAttachedTargetSession();
+      if (!session) {
+        return R.fail(
+          'No attached CDP target session. Call browser_attach_cdp_target on a service worker ' +
+            'target first.',
+        ).build();
+      }
+
+      await session.send('ServiceWorker.enable');
+      await session.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data });
+
+      return R.ok().build({
+        delivered: true,
+        scope: 'cdp-arg-level',
+        verified: false,
+        origin,
+        registrationId,
+        note:
+          'CDP ServiceWorker.deliverPushMessage was sent with the provided arguments. ' +
+          'Behavioral verification (push event firing in the SW) requires a real Chromium ' +
+          'instance with a registered service worker and cannot be CI-verified.',
+      });
+    } catch (error) {
+      logger.error('Failed to deliver push message:', error);
+      return R.fail(error instanceof Error ? error.message : String(error)).build();
+    }
+  }
+
+  async handleServiceWorkerDispatchSync(args: Record<string, unknown>): Promise<ToolResponse> {
+    try {
+      const origin = argString(args, 'origin', '');
+      const registrationId = argString(args, 'registrationId', '');
+      const tag = argString(args, 'tag', '');
+      const lastChance = argBool(args, 'lastChance', false);
+      if (!origin || !registrationId) {
+        return R.fail(
+          'origin and registrationId are required. Call browser_list_workers to find a ' +
+            'service worker target, then use ServiceWorker.register to obtain the registrationId.',
+        ).build();
+      }
+
+      const session = this.deps.collector.getAttachedTargetSession();
+      if (!session) {
+        return R.fail(
+          'No attached CDP target session. Call browser_attach_cdp_target on a service worker ' +
+            'target first.',
+        ).build();
+      }
+
+      await session.send('ServiceWorker.enable');
+      await session.send('ServiceWorker.dispatchSyncEvent', {
+        origin,
+        registrationId,
+        tag,
+        lastChance,
+      });
+
+      return R.ok().build({
+        dispatched: true,
+        scope: 'cdp-arg-level',
+        verified: false,
+        origin,
+        registrationId,
+        tag,
+        lastChance,
+        note:
+          'CDP ServiceWorker.dispatchSyncEvent was sent with the provided arguments. ' +
+          'Behavioral verification (sync event firing in the SW) requires a real Chromium ' +
+          'instance with a registered service worker and cannot be CI-verified.',
+      });
+    } catch (error) {
+      logger.error('Failed to dispatch sync event:', error);
+      return R.fail(error instanceof Error ? error.message : String(error)).build();
+    }
+  }
 }

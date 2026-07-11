@@ -282,6 +282,50 @@ export class PageDataHandlers {
     });
   }
 
+  async handlePageDeleteLocalStorage(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const key = this.requireStorageKey(args, 'localStorage');
+      await this.deps.pageController.evaluate(`localStorage.removeItem(${JSON.stringify(key)})`);
+      return { key, deleted: true };
+    });
+  }
+
+  async handlePageDeleteSessionStorage(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const key = this.requireStorageKey(args, 'sessionStorage');
+      await this.deps.pageController.evaluate(`sessionStorage.removeItem(${JSON.stringify(key)})`);
+      return { key, deleted: true };
+    });
+  }
+
+  async handlePageStorageInfo(_args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const info = (await this.deps.pageController.evaluate(
+        `(async () => {
+          if (!navigator.storage || typeof navigator.storage.estimate !== 'function') {
+            return { supported: false, usage: null, quota: null, persisted: null };
+          }
+          const estimate = await navigator.storage.estimate();
+          const persisted = typeof navigator.storage.persisted === 'function'
+            ? await navigator.storage.persisted()
+            : null;
+          return {
+            supported: true,
+            usage: typeof estimate.usage === 'number' ? estimate.usage : null,
+            quota: typeof estimate.quota === 'number' ? estimate.quota : null,
+            persisted,
+          };
+        })()`,
+      )) as {
+        supported: boolean;
+        usage: number | null;
+        quota: number | null;
+        persisted: boolean | null;
+      };
+      return info;
+    });
+  }
+
   async handleBrowserPasskeySeed(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
       const relyingPartyId = argString(args, 'relyingPartyId', '');
