@@ -161,4 +161,16 @@ export const wasmTools: Tool[] = [
       )
       .required('inputPathA', 'inputPathB'),
   ),
+  tool('wasm_instrument_binary', (t) =>
+    t
+      .desc(
+        'Real wasm-level binary instrumentation: disassembles via wasm2wat, inserts a call to an imported trace function at every function entry, and reassembles via wat2wasm. Unlike wasm_instrument_trace (which only proxies JS-visible exports), this rewrites the code section so every function entry is observable. Honest boundary: function-ENTRY-level tracing, not basic-block — the host must supply the trace_fn import at instantiation.',
+      )
+      .string('inputPath', 'Path to the .wasm file to instrument')
+      .string(
+        'outputPath',
+        'Output instrumented .wasm file path. If omitted, auto-generates in artifacts/wasm/',
+      )
+      .required('inputPath'),
+  ),
 ];

@@ -40,6 +40,13 @@ const DEFAULT_SPECS = [
     required: false,
     envAllowlist: [],
   },
+  {
+    name: 'wabt.wat2wasm',
+    command: 'wat2wasm',
+    versionArgs: ['--version'],
+    required: false,
+    envAllowlist: [],
+  },
 
   // binaryen
   {

@@ -4,6 +4,7 @@ import { ExternalConversionHandlers } from './external-conversion-handlers';
 import { ExternalRuntimeHandlers } from './external-runtime-handlers';
 import { StringExtractHandlers } from './string-extract-handlers';
 import { DiffHandlers } from './diff-handlers';
+import { InstrumentBinaryHandlers } from './instrument-binary-handlers';
 
 export class ExternalToolHandlers {
   private readonly conversion: ExternalConversionHandlers;
@@ -11,6 +12,7 @@ export class ExternalToolHandlers {
   private readonly analysis: ExternalAnalysisHandlers;
   private readonly stringExtract: StringExtractHandlers;
   private readonly diff: DiffHandlers;
+  private readonly instrumentBinary: InstrumentBinaryHandlers;
 
   constructor(state: WasmSharedState) {
     this.conversion = new ExternalConversionHandlers(state);
@@ -18,6 +20,7 @@ export class ExternalToolHandlers {
     this.analysis = new ExternalAnalysisHandlers(state);
     this.stringExtract = new StringExtractHandlers(state);
     this.diff = new DiffHandlers(state);
+    this.instrumentBinary = new InstrumentBinaryHandlers(state);
   }
 
   handleWasmDisassemble(args: Record<string, unknown>) {
@@ -58,5 +61,9 @@ export class ExternalToolHandlers {
 
   handleWasmDiff(args: Record<string, unknown>) {
     return this.diff.handleWasmDiff(args);
+  }
+
+  handleWasmInstrumentBinary(args: Record<string, unknown>) {
+    return this.instrumentBinary.handleWasmInstrumentBinary(args);
   }
 }

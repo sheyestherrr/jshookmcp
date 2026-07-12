@@ -8,6 +8,7 @@ export type ExternalToolName =
   | 'wabt.wasm-objdump'
   | 'wabt.wasm-decompile'
   | 'wabt.wasm2c'
+  | 'wabt.wat2wasm'
   | 'binaryen.wasm-opt'
   | 'runtime.wasmtime'
   | 'runtime.wasmer'
