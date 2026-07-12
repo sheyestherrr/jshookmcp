@@ -20,7 +20,7 @@
 - dart-inspector + binary-instrument
 - dart-inspector + adb-bridge
 
-## 工具清单（12）
+## 工具清单（13）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -36,3 +36,4 @@
 | `dart_call_function` | 在 ARM64 仿真器中按地址或名称执行 Dart 函数，带简化运行时（模拟 built-ins、标记指针）。 |
 | `dart_inspect_object_pool` | 转储指定地址的 ObjectPool，显示所有条目的类型和值。 |
 | `dart_trace_execution` | 逐步跟踪 Dart 函数执行，输出每条指令及寄存器状态（PC、x0-x30、PP、THR）。 |
+| `dart_call_graph` | 待补充中文：Build a best-effort static call graph from a Dart AOT snapshot: nodes are Code objects, edges are ObjectPool entries whose value matches another Code entry point (caller to callee). Honest boundary: indirect/dynamic calls without a pool entry, and PcDescriptors-level mapping, require instruction decoding (deferred — cross-Dart-SDK version work). |

@@ -20,7 +20,7 @@ Extract and classify strings, recover Smi integer constants, and resolve obfusca
 - dart-inspector + binary-instrument
 - dart-inspector + adb-bridge
 
-## Full tool list (12)
+## Full tool list (13)
 
 | Tool | Description |
 | --- | --- |
@@ -36,3 +36,4 @@ Extract and classify strings, recover Smi integer constants, and resolve obfusca
 | `dart_call_function` | Execute a Dart function in the ARM64 emulator by address or name, with simplified runtime (mock built-ins, tagged pointers). |
 | `dart_inspect_object_pool` | Dump an ObjectPool at a specific address, showing all entries with types and values. |
 | `dart_trace_execution` | Trace Dart function execution step-by-step, emitting each instruction with register state (PC, x0-x30, PP, THR). |
+| `dart_call_graph` | Build a best-effort static call graph from a Dart AOT snapshot: nodes are Code objects, edges are ObjectPool entries whose value matches another Code entry point (caller to callee). Honest boundary: indirect/dynamic calls without a pool entry, and PcDescriptors-level mapping, require instruction decoding (deferred — cross-Dart-SDK version work). |

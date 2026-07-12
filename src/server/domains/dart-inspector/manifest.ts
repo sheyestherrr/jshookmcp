@@ -24,6 +24,7 @@ const registrations = defineMethodRegistrations<H, (typeof dartInspectorTools)[n
     { tool: 'dart_call_function', method: 'handleDartCallFunction' },
     { tool: 'dart_inspect_object_pool', method: 'handleDartInspectObjectPool' },
     { tool: 'dart_trace_execution', method: 'handleDartTraceExecution' },
+    { tool: 'dart_call_graph', method: 'handleDartCallGraph' },
   ],
 });
 

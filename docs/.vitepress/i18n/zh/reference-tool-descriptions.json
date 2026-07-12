@@ -611,5 +611,6 @@
   "frida_memory_scan": "待补充中文：Scan process memory for a byte pattern via Frida Memory.scanSync. Searches a named module, an explicit address range, or all readable ranges by default.",
   "frida_memory_read": "待补充中文：Read raw bytes from a Frida session via ptr(address).readByteArray. Returns hex; capped at 65536 bytes per call.",
   "instrumentation_session_diff": "待补充中文：Diff two instrumentation session snapshots: operations added/removed/common (by id) plus artifact fingerprints and per-type counts. Pure compare, mutates nothing.",
-  "instrumentation_session_merge": "待补充中文：Merge two sessions into a new session: copies operations (with id remapping) and artifacts from both sources. Original sessions are untouched."
+  "instrumentation_session_merge": "待补充中文：Merge two sessions into a new session: copies operations (with id remapping) and artifacts from both sources. Original sessions are untouched.",
+  "dart_call_graph": "待补充中文：Build a best-effort static call graph from a Dart AOT snapshot: nodes are Code objects, edges are ObjectPool entries whose value matches another Code entry point (caller to callee). Honest boundary: indirect/dynamic calls without a pool entry, and PcDescriptors-level mapping, require instruction decoding (deferred — cross-Dart-SDK version work)."
 }

@@ -53,6 +53,9 @@ const RULE_MODE_SET = new Set(['append', 'prepend', 'replace'] as const);
 const SYMBOLIZER_FORMAT_SET = new Set(['auto', 'flat', 'pairs', 'object'] as const);
 const SYMBOLIZER_MODE_SET = new Set(['forward', 'reverse'] as const);
 
+/** Format a bigint address as a lowercase hex string (`0x`-prefixed). */
+const hex = (n: bigint): string => `0x${n.toString(16)}`;
+
 /**
  * Coerce the raw `customRules` argument into a list of compiled
  * {@link CategoryRule}s, throwing {@link ToolError}(`VALIDATION`) on
@@ -404,6 +407,94 @@ export class DartInspectorHandlers {
         functions,
         totalCount: snapshot.codeObjects.length,
         truncated,
+      };
+    });
+  }
+
+  handleDartCallGraph(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const { DartAotLoader } = await import('@modules/native-emulator/dart/DartAotLoader');
+
+      const apkPath = argString(args, 'apkPath');
+      const libappPath = argString(args, 'libappPath');
+      const maxEdges = argNumber(args, 'maxEdges') ?? 5000;
+
+      if (!apkPath && !libappPath) {
+        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
+      }
+
+      const loader = new DartAotLoader();
+      const snapshot = await loader.loadSnapshot(apkPath ?? libappPath!);
+
+      const codes = snapshot.codeObjects;
+
+      // Index Code objects by entry point. Pool entries may carry a Dart heap
+      // tag bit, so each candidate value is also tried tag-stripped (−1).
+      const entryByAddr = new Map<bigint, (typeof codes)[number]>();
+      for (const code of codes) {
+        entryByAddr.set(code.entryPoint, code);
+      }
+
+      const nodes = codes.map((code) => ({
+        entry: hex(code.entryPoint),
+        name: code.name,
+        size: code.size,
+        hasName: Boolean(code.name),
+      }));
+
+      const edges: Array<{
+        from: string;
+        to: string;
+        fromName?: string;
+        toName?: string;
+      }> = [];
+      let poolsScanned = 0;
+      let poolsMissing = 0;
+      let hitCap = false;
+
+      for (const code of codes) {
+        if (hitCap) break;
+        const pool = snapshot.objectPools.find((p) => p.address === code.objectPool);
+        if (!pool) {
+          poolsMissing++;
+          continue;
+        }
+        poolsScanned++;
+        for (const entry of pool.pool.getAllEntries()) {
+          if (hitCap) break;
+          if (entry.value === 0n) continue;
+          for (const candidate of [entry.value, entry.value - 1n]) {
+            const target = entryByAddr.get(candidate);
+            if (target && target.entryPoint !== code.entryPoint) {
+              edges.push({
+                from: hex(code.entryPoint),
+                to: hex(target.entryPoint),
+                fromName: code.name || undefined,
+                toName: target.name || undefined,
+              });
+              if (edges.length >= maxEdges) hitCap = true;
+              break;
+            }
+          }
+        }
+      }
+
+      const entryPoints = nodes.filter((n) => /main|entry/i.test(n.name ?? ''));
+
+      return {
+        nodes,
+        edges,
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        entryPoints,
+        poolsScanned,
+        poolsMissing,
+        truncated: hitCap,
+        honestBoundary:
+          'Edges are derived from ObjectPool entries whose value matches a known Code entry point ' +
+          '(caller to callee, tag-stripped fallback). Indirect calls via BL/B instructions without a ' +
+          'pool entry, and dynamic-dispatch edges, require PcDescriptors / instruction-level decoding ' +
+          '(deferred — cross-Dart-SDK version work).',
       };
     });
   }

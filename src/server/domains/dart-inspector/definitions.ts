@@ -311,4 +311,18 @@ export const dartInspectorTools: Tool[] = [
       .required('apkPath|libappPath')
       .query(),
   ),
+  tool('dart_call_graph', (t) =>
+    t
+      .desc(
+        'Build a best-effort static call graph from a Dart AOT snapshot: nodes are Code objects, ' +
+          'edges are ObjectPool entries whose value matches another Code entry point (caller to callee). ' +
+          'Honest boundary: indirect/dynamic calls without a pool entry, and PcDescriptors-level mapping, ' +
+          'require instruction decoding (deferred — cross-Dart-SDK version work).',
+      )
+      .string('apkPath', 'Absolute path to APK')
+      .string('libappPath', 'Absolute path to libapp.so')
+      .number('maxEdges', 'Cap on emitted edges (excess sets truncated=true)', { minimum: 1 })
+      .required('apkPath|libappPath')
+      .query(),
+  ),
 ];
