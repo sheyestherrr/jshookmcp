@@ -21,6 +21,7 @@ import {
   type GraphQLExtractDependencies,
 } from '@server/domains/graphql/handlers/extract';
 import { ReplayHandlers } from '@server/domains/graphql/handlers/replay';
+import { SubscribeHandlers } from '@server/domains/graphql/handlers/subscribe';
 import { SchemaEnumHandlers } from '@server/domains/graphql/handlers/schema-enum';
 
 export type GraphQLToolHandlerDependencies = GraphQLExtractDependencies;
@@ -37,6 +38,7 @@ export class GraphQLToolHandlers {
   private introspection: IntrospectionHandlers;
   private extract: ExtractHandlers;
   private replay: ReplayHandlers;
+  private subscribe: SubscribeHandlers;
   private schemaEnum: SchemaEnumHandlers;
 
   constructor(deps: CodeCollector | GraphQLToolHandlerDependencies) {
@@ -46,6 +48,7 @@ export class GraphQLToolHandlers {
     this.introspection = new IntrospectionHandlers(normalized.collector);
     this.extract = new ExtractHandlers(normalized);
     this.replay = new ReplayHandlers(normalized.collector);
+    this.subscribe = new SubscribeHandlers(normalized.collector);
     this.schemaEnum = new SchemaEnumHandlers();
   }
 
@@ -94,6 +97,15 @@ export class GraphQLToolHandlers {
     return this.replay.handleGraphqlReplay(args);
   }
 
+  // ── Subscribe ──
+  async handleGraphqlSubscribeTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleGraphqlSubscribe(args));
+  }
+
+  async handleGraphqlSubscribe(args: Record<string, unknown>) {
+    return this.subscribe.handleGraphqlSubscribe(args);
+  }
+
   async handleGraphqlEnumSchemaTool(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => await this.handleGraphqlEnumSchema(args));
   }
@@ -110,5 +122,6 @@ export {
   IntrospectionHandlers,
   ExtractHandlers,
   ReplayHandlers,
+  SubscribeHandlers,
   SchemaEnumHandlers,
 };

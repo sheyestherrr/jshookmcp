@@ -16,7 +16,7 @@ describe('graphql definitions', () => {
     });
 
     it('contains exactly 6 tools', async () => {
-      expect(graphqlTools).toHaveLength(6);
+      expect(graphqlTools).toHaveLength(7);
     });
 
     it('every tool has a name and description', async () => {
@@ -255,17 +255,18 @@ describe('graphql manifest', () => {
     expect(manifest.profiles).toEqual(['workflow', 'full']);
   });
 
-  it('has registrations for all 6 tools', async () => {
+  it('has registrations for all 7 tools', async () => {
     const manifestModule = await import('@server/domains/graphql/manifest');
     const manifest = manifestModule.default;
 
-    expect(manifest.registrations).toHaveLength(6);
+    expect(manifest.registrations).toHaveLength(7);
     const toolNames = manifest.registrations.map((r: any) => r.tool.name);
     expect(toolNames).toContain('call_graph_analyze');
     expect(toolNames).toContain('script_replace_persist');
     expect(toolNames).toContain('graphql_introspect');
     expect(toolNames).toContain('graphql_extract_queries');
     expect(toolNames).toContain('graphql_replay');
+    expect(toolNames).toContain('graphql_subscribe');
     expect(toolNames).toContain('graphql_enum_schema');
   });
 

@@ -603,5 +603,7 @@
   "webrtc_export_capture": "将 WebRTC 数据通道监控捕获的消息导出为 artifacts/captures 下的 JSON 或 NDJSON 工件。",
   "page_storage_info": "查询 navigator.storage.estimate() 获取当前源的存储用量与配额，并检查 navigator.storage.persisted() 的持久化状态，用于 PWA / 离线应用的存储预算与持久化分析。",
   "service_worker_deliver_push": "通过 CDP ServiceWorker.deliverPushMessage 向 Service Worker 投递一条合成的 push 消息，用于测试 push 事件处理逻辑。需先在 SW 目标上挂载 CDP 会话。",
-  "service_worker_dispatch_sync": "通过 CDP ServiceWorker.dispatchSyncEvent 向 Service Worker 派发 Background Sync 事件，用于触发并测试后台同步逻辑。需先在 SW 目标上挂载 CDP 会话。"
+  "service_worker_dispatch_sync": "通过 CDP ServiceWorker.dispatchSyncEvent 向 Service Worker 派发 Background Sync 事件，用于触发并测试后台同步逻辑。需先在 SW 目标上挂载 CDP 会话。",
+  "canvas_inject_draw_hook": "待补充中文：Intercept Canvas 2D (drawImage/fillText/strokeText) and WebGL (drawArrays/drawElements) draw calls into a ring buffer on the page. Actions: install (wrap prototypes), read (dump captured calls), uninstall (restore).",
+  "graphql_subscribe": "待补充中文：Open a GraphQL subscription WebSocket, perform the graphql-transport-ws (or legacy graphql-ws) handshake, send a subscribe frame, and collect frames for collectMs. Runs in-page so the browser-session auth (cookies + connectionPayload) is preserved. Pairs with graphql_replay for targets that expose queries/mutations only via the authed WebSocket session."
 }

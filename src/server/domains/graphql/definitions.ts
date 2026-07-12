@@ -116,4 +116,42 @@ export const graphqlTools: Tool[] = [
       })
       .requiredOpenWorld('endpoint'),
   ),
+  tool('graphql_subscribe', (t) =>
+    t
+      .desc(
+        'Open a GraphQL subscription WebSocket, perform the graphql-transport-ws (or legacy graphql-ws) handshake, send a subscribe frame, and collect frames for collectMs. Runs in-page so the browser-session auth (cookies + connectionPayload) is preserved. Pairs with graphql_replay for targets that expose queries/mutations only via the authed WebSocket session.',
+      )
+      .string(
+        'endpoint',
+        'GraphQL subscription WebSocket endpoint. ws:/wss: used directly; http:/https: auto-upgraded to ws/wss.',
+      )
+      .string('query', 'GraphQL subscription query string')
+      .prop('variables', {
+        type: 'object',
+        description: 'GraphQL variables for the subscription',
+        additionalProperties: true,
+      })
+      .string('operationName', 'GraphQL operationName')
+      .prop('connectionPayload', {
+        type: 'object',
+        description:
+          'Payload sent in the connection_init frame (e.g. { Authorization: "Bearer ..." }). Auth context that makes the subscription work.',
+        additionalProperties: true,
+      })
+      .enum(
+        'protocol',
+        ['graphql-transport-ws', 'graphql-ws'],
+        'WebSocket subprotocol. graphql-transport-ws is the modern standard; graphql-ws is the legacy subscriptions-transport-ws dialect.',
+        { default: 'graphql-transport-ws' },
+      )
+      .number('collectMs', 'How long to collect frames after subscribe before sending complete.', {
+        default: 3000,
+        minimum: 100,
+      })
+      .number('connectTimeoutMs', 'Timeout waiting for connection_ack before giving up.', {
+        default: 5000,
+        minimum: 500,
+      })
+      .requiredOpenWorld('endpoint', 'query'),
+  ),
 ];
