@@ -19,7 +19,7 @@ Mojo IPC monitoring domain for Chromium inter-process communication analysis.
 - mojo-ipc + browser
 - mojo-ipc + network
 
-## Full tool list (6)
+## Full tool list (7)
 
 | Tool | Description |
 | --- | --- |
@@ -29,3 +29,4 @@ Mojo IPC monitoring domain for Chromium inter-process communication analysis.
 | `mojo_encode_message` | Encode a structured Mojo IPC message into a hex payload. |
 | `mojo_list_interfaces` | List discovered Mojo IPC interfaces and their pending message counts. |
 | `mojo_messages_get` | Retrieve captured Mojo IPC messages from the active monitoring session. |
+| `mojo_messages_summarize` | Aggregate the captured Mojo IPC buffer (non-destructive) into interface/method/direction breakdowns, top-N lists, and a capture time window. Does not drain the buffer. |

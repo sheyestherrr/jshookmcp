@@ -19,7 +19,7 @@ Mojo IPC 监控域，用于 Chromium 内部进程间通信分析。
 - mojo-ipc + browser
 - mojo-ipc + network
 
-## 工具清单（6）
+## 工具清单（7）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -29,3 +29,4 @@ Mojo IPC 监控域，用于 Chromium 内部进程间通信分析。
 | `mojo_encode_message` | 将结构化 Mojo IPC 消息编码为十六进制负载 |
 | `mojo_list_interfaces` | 列出已发现的 Mojo IPC 接口及其待处理消息计数。 |
 | `mojo_messages_get` | 从活跃监控会话中获取已捕获的 Mojo IPC 消息。 |
+| `mojo_messages_summarize` | 将已捕获的 Mojo IPC 缓冲区（非破坏性读取）聚合为按接口/方法/方向的分布统计、Top-N 列表与捕获时间窗。不清空缓冲区。 |

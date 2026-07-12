@@ -18,7 +18,7 @@
 - platform + process
 - platform + core
 
-## 工具清单（16）
+## 工具清单（18）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -38,3 +38,5 @@
 | `electron_ipc_sniff` | 嗅探 Electron 应用的 IPC 通信，捕获 channel 名称和参数。 |
 | `electron_verify_integrity` | 验证 Electron ASAR 完整性：解析嵌入主二进制的 ElectronAsarIntegrity JSON，定位每个引用的 ASAR，对比磁盘 SHA256 与嵌入哈希。不匹配意味着 ASAR 在构建后被篡改。 |
 | `asar_deobfuscate` | 扫描 ASAR 归档内每个 .js 文件的混淆指标（字符串数组、webpack bundle、控制流平坦化、动态代码、压缩）并分类。标记的文件可提取到目录供后续反混淆。 |
+| `asar_repack` | 将目录树打包成 Electron ASAR 归档（asar_extract 的逆操作）。遍历输入目录并写入合法 .asar（4×UInt32LE pickle 前缀 + JSON 头 + 数据段），parseAsarBuffer 与 Electron 运行时均可读取。闭合「解包 → 改补丁 → 重打包 → 重测」循环，无需离开 jshookmcp。 |
+| `electron_verify_signature` | 对打包后的 Electron 二进制做结构化代码签名解析：Windows PE Authenticode 与 macOS Mach-O 内嵌代码签名。纯 TS 二进制 + ASN.1 解析——定位 WIN_CERTIFICATE / SuperBlob，解码 PKCS#7 SignedData，输出证书链、签名者、摘要算法，以及（macOS）CodeDirectory ident 与尽力而为的 cdhash。无 codesign/signtool 依赖，CI 任意环境可运行。签名密码学有效性、Authenticode 时间戳反签名与 notarization ticket 为诚实边界（verified:false，遵循教训 #51）。 |

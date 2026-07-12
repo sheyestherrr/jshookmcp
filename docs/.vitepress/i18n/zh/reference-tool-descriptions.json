@@ -613,5 +613,9 @@
   "instrumentation_session_diff": "对比两个插桩会话快照：按 id 统计 operation 的 added/removed/common，并给出 artifact 指纹与按类型计数。纯比较，不修改任何数据。",
   "instrumentation_session_merge": "将两个会话合并为一个新会话：从两边复制 operation（带 id 重映射）与 artifact。原始会话保持不变。",
   "dart_call_graph": "从 Dart AOT 快照构建尽力而为的静态调用图：节点为 Code 对象，边为其值匹配另一个 Code 入口点（caller→callee）的 ObjectPool 表项。诚实边界：没有 pool 表项的间接/动态调用，以及 PcDescriptors 级别的映射，需要指令解码（暂缓——属跨 Dart SDK 版本工作）。",
-  "wasm_instrument_binary": "真正的 wasm 级二进制插桩：通过 wasm2wat 反汇编，在每个函数入口插入对导入 trace 函数的调用，再通过 wat2wasm 重新汇编。与 wasm_instrument_trace（仅代理 JS 可见导出）不同，它重写 code section 使每个函数入口可观测。诚实边界：函数入口级追踪，非基本块——宿主需在实例化时提供 trace_fn 导入。"
+  "wasm_instrument_binary": "真正的 wasm 级二进制插桩：通过 wasm2wat 反汇编，在每个函数入口插入对导入 trace 函数的调用，再通过 wat2wasm 重新汇编。与 wasm_instrument_trace（仅代理 JS 可见导出）不同，它重写 code section 使每个函数入口可观测。诚实边界：函数入口级追踪，非基本块——宿主需在实例化时提供 trace_fn 导入。",
+  "adb_getprop": "导出并解析 Android 系统属性（getprop）为结构化键值映射，并汇总设备指纹（型号、SDK 版本、ABI、构建指纹、安全补丁级别、bootloader 锁定状态）。",
+  "mojo_messages_summarize": "将已捕获的 Mojo IPC 缓冲区（非破坏性读取）聚合为按接口/方法/方向的分布统计、Top-N 列表与捕获时间窗。不清空缓冲区。",
+  "asar_repack": "将目录树打包成 Electron ASAR 归档（asar_extract 的逆操作）。遍历输入目录并写入合法 .asar（4×UInt32LE pickle 前缀 + JSON 头 + 数据段），parseAsarBuffer 与 Electron 运行时均可读取。闭合「解包 → 改补丁 → 重打包 → 重测」循环，无需离开 jshookmcp。",
+  "electron_verify_signature": "对打包后的 Electron 二进制做结构化代码签名解析：Windows PE Authenticode 与 macOS Mach-O 内嵌代码签名。纯 TS 二进制 + ASN.1 解析——定位 WIN_CERTIFICATE / SuperBlob，解码 PKCS#7 SignedData，输出证书链、签名者、摘要算法，以及（macOS）CodeDirectory ident 与尽力而为的 cdhash。无 codesign/signtool 依赖，CI 任意环境可运行。签名密码学有效性、Authenticode 时间戳反签名与 notarization ticket 为诚实边界（verified:false，遵循教训 #51）。"
 }

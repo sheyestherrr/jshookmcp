@@ -19,7 +19,7 @@ Android Debug Bridge integration domain for device management, application analy
 - adb-bridge + process
 - adb-bridge + network
 
-## Full tool list (23)
+## Full tool list (24)
 
 | Tool | Description |
 | --- | --- |
@@ -34,6 +34,7 @@ Android Debug Bridge integration domain for device management, application analy
 | `adb_input_text` | Send text through adb shell input text with Android-safe whitespace encoding. |
 | `adb_proc_maps` | Read and parse /proc/PID/maps from a device, resolving PID from packageName when needed. |
 | `adb_root_check` | Probe root indicators such as su, Magisk, test-keys, SELinux, and shell uid. |
+| `adb_getprop` | Dump and parse Android system properties (getprop) into a structured map with a curated device fingerprint (model, SDK, ABI, build fingerprint, security patch, bootloader lock). |
 | `adb_screenshot` | Capture a PNG screenshot through adb exec-out screencap -p. |
 | `adb_screenrecord` | Record a short MP4 screen capture through adb shell screenrecord and pull it locally. |
 | `adb_port_forward` | Manage ADB forward/reverse port mappings for device-host bridge workflows. |
