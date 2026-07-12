@@ -25,6 +25,60 @@ export const PROXY_TOOLS: Tool[] = [
       .string('urlPattern', 'URL matcher string or regex literal.')
       .number('mockStatus', 'Response status for mock_response.', { default: 200 })
       .string('mockBody', 'Response body for mock_response.')
+      .object(
+        'forwardOptions',
+        {
+          transformRequest: {
+            type: 'object',
+            description:
+              'Optional request rewrite applied on passthrough. Mutually exclusive with callback mode (not exposed).',
+            properties: {
+              replaceMethod: { type: 'string', description: 'Replacement HTTP method.' },
+              updateHeaders: {
+                type: 'object',
+                description: 'Headers merged into the request; a null value removes the header.',
+                additionalProperties: { type: ['string', 'null'] },
+              },
+              replaceHeaders: {
+                type: 'object',
+                description: 'Headers that completely replace the request headers.',
+                additionalProperties: { type: 'string' },
+              },
+              replaceBody: {
+                type: 'string',
+                description: 'String that replaces the request body entirely.',
+              },
+            },
+          },
+          transformResponse: {
+            type: 'object',
+            description: 'Optional response rewrite applied on passthrough.',
+            properties: {
+              replaceStatus: {
+                type: 'integer',
+                minimum: 100,
+                maximum: 599,
+                description: 'Replacement response status code (100-599).',
+              },
+              updateHeaders: {
+                type: 'object',
+                description: 'Headers merged into the response; a null value removes the header.',
+                additionalProperties: { type: ['string', 'null'] },
+              },
+              replaceHeaders: {
+                type: 'object',
+                description: 'Headers that completely replace the response headers.',
+                additionalProperties: { type: 'string' },
+              },
+              replaceBody: {
+                type: 'string',
+                description: 'String that replaces the response body entirely.',
+              },
+            },
+          },
+        },
+        'Forward-only rewrite options. Only honored when action=forward; ignored otherwise. Omit for plain passthrough.',
+      )
       .required('action'),
   ),
   tool('proxy_list_rules', (t) =>

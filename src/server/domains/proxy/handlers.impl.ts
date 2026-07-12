@@ -3,7 +3,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { logger } from '@utils/logger';
 import { R, handleSafe, type ToolResponse } from '@server/domains/shared/ResponseBuilder';
-import { argNumber, argBool, argString } from '@server/domains/shared/parse-args';
+import { argNumber, argBool, argString, argObject } from '@server/domains/shared/parse-args';
 import {
   PROXY_ADB_MAX_BUFFER_BYTES,
   PROXY_ADB_TIMEOUT_MS,
@@ -51,12 +51,41 @@ interface CaptureEntry {
   timestamp: number;
 }
 
+/** Header map where `undefined` means "remove this header" (mockttp convention). */
+type HeaderMap = Record<string, string | undefined>;
+
+interface ForwardTransformRequest {
+  replaceMethod?: string;
+  updateHeaders?: HeaderMap;
+  replaceHeaders?: HeaderMap;
+  replaceBody?: string;
+}
+
+interface ForwardTransformResponse {
+  replaceStatus?: number;
+  updateHeaders?: HeaderMap;
+  replaceHeaders?: HeaderMap;
+  replaceBody?: string;
+}
+
+/**
+ * Declarative passthrough rewrite. A structural subset of mockttp's
+ * `PassThroughStepOptions.transformRequest`/`transformResponse` — callback
+ * modes (`beforeRequest`/`beforeResponse`) and regex body replacements are
+ * intentionally not exposed (lesson #51 honest boundary).
+ */
+interface ForwardOptions {
+  transformRequest?: ForwardTransformRequest;
+  transformResponse?: ForwardTransformResponse;
+}
+
 interface ProxyRuleRecord {
   endpointId: string;
   action: string;
   method: string;
   urlPattern: string;
   mockStatus?: number;
+  forwardOptions?: ForwardOptions;
   createdAt: string;
 }
 
@@ -171,6 +200,124 @@ function parseMockStatus(args: Record<string, unknown>): ParsedValue<number> {
     };
   }
   return { ok: true, value };
+}
+
+/**
+ * Normalize a caller-supplied header map into mockttp's convention:
+ * `null` (JSON) → `undefined` (remove), strings kept, anything else rejected.
+ * Throws on invalid shapes so `handleSafe` surfaces a structured error.
+ */
+function normalizeForwardHeaderMap(raw: unknown, field: string): HeaderMap | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`forwardOptions.${field} must be an object of header name to string|null`);
+  }
+  const result: HeaderMap = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (value === null) {
+      result[key] = undefined; // mockttp: undefined removes the header
+    } else if (typeof value === 'string') {
+      result[key] = value;
+    } else {
+      throw new Error(`forwardOptions.${field}["${key}"] must be a string or null`);
+    }
+  }
+  return result;
+}
+
+function buildForwardTransformRequest(raw: Record<string, unknown>): ForwardTransformRequest {
+  const result: ForwardTransformRequest = {};
+  const replaceMethod = raw['replaceMethod'];
+  if (replaceMethod !== undefined && replaceMethod !== null) {
+    if (typeof replaceMethod !== 'string' || replaceMethod.trim() === '') {
+      throw new Error('forwardOptions.transformRequest.replaceMethod must be a non-empty string');
+    }
+    result.replaceMethod = replaceMethod.toUpperCase();
+  }
+  const updateHeaders = normalizeForwardHeaderMap(
+    raw['updateHeaders'],
+    'transformRequest.updateHeaders',
+  );
+  if (updateHeaders) result.updateHeaders = updateHeaders;
+  const replaceHeaders = normalizeForwardHeaderMap(
+    raw['replaceHeaders'],
+    'transformRequest.replaceHeaders',
+  );
+  if (replaceHeaders) result.replaceHeaders = replaceHeaders;
+  const replaceBody = raw['replaceBody'];
+  if (replaceBody !== undefined && replaceBody !== null) {
+    if (typeof replaceBody !== 'string') {
+      throw new Error('forwardOptions.transformRequest.replaceBody must be a string');
+    }
+    result.replaceBody = replaceBody;
+  }
+  return result;
+}
+
+function buildForwardTransformResponse(raw: Record<string, unknown>): ForwardTransformResponse {
+  const result: ForwardTransformResponse = {};
+  const replaceStatus = raw['replaceStatus'];
+  if (replaceStatus !== undefined && replaceStatus !== null) {
+    if (
+      typeof replaceStatus !== 'number' ||
+      !Number.isInteger(replaceStatus) ||
+      replaceStatus < 100 ||
+      replaceStatus > 599
+    ) {
+      throw new Error(
+        'forwardOptions.transformResponse.replaceStatus must be an integer between 100 and 599',
+      );
+    }
+    result.replaceStatus = replaceStatus;
+  }
+  const updateHeaders = normalizeForwardHeaderMap(
+    raw['updateHeaders'],
+    'transformResponse.updateHeaders',
+  );
+  if (updateHeaders) result.updateHeaders = updateHeaders;
+  const replaceHeaders = normalizeForwardHeaderMap(
+    raw['replaceHeaders'],
+    'transformResponse.replaceHeaders',
+  );
+  if (replaceHeaders) result.replaceHeaders = replaceHeaders;
+  const replaceBody = raw['replaceBody'];
+  if (replaceBody !== undefined && replaceBody !== null) {
+    if (typeof replaceBody !== 'string') {
+      throw new Error('forwardOptions.transformResponse.replaceBody must be a string');
+    }
+    result.replaceBody = replaceBody;
+  }
+  return result;
+}
+
+/**
+ * Build declarative passthrough rewrite options from raw args.
+ * Returns `undefined` when `forwardOptions` is absent (plain passthrough,
+ * byte-identical to prior behavior). Throws on malformed input.
+ */
+function buildForwardOptions(args: Record<string, unknown>): ForwardOptions | undefined {
+  const raw = argObject(args, 'forwardOptions');
+  if (raw === undefined) return undefined;
+  const result: ForwardOptions = {};
+  const transformRequest = raw['transformRequest'];
+  if (transformRequest !== undefined && transformRequest !== null) {
+    if (typeof transformRequest !== 'object' || Array.isArray(transformRequest)) {
+      throw new Error('forwardOptions.transformRequest must be an object');
+    }
+    result.transformRequest = buildForwardTransformRequest(
+      transformRequest as Record<string, unknown>,
+    );
+  }
+  const transformResponse = raw['transformResponse'];
+  if (transformResponse !== undefined && transformResponse !== null) {
+    if (typeof transformResponse !== 'object' || Array.isArray(transformResponse)) {
+      throw new Error('forwardOptions.transformResponse must be an object');
+    }
+    result.transformResponse = buildForwardTransformResponse(
+      transformResponse as Record<string, unknown>,
+    );
+  }
+  return result;
 }
 
 function normalizeHeaders(headers: Record<string, unknown> | undefined): Record<string, string> {
@@ -533,7 +680,7 @@ export class ProxyHandlers {
         forAnyRequest: () => unknown;
       };
       let builder: {
-        thenPassThrough: () => Promise<{ id: string }>;
+        thenPassThrough: (options?: ForwardOptions) => Promise<{ id: string }>;
         thenCloseConnection: () => Promise<{ id: string }>;
         thenReply: (status: number, body: string) => Promise<{ id: string }>;
       };
@@ -552,9 +699,11 @@ export class ProxyHandlers {
       }
 
       let endpoint: { id: string };
+      let forwardOptions: ForwardOptions | undefined;
       switch (action) {
         case 'forward':
-          endpoint = await builder.thenPassThrough();
+          forwardOptions = buildForwardOptions(args);
+          endpoint = await builder.thenPassThrough(forwardOptions);
           break;
         case 'block':
           endpoint = await builder.thenCloseConnection();
@@ -573,6 +722,7 @@ export class ProxyHandlers {
           method,
           urlPattern,
           ...(action === 'mock_response' ? { mockStatus: mockStatus ?? 200 } : {}),
+          ...(forwardOptions ? { forwardOptions } : {}),
         }),
       });
     } catch (e) {

@@ -363,6 +363,177 @@ describe('ProxyHandlers (Integration)', () => {
     }
   });
 
+  it('applies forwardOptions.transformRequest header rewrites to the upstream request', async () => {
+    let receivedAuth: string | undefined;
+    const upstream = http.createServer((req, res) => {
+      receivedAuth = req.headers['authorization'];
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('upstream-ok');
+    });
+    const upstreamPort = await listen(upstream);
+
+    try {
+      await handlers.handleProxyStart({ port: testPort + 10, useHttps: false });
+      const ruleRes = await handlers.handleProxyAddRule({
+        action: 'forward',
+        method: 'GET',
+        urlPattern: '/rewrite-req-headers',
+        forwardOptions: {
+          transformRequest: {
+            updateHeaders: { authorization: 'Bearer swapped-token' },
+          },
+        },
+      });
+      expect(parseResponse(ruleRes).success).toBe(true);
+
+      const response = await sendRawHttpRequest(
+        testPort + 10,
+        [
+          `GET http://127.0.0.1:${upstreamPort}/rewrite-req-headers HTTP/1.1`,
+          `Host: 127.0.0.1:${upstreamPort}`,
+          'Authorization: Bearer original-token',
+          'Connection: close',
+          '',
+          '',
+        ].join('\r\n'),
+      );
+
+      expect(response).toContain('200 OK');
+      expect(receivedAuth).toBe('Bearer swapped-token');
+    } finally {
+      await new Promise((resolve, reject) => {
+        upstream.close((error) => (error ? reject(error) : resolve(undefined)));
+      });
+    }
+  });
+
+  it('applies forwardOptions.transformResponse status and header rewrites', async () => {
+    const upstream = http.createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('upstream-body');
+    });
+    const upstreamPort = await listen(upstream);
+
+    try {
+      await handlers.handleProxyStart({ port: testPort + 11, useHttps: false });
+      const ruleRes = await handlers.handleProxyAddRule({
+        action: 'forward',
+        method: 'GET',
+        urlPattern: '/rewrite-res-status',
+        forwardOptions: {
+          transformResponse: {
+            replaceStatus: 418,
+            updateHeaders: { 'x-rewritten': 'by-proxy' },
+          },
+        },
+      });
+      expect(parseResponse(ruleRes).success).toBe(true);
+
+      const response = await sendRawHttpRequest(
+        testPort + 11,
+        [
+          `GET http://127.0.0.1:${upstreamPort}/rewrite-res-status HTTP/1.1`,
+          `Host: 127.0.0.1:${upstreamPort}`,
+          'Connection: close',
+          '',
+          '',
+        ].join('\r\n'),
+      );
+
+      expect(response).toMatch(/^HTTP\/1\.1 418\b/);
+      expect(response).toMatch(/x-rewritten:\s*by-proxy/i);
+    } finally {
+      await new Promise((resolve, reject) => {
+        upstream.close((error) => (error ? reject(error) : resolve(undefined)));
+      });
+    }
+  });
+
+  it('applies forwardOptions.transformRequest.replaceBody to the upstream request', async () => {
+    let receivedBody = '';
+    const upstream = http.createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      req.on('end', () => {
+        receivedBody = Buffer.concat(chunks).toString('utf8');
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end('upstream-ok');
+      });
+    });
+    const upstreamPort = await listen(upstream);
+
+    try {
+      await handlers.handleProxyStart({ port: testPort + 12, useHttps: false });
+      const ruleRes = await handlers.handleProxyAddRule({
+        action: 'forward',
+        method: 'POST',
+        urlPattern: '/rewrite-req-body',
+        forwardOptions: {
+          transformRequest: { replaceBody: 'replaced-payload' },
+        },
+      });
+      expect(parseResponse(ruleRes).success).toBe(true);
+
+      const originalBody = 'original-payload';
+      const response = await sendRawHttpRequest(
+        testPort + 12,
+        [
+          `POST http://127.0.0.1:${upstreamPort}/rewrite-req-body HTTP/1.1`,
+          `Host: 127.0.0.1:${upstreamPort}`,
+          'Content-Type: text/plain',
+          `Content-Length: ${Buffer.byteLength(originalBody)}`,
+          'Connection: close',
+          '',
+          originalBody,
+        ].join('\r\n'),
+      );
+
+      expect(response).toContain('200 OK');
+      expect(receivedBody).toBe('replaced-payload');
+    } finally {
+      await new Promise((resolve, reject) => {
+        upstream.close((error) => (error ? reject(error) : resolve(undefined)));
+      });
+    }
+  });
+
+  it('records forwardOptions on the rule and lists them back', async () => {
+    await handlers.handleProxyStart({ port: testPort + 13, useHttps: false });
+    const ruleRes = await handlers.handleProxyAddRule({
+      action: 'forward',
+      method: 'GET',
+      urlPattern: '/recorded-forward',
+      forwardOptions: {
+        transformResponse: { replaceStatus: 503 },
+      },
+    });
+    const ruleData = parseResponse(ruleRes);
+    expect(ruleData.success).toBe(true);
+    expect(ruleData.rule.forwardOptions).toMatchObject({
+      transformResponse: { replaceStatus: 503 },
+    });
+
+    const listData = parseResponse(await handlers.handleProxyListRules({}));
+    expect(listData.rules[0].forwardOptions).toMatchObject({
+      transformResponse: { replaceStatus: 503 },
+    });
+  });
+
+  it('omits forwardOptions from the rule record when none are supplied', async () => {
+    await handlers.handleProxyStart({ port: testPort + 14, useHttps: false });
+    const ruleRes = await handlers.handleProxyAddRule({
+      action: 'forward',
+      method: 'GET',
+      urlPattern: '/plain-forward',
+    });
+    const ruleData = parseResponse(ruleRes);
+    expect(ruleData.success).toBe(true);
+    expect(ruleData.rule.forwardOptions).toBeUndefined();
+
+    const listData = parseResponse(await handlers.handleProxyListRules({}));
+    expect(listData.rules[0].forwardOptions).toBeUndefined();
+  });
+
   it('captures request and response body previews with timing metadata', async () => {
     const requestBody = JSON.stringify({ token: 'abc123', action: 'capture' });
     const upstream = http.createServer((req, res) => {
