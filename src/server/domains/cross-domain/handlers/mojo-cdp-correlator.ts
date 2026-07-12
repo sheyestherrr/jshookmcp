@@ -17,6 +17,26 @@ export interface NetworkRequest {
   requestId: string;
   url: string;
   timestamp: number;
+  /** HTTP method (GET/POST/...). Optional — MOJO-03 ignores it. */
+  method?: string;
+  /** Request initiator provenance. Optional — consumed by the network→V8 correlator. */
+  initiator?: NetworkInitiator;
+}
+
+/**
+ * Describes what initiated a network request — mirrors the subset of the CDP
+ * `Network.requestWillBeSent.initiator` payload that the network→V8 correlator
+ * can reconcile against existing function / heap-object evidence nodes.
+ */
+export interface NetworkInitiator {
+  /** JS function name that issued the request (CDP initiator.stack.callFrames[0].functionName). */
+  functionName?: string;
+  /** Heap object address (hex string) that owns the request, when known. */
+  heapAddress?: string;
+  /** Script URL or source that initiated the request. */
+  url?: string;
+  /** Call stack frame function names, innermost first. */
+  stack?: string[];
 }
 
 export interface MatchedPair {
