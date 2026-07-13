@@ -20,7 +20,7 @@
 - dart-inspector + binary-instrument
 - dart-inspector + adb-bridge
 
-## 工具清单（13）
+## 工具清单（15）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -37,3 +37,5 @@
 | `dart_inspect_object_pool` | 转储指定地址的 ObjectPool，显示所有条目的类型和值。 |
 | `dart_trace_execution` | 逐步跟踪 Dart 函数执行，输出每条指令及寄存器状态（PC、x0-x30、PP、THR）。 |
 | `dart_call_graph` | 从 Dart AOT 快照构建尽力而为的静态调用图：节点为 Code 对象，边为其值匹配另一个 Code 入口点（caller→callee）的 ObjectPool 表项。诚实边界：没有 pool 表项的间接/动态调用，以及 PcDescriptors 级别的映射，需要指令解码（暂缓——属跨 Dart SDK 版本工作）。 |
+| `dart_create_session` | 一次性解析 Dart AOT 快照并缓存至会话 ID，后续 dart_load_snapshot / dart_list_functions / dart_call_graph / dart_inspect_object_pool / dart_call_function / dart_trace_execution 等工具可通过 sessionId 复用已解析快照，跳过重复解析 libapp.so（对 10-40 MB Flutter 快照而言是主要耗时）。使用完毕请通过 dart_destroy_session 销毁；空闲会话自动过期（TTL + 定时清扫，参见 DART_SESSION_* 常量）。 |
+| `dart_destroy_session` | 销毁由 dart_create_session 创建的 Dart 快照会话，释放缓存的已解析快照。若会话存在返回 destroyed=true，若未知或已被空闲 TTL 自动清扫返回 false。 |

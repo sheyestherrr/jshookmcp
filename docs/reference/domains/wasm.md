@@ -19,7 +19,7 @@ WebAssembly dump、反汇编、反编译、优化与离线执行域。
 - browser + wasm
 - core + wasm
 
-## 工具清单（15）
+## 工具清单（16）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -38,3 +38,4 @@ WebAssembly dump、反汇编、反编译、优化与离线执行域。
 | `wasm_string_extract` | 从 .wasm 二进制中提取可打印字符串，按 section 分组，支持 name section 函数名恢复与分类（url/base64/hex-hash/file-path）。是通用二进制字符串工具的 wasm 专用替代。 |
 | `wasm_diff` | 对两个 .wasm 二进制（原版 vs 补丁版）做 patch-diff 用于漏洞研究：通过 wasm2wat 反汇编两者，输出结构化的函数级差异（新增/删除/变更）+ 每函数 WAT 行级 unified diff。完整 diff 写入工件，响应携带摘要与预览。 |
 | `wasm_instrument_binary` | 真正的 wasm 级二进制插桩：通过 wasm2wat 反汇编，在每个函数入口插入对导入 trace 函数的调用，再通过 wat2wasm 重新汇编。与 wasm_instrument_trace（仅代理 JS 可见导出）不同，它重写 code section 使每个函数入口可观测。诚实边界：函数入口级追踪，非基本块——宿主需在实例化时提供 trace_fn 导入。 |
+| `wasm_inspect` | 纯 TS wasm 二进制结构检查器（无 wabt 依赖）。直接从二进制解析模块结构面——类型、导入、函数（含 name section 恢复）、表、内存、全局、导出、start、元素/数据/code 段计数、以及自定义 section（name/producers/target_features）——输出结构化 JSON。作为 wabt 不可用时的独立结构路径，与 wasm_inspect_sections（依赖 wasm-objdump）互为补充（参见 wasm_capabilities）。诚实边界：仅结构信息，不做 code body 反汇编；元素/数据/global-init 有效载荷仅报告计数。 |

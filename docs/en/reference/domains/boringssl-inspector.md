@@ -28,12 +28,12 @@ BoringSSL/TLS inspection domain supporting TLS traffic analysis and certificate 
 | `tls_keylog_parse` | Parse an SSLKEYLOGFILE and summarize available key material. |
 | `tls_keylog_disable` | Disable SSLKEYLOGFILE capture and unset the environment variable. |
 | `tls_decrypt_payload` | Decrypt a TLS payload using a provided key, nonce, and algorithm. |
-| `tls_keylog_summarize` | Summarize the contents of an SSLKEYLOGFILE by label distribution. |
+| `tls_keylog_summarize` | Summarize an SSLKEYLOGFILE: per-label distribution, secret-type classification (TLS 1.2 master-secret vs TLS 1.3 traffic-secret kinds), TLS version inference, and unique session (client_random) count. |
 | `tls_keylog_lookup_secret` | Look up a TLS secret by client random hex from the parsed keylog. |
 | `tls_cert_pin_bypass` | Return a certificate pinning bypass strategy for the selected platform. |
 | `tls_parse_handshake` | Parse TLS handshake metadata from raw hex. For payload decryption, use tls_decrypt_payload with explicit keyHex/nonceHex/authTagHex. |
-| `tls_cipher_suites` | List TLS cipher suites. |
-| `tls_parse_certificate` | Parse a TLS Certificate message from raw hex and extract fingerprints. |
+| `tls_cipher_suites` | List TLS cipher suites with IANA id, protocol, key-exchange / authentication / encryption / MAC split, and AEAD flag (each dimension derived from the suite name). |
+| `tls_parse_certificate` | Parse a TLS Certificate message from raw hex and extract X.509 details (subject/issuer/SAN/validity/keyUsage), SHA-256 fingerprint, and SPKI pin hash (Android Network Security Config / HPKP format). |
 | `tls_probe_endpoint` | Probe a TLS endpoint and report handshake and certificate details. |
 | `tcp_open` | Open a TCP session. |
 | `tcp_write` | Write data to an open TCP session. |

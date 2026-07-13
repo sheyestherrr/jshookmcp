@@ -20,7 +20,7 @@
 
 - workflow + browser + network
 
-## 工具清单（9）
+## 工具清单（10）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -31,5 +31,6 @@
 | `list_extension_workflows` | 列出已安装的扩展工作流。 |
 | `run_extension_workflow` | 执行指定的扩展工作流。 |
 | `reverse_session` | 创建、检查、列出、预览或运行端到端的逆向工程工作流会话，包含产物根目录、跨域工具调用和证据引用。支持 android、native、web 等平台，按计划步骤依次执行并将结果归入可恢复的会话。 |
+| `workflow_run_inspect` | 检视全局工作流运行记录：列出最近的 run_extension_workflow / run_macro 运行；按 runId 获取单次运行的详情；获取某个工作流或宏的上一次成功执行的完整结果（stepResults / spans / metrics）。 |
 | `run_macro` | 执行预设的自动化操作序列。 |
 | `list_macros` | 列出所有可用宏（内置和用户自定义），包含名称、描述、标签和步骤数。 |

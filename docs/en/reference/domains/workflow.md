@@ -20,7 +20,7 @@ Composite workflow, script-library, and macro-orchestration domain; the main bui
 
 - workflow + browser + network
 
-## Full tool list (9)
+## Full tool list (10)
 
 | Tool | Description |
 | --- | --- |
@@ -31,5 +31,6 @@ Composite workflow, script-library, and macro-orchestration domain; the main bui
 | `list_extension_workflows` | List runtime-loaded extension workflows from plugins/ or workflows/ directories. |
 | `run_extension_workflow` | Execute an extension workflow by workflowId with optional config and timeout overrides. |
 | `reverse_session` | Create, inspect, list, preview, or run an end-to-end reverse-engineering workflow session with artifact root, cross-domain tool calls, and evidence refs. |
+| `workflow_run_inspect` | Inspect the global workflow run store: list recent run_extension_workflow / run_macro runs, get a run entry by runId, or fetch the last successful full result (stepResults, spans, metrics) for a workflow or macro id. |
 | `run_macro` | Execute a registered macro with sequence, parallel, branch, fallback, and retry orchestration. |
 | `list_macros` | List all available macros. |

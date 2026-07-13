@@ -617,5 +617,9 @@
   "adb_getprop": "导出并解析 Android 系统属性（getprop）为结构化键值映射，并汇总设备指纹（型号、SDK 版本、ABI、构建指纹、安全补丁级别、bootloader 锁定状态）。",
   "mojo_messages_summarize": "将已捕获的 Mojo IPC 缓冲区（非破坏性读取）聚合为按接口/方法/方向的分布统计、Top-N 列表与捕获时间窗。不清空缓冲区。",
   "asar_repack": "将目录树打包成 Electron ASAR 归档（asar_extract 的逆操作）。遍历输入目录并写入合法 .asar（4×UInt32LE pickle 前缀 + JSON 头 + 数据段），parseAsarBuffer 与 Electron 运行时均可读取。闭合「解包 → 改补丁 → 重打包 → 重测」循环，无需离开 jshookmcp。",
-  "electron_verify_signature": "对打包后的 Electron 二进制做结构化代码签名解析：Windows PE Authenticode 与 macOS Mach-O 内嵌代码签名。纯 TS 二进制 + ASN.1 解析——定位 WIN_CERTIFICATE / SuperBlob，解码 PKCS#7 SignedData，输出证书链、签名者、摘要算法，以及（macOS）CodeDirectory ident 与尽力而为的 cdhash。无 codesign/signtool 依赖，CI 任意环境可运行。签名密码学有效性、Authenticode 时间戳反签名与 notarization ticket 为诚实边界（verified:false，遵循教训 #51）。"
+  "electron_verify_signature": "对打包后的 Electron 二进制做结构化代码签名解析：Windows PE Authenticode 与 macOS Mach-O 内嵌代码签名。纯 TS 二进制 + ASN.1 解析——定位 WIN_CERTIFICATE / SuperBlob，解码 PKCS#7 SignedData，输出证书链、签名者、摘要算法，以及（macOS）CodeDirectory ident 与尽力而为的 cdhash。无 codesign/signtool 依赖，CI 任意环境可运行。签名密码学有效性、Authenticode 时间戳反签名与 notarization ticket 为诚实边界（verified:false，遵循教训 #51）。",
+  "dart_create_session": "一次性解析 Dart AOT 快照并缓存至会话 ID，后续 dart_load_snapshot / dart_list_functions / dart_call_graph / dart_inspect_object_pool / dart_call_function / dart_trace_execution 等工具可通过 sessionId 复用已解析快照，跳过重复解析 libapp.so（对 10-40 MB Flutter 快照而言是主要耗时）。使用完毕请通过 dart_destroy_session 销毁；空闲会话自动过期（TTL + 定时清扫，参见 DART_SESSION_* 常量）。",
+  "dart_destroy_session": "销毁由 dart_create_session 创建的 Dart 快照会话，释放缓存的已解析快照。若会话存在返回 destroyed=true，若未知或已被空闲 TTL 自动清扫返回 false。",
+  "wasm_inspect": "纯 TS wasm 二进制结构检查器（无 wabt 依赖）。直接从二进制解析模块结构面——类型、导入、函数（含 name section 恢复）、表、内存、全局、导出、start、元素/数据/code 段计数、以及自定义 section（name/producers/target_features）——输出结构化 JSON。作为 wabt 不可用时的独立结构路径，与 wasm_inspect_sections（依赖 wasm-objdump）互为补充（参见 wasm_capabilities）。诚实边界：仅结构信息，不做 code body 反汇编；元素/数据/global-init 有效载荷仅报告计数。",
+  "workflow_run_inspect": "检视全局工作流运行记录：列出最近的 run_extension_workflow / run_macro 运行；按 runId 获取单次运行的详情；获取某个工作流或宏的上一次成功执行的完整结果（stepResults / spans / metrics）。"
 }
