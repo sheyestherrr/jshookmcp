@@ -61,6 +61,57 @@ export const ETW_PROVIDERS: Readonly<Record<string, string>> = {
   'kernel-image': '{65d92380-231d-4e56-8f6f-2e1e6e6e6e6e}',
 };
 
+/**
+ * Descriptive catalog of the named ETW kernel providers, surfaced via
+ * `syscall_get_stats` so tool callers can discover the valid `etwProviders`
+ * names, their GUIDs, and what each provider actually surfaces — without
+ * reading source. Order matches the `etwProviders` param documentation.
+ */
+export interface EtwProviderCatalogEntry {
+  name: string;
+  guid: string;
+  description: string;
+}
+
+export const ETW_PROVIDER_CATALOG: ReadonlyArray<EtwProviderCatalogEntry> = [
+  {
+    name: 'nt-kernel',
+    guid: ETW_PROVIDERS['nt-kernel']!,
+    description:
+      'Legacy "NT Kernel Logger" session with the Process + File I/O flag (0x10000). ' +
+      'The default fallback when no providers are requested; surfaces a baseline ' +
+      'mix of process and file events.',
+  },
+  {
+    name: 'kernel-process',
+    guid: ETW_PROVIDERS['kernel-process']!,
+    description:
+      'Process lifecycle events: ImageID/ProcessID create + exit with command line ' +
+      'and exit code. Feeds the `process_spawn` pattern in syscall_pattern_detect.',
+  },
+  {
+    name: 'kernel-network',
+    guid: ETW_PROVIDERS['kernel-network']!,
+    description:
+      'Kernel network events: connect / sendto / recvfrom with local + remote ' +
+      'addresses. Required for the `network_beacon` pattern on Windows.',
+  },
+  {
+    name: 'kernel-file',
+    guid: ETW_PROVIDERS['kernel-file']!,
+    description:
+      'File events: CreateFile / Read / Write / Close with full paths. Required ' +
+      'for the `file_enum` pattern on Windows.',
+  },
+  {
+    name: 'kernel-image',
+    guid: ETW_PROVIDERS['kernel-image']!,
+    description:
+      'Image (DLL/EXE) load + unload events with full paths. Useful for tracking ' +
+      'payload unpacking and dynamic module loading.',
+  },
+];
+
 const SYNTHETIC_EVENT_SEEDS: Readonly<Record<SyscallBackend, ReadonlyArray<SyntheticEventSeed>>> = {
   etw: [
     {
@@ -434,6 +485,7 @@ export class SyscallMonitor {
         pid: options?.pid,
         startedAt,
         generatedEvents: 0,
+        etwProviders: requestedBackend === 'etw' ? options?.etwProviders : undefined,
       };
       this.lastBackend = requestedBackend;
       this.capturedEvents.length = 0;
@@ -461,6 +513,7 @@ export class SyscallMonitor {
         pid: options?.pid,
         startedAt,
         generatedEvents: 0,
+        etwProviders: requestedBackend === 'etw' ? options?.etwProviders : undefined,
       };
       this.lastBackend = requestedBackend;
       this.capturedEvents.length = 0;
@@ -503,15 +556,30 @@ export class SyscallMonitor {
     backend: SyscallBackend;
     subprocessActive: boolean;
     subprocessError?: string;
+    /** Active session config — present only while a session is running. */
+    pid?: number;
+    simulate?: boolean;
+    etwProviders?: string[];
   } {
     const backend = this.activeState?.backend ?? this.lastBackend;
     const uptime = this.activeState ? Date.now() - this.activeState.startedAt : 0;
+    const state = this.activeState;
     return {
       eventsCaptured: this.capturedEvents.length,
       uptime,
       backend,
-      subprocessActive: !!this.activeState?.subprocess,
+      subprocessActive: !!state?.subprocess,
       subprocessError: this.subprocessError,
+      // Session-config introspection (undefined when no active session).
+      // `simulate` is true for synthetic mode (no live subprocess); when a real
+      // subprocess is attached the session is live.
+      ...(state
+        ? {
+            pid: state.pid,
+            simulate: !state.subprocess,
+            ...(state.etwProviders ? { etwProviders: state.etwProviders } : {}),
+          }
+        : {}),
     };
   }
 

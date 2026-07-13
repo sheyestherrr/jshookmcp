@@ -1,6 +1,8 @@
 import {
   SyscallMonitor,
   SyscallToJSMapper,
+  ETW_PROVIDERS,
+  ETW_PROVIDER_CATALOG,
   type CorrelatedSyscall,
   type SyscallBackend,
   type SyscallEvent,
@@ -70,6 +72,13 @@ function readStringArray(value: unknown): string[] | undefined {
 
 const SYSCALL_NAME_RE = /^[a-z][a-z0-9_]*$/;
 
+/** Cap on ranked summary entries so a capture of thousands of distinct syscalls
+ *  cannot blow up the capture_events response. */
+const SUMMARY_TOP_N = 20;
+
+/** Known ETW provider names (lowercased) for start_monitor validation. */
+const KNOWN_ETW_PROVIDER_NAMES = new Set(Object.keys(ETW_PROVIDERS));
+
 function isValidSyscallName(name: string): boolean {
   return SYSCALL_NAME_RE.test(name) && name.length <= 64;
 }
@@ -98,6 +107,42 @@ function readBackend(value: unknown): SyscallBackend | undefined {
     return value;
   }
   return undefined;
+}
+
+/**
+ * Validate a requested ETW provider name list (Windows only). Names are
+ * lowercased + de-duplicated to match `buildEtwProviderArgs`'s case-insensitive
+ * lookup. Unknown names are NOT rejected — the legacy session still starts with
+ * whatever valid names remain — but they are surfaced back as
+ * `unknownProviders` so a typo (e.g. `kernel-net`) is no longer silently
+ * dropped. This closes the silent-failure gap where `buildEtwProviderArgs`
+ * ignored unresolved names with no diagnostic.
+ */
+interface EtwProviderValidation {
+  /** Resolved provider names that will be enabled (lowercased, de-duplicated). */
+  validProviders: string[];
+  /** Requested names that did not resolve to a known provider. */
+  unknownProviders: string[];
+}
+
+function validateEtwProviders(requested: string[] | undefined): EtwProviderValidation | undefined {
+  if (!requested || requested.length === 0) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const valid: string[] = [];
+  const unknown: string[] = [];
+  for (const raw of requested) {
+    const name = raw.toLowerCase();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    if (KNOWN_ETW_PROVIDER_NAMES.has(name)) {
+      valid.push(name);
+    } else {
+      unknown.push(name);
+    }
+  }
+  return { validProviders: valid, unknownProviders: unknown };
 }
 
 type CaptureFilterValidation =
@@ -181,6 +226,13 @@ function cloneSyscallEvent(event: SyscallEvent): SyscallEvent {
 function summarizeSyscallEvents(events: SyscallEvent[]): Record<string, unknown> {
   const bySyscall: Record<string, number> = {};
   const byPid: Record<string, number> = {};
+  // Per-syscall accumulators that the legacy global errorCount/averageDuration
+  // hid: a reverse engineer's first question after a capture is usually
+  // "which syscalls are failing / slowest / most frequent", and a single global
+  // errorCount or averageDuration cannot answer it.
+  const syscallErrors: Record<string, number> = {};
+  const syscallDurationSum: Record<string, number> = {};
+  const syscallDurationCount: Record<string, number> = {};
   let errorCount = 0;
   let totalDuration = 0;
   let durationCount = 0;
@@ -190,12 +242,42 @@ function summarizeSyscallEvents(events: SyscallEvent[]): Record<string, unknown>
     byPid[String(event.pid)] = (byPid[String(event.pid)] ?? 0) + 1;
     if (typeof event.returnValue === 'number' && event.returnValue < 0) {
       errorCount++;
+      syscallErrors[event.syscall] = (syscallErrors[event.syscall] ?? 0) + 1;
     }
     if (typeof event.duration === 'number' && Number.isFinite(event.duration)) {
       totalDuration += event.duration;
       durationCount++;
+      syscallDurationSum[event.syscall] = (syscallDurationSum[event.syscall] ?? 0) + event.duration;
+      syscallDurationCount[event.syscall] = (syscallDurationCount[event.syscall] ?? 0) + 1;
     }
   }
+
+  // Ranked top-N analysis, sorted by count desc then name for determinism.
+  // Capped so a capture of thousands of distinct syscalls cannot blow up the
+  // response. Avg duration is omitted from an entry when that syscall has no
+  // duration samples (rather than emitting a misleading 0).
+  const topSyscalls = Object.keys(bySyscall)
+    .map((name) => {
+      const count = bySyscall[name] ?? 0;
+      const durCount = syscallDurationCount[name] ?? 0;
+      const sum = syscallDurationSum[name] ?? 0;
+      const entry: { name: string; count: number; errorCount: number; avgDurationMs?: number } = {
+        name,
+        count,
+        errorCount: syscallErrors[name] ?? 0,
+      };
+      if (durCount > 0) {
+        entry.avgDurationMs = sum / durCount;
+      }
+      return entry;
+    })
+    .toSorted((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, SUMMARY_TOP_N);
+
+  const topPids = Object.entries(byPid)
+    .map(([pidKey, count]) => ({ pid: Number(pidKey), count }))
+    .toSorted((a, b) => b.count - a.count || a.pid - b.pid)
+    .slice(0, SUMMARY_TOP_N);
 
   return {
     total: events.length,
@@ -203,6 +285,8 @@ function summarizeSyscallEvents(events: SyscallEvent[]): Record<string, unknown>
     byPid,
     errorCount,
     averageDuration: durationCount > 0 ? totalDuration / durationCount : undefined,
+    topSyscalls,
+    topPids,
   };
 }
 
@@ -317,12 +401,19 @@ export class SyscallHookHandlers {
     }
 
     const monitor = this.ensureMonitor();
+    // Validate ETW provider names up front so unknown names (typos) are surfaced
+    // back to the caller instead of being silently dropped by buildEtwProviderArgs.
+    // Only meaningful for the etw backend; ignored otherwise.
+    const etwProviderValidation =
+      backend === 'etw' ? validateEtwProviders(readStringArray(args['etwProviders'])) : undefined;
     try {
       await monitor.start({
         backend,
         pid,
         simulate,
-        ...(backend === 'etw' ? { etwProviders: readStringArray(args['etwProviders']) } : {}),
+        ...(etwProviderValidation && etwProviderValidation.validProviders.length > 0
+          ? { etwProviders: etwProviderValidation.validProviders }
+          : {}),
       });
       void this.eventBus?.emit('syscall:trace_started', {
         backend,
@@ -337,6 +428,17 @@ export class SyscallHookHandlers {
         pid,
         simulate,
         stats: monitor.getStats(),
+        // Surface unknown provider names so a typo is visible. Omitted entirely
+        // when validation did not run (non-etw) or all names resolved.
+        ...(etwProviderValidation && etwProviderValidation.unknownProviders.length > 0
+          ? {
+              etwProviderWarning: {
+                unknownProviders: etwProviderValidation.unknownProviders,
+                validProviders: etwProviderValidation.validProviders,
+                availableProviders: ETW_PROVIDER_CATALOG.map((entry) => entry.name),
+              },
+            }
+          : {}),
       };
     } catch (error) {
       return {
@@ -579,6 +681,10 @@ export class SyscallHookHandlers {
       ...monitor.getStats(),
       running: monitor.isRunning(),
       supportedBackends: monitor.getSupportedBackends(),
+      // Surface the ETW provider catalog so callers can discover the valid
+      // `etwProviders` names, GUIDs, and what each surfaces — without reading
+      // source. Cheap (static const), always included.
+      etwProviderCatalog: ETW_PROVIDER_CATALOG,
     };
   }
 

@@ -370,4 +370,75 @@ describe('SyscallMonitor', () => {
 
     await expect((monitor as any).captureWithDTrace(1234)).rejects.toThrow(/permission denied/);
   });
+
+  // ── Session 61: getStats session-config introspection ───────────────────────
+
+  it('exposes pid/simulate/etwProviders in getStats for an active etw session', async () => {
+    await monitor.start({
+      backend: process.platform === 'win32' ? 'etw' : 'strace',
+      pid: 5555,
+      simulate: true,
+      etwProviders: ['kernel-network'],
+    });
+    const stats = monitor.getStats();
+    expect(stats).toMatchObject({
+      backend: process.platform === 'win32' ? 'etw' : 'strace',
+      pid: 5555,
+      simulate: true,
+    });
+    // etwProviders only surfaced on etw backend
+    if (process.platform === 'win32') {
+      expect(stats.etwProviders).toEqual(['kernel-network']);
+    }
+  });
+
+  it('omits session config fields when no session is active', async () => {
+    const stats = monitor.getStats();
+    expect(stats.pid).toBeUndefined();
+    expect(stats.simulate).toBeUndefined();
+    expect(stats.etwProviders).toBeUndefined();
+  });
+
+  it('reports simulate=false when a real subprocess is attached', async () => {
+    const child = createFakeChildProcess();
+    mockSpawn.mockImplementationOnce(() => {
+      queueMicrotask(() => child.emit('spawn'));
+      return child as any;
+    });
+    await monitor.start({
+      backend: process.platform === 'win32' ? 'etw' : 'strace',
+      pid: 7777,
+      simulate: false,
+    });
+    const stats = monitor.getStats();
+    expect(stats.simulate).toBe(false);
+    expect(stats.subprocessActive).toBe(true);
+  });
+
+  it('clears session config after stop()', async () => {
+    await monitor.start({
+      backend: process.platform === 'win32' ? 'etw' : 'strace',
+      pid: 5555,
+      simulate: true,
+    });
+    await monitor.stop();
+    const stats = monitor.getStats();
+    expect(stats.pid).toBeUndefined();
+    expect(stats.simulate).toBeUndefined();
+  });
+
+  // ── Session 61: ETW provider catalog (static discovery) ─────────────────────
+
+  it('ETW_PROVIDER_CATALOG entries align with ETW_PROVIDERS GUIDs', async () => {
+    const { ETW_PROVIDER_CATALOG, ETW_PROVIDERS } =
+      await import('@modules/syscall-hook/SyscallMonitor');
+    for (const entry of ETW_PROVIDER_CATALOG) {
+      expect(entry.guid).toBe(ETW_PROVIDERS[entry.name]);
+      expect(entry.description.length).toBeGreaterThan(10);
+    }
+    // Catalog covers every known provider name
+    const catalogNames = ETW_PROVIDER_CATALOG.map((e: any) => e.name).toSorted();
+    const providerNames = Object.keys(ETW_PROVIDERS).toSorted();
+    expect(catalogNames).toEqual(providerNames);
+  });
 });
