@@ -62,7 +62,30 @@ export class DartAotExecutor {
    */
   async load(path: string): Promise<void> {
     const loader = new DartAotLoader();
-    this.snapshot = await loader.loadSnapshot(path);
+    const snapshot = await loader.loadSnapshot(path);
+    this.initFromSnapshot(snapshot);
+  }
+
+  /**
+   * Prepare for execution from an already-parsed snapshot.
+   *
+   * This is the cache-friendly entry point: a {@link DartSnapshotSessionManager}
+   * parses `libapp.so` once and hands the resulting `LoadedSnapshot` to every
+   * downstream call/trace invocation, skipping the repeated IO + cluster parse
+   * that `load()` would otherwise redo. The CPU/runtime state is still
+   * initialised fresh per executor (register state is per-call, never shared).
+   */
+  loadFromSnapshot(snapshot: LoadedSnapshot): void {
+    this.initFromSnapshot(snapshot);
+  }
+
+  /**
+   * Initialise CPU engine, Dart runtime, ObjectPool registry, and built-in
+   * stubs from a parsed snapshot. Factored out of {@link load} so the
+   * cache-backed {@link loadFromSnapshot} shares the exact same setup.
+   */
+  private initFromSnapshot(snapshot: LoadedSnapshot): void {
+    this.snapshot = snapshot;
 
     // Initialize CPU engine
     this.cpu = new CpuEngine();

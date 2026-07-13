@@ -42,7 +42,9 @@ describe('dart-inspector manifest', () => {
     expect(toolNames).toContain('dart_inspect_object_pool');
     expect(toolNames).toContain('dart_trace_execution');
     expect(toolNames).toContain('dart_call_graph');
-    expect(toolNames).toHaveLength(13);
+    expect(toolNames).toContain('dart_create_session');
+    expect(toolNames).toContain('dart_destroy_session');
+    expect(toolNames).toHaveLength(15);
   });
 
   it('every registration is bound to the dart-inspector domain', () => {

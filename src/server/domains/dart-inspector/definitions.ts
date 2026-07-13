@@ -241,31 +241,36 @@ export const dartInspectorTools: Tool[] = [
     t
       .desc(
         'Load and parse a Dart AOT snapshot from libapp.so, extracting metadata ' +
-          'and statistics (Code objects, ObjectPool entries, clusters).',
+          'and statistics (Code objects, ObjectPool entries, clusters). Pass a sessionId from ' +
+          'dart_create_session to reuse an already-parsed snapshot (skips re-parsing libapp.so).',
       )
+      .string('sessionId', 'Session id from dart_create_session (reuse cached snapshot)')
       .string('apkPath', 'Absolute path to APK (extracts arm64-v8a/libapp.so)')
       .string('libappPath', 'Absolute path to libapp.so directly')
-      .required('apkPath|libappPath')
       .query(),
   ),
   tool('dart_list_functions', (t) =>
     t
       .desc(
         'List all Dart Code objects (compiled functions) from a loaded snapshot, ' +
-          'with entry point address, size, and name (if available).',
+          'with entry point address, size, and name (if available). Pass a sessionId to reuse ' +
+          'a cached snapshot.',
       )
+      .string('sessionId', 'Session id from dart_create_session (reuse cached snapshot)')
       .string('apkPath', 'Absolute path to APK')
       .string('libappPath', 'Absolute path to libapp.so')
       .number('maxFunctions', 'Cap on returned functions (default: unlimited)', { minimum: 1 })
-      .required('apkPath|libappPath')
       .query(),
   ),
   tool('dart_call_function', (t) =>
     t
       .desc(
         'Execute a Dart function in the ARM64 emulator by address or name, ' +
-          'with simplified runtime (mock built-ins, tagged pointers).',
+          'with simplified runtime (mock built-ins, tagged pointers). Pass a sessionId to reuse ' +
+          'the cached snapshot; the executor still initialises fresh CPU state per call ' +
+          '(register state is never shared across calls).',
       )
+      .string('sessionId', 'Session id from dart_create_session (reuse cached snapshot)')
       .string('apkPath', 'Absolute path to APK')
       .string('libappPath', 'Absolute path to libapp.so')
       .string('functionAddress', 'Hex address of function entry point (e.g., "0x12345678")')
@@ -280,24 +285,28 @@ export const dartInspectorTools: Tool[] = [
         minimum: 1,
       })
       .boolean('traceExecution', 'Emit instruction trace in response', { default: false })
-      .required('apkPath|libappPath')
       .query(),
   ),
   tool('dart_inspect_object_pool', (t) =>
     t
-      .desc('Dump an ObjectPool at a specific address, showing all entries with types and values.')
+      .desc(
+        'Dump an ObjectPool at a specific address, showing all entries with types and values. ' +
+          'Pass a sessionId to reuse a cached snapshot.',
+      )
+      .string('sessionId', 'Session id from dart_create_session (reuse cached snapshot)')
       .string('apkPath', 'Absolute path to APK')
       .string('libappPath', 'Absolute path to libapp.so')
       .string('poolAddress', 'Hex address of ObjectPool (e.g., "0x12345678")')
-      .required('apkPath|libappPath', 'poolAddress')
+      .required('poolAddress')
       .query(),
   ),
   tool('dart_trace_execution', (t) =>
     t
       .desc(
         'Trace Dart function execution step-by-step, emitting each instruction ' +
-          'with register state (PC, x0-x30, PP, THR).',
+          'with register state (PC, x0-x30, PP, THR). Pass a sessionId to reuse the cached snapshot.',
       )
+      .string('sessionId', 'Session id from dart_create_session (reuse cached snapshot)')
       .string('apkPath', 'Absolute path to APK')
       .string('libappPath', 'Absolute path to libapp.so')
       .string('functionAddress', 'Hex address of function entry point')
@@ -308,7 +317,6 @@ export const dartInspectorTools: Tool[] = [
         { type: 'string', description: 'Argument as hex string' },
         'Function arguments',
       )
-      .required('apkPath|libappPath')
       .query(),
   ),
   tool('dart_call_graph', (t) =>
@@ -316,13 +324,39 @@ export const dartInspectorTools: Tool[] = [
       .desc(
         'Build a best-effort static call graph from a Dart AOT snapshot: nodes are Code objects, ' +
           'edges are ObjectPool entries whose value matches another Code entry point (caller to callee). ' +
-          'Honest boundary: indirect/dynamic calls without a pool entry, and PcDescriptors-level mapping, ' +
-          'require instruction decoding (deferred — cross-Dart-SDK version work).',
+          'Pass a sessionId to reuse a cached snapshot. Honest boundary: indirect/dynamic calls ' +
+          'without a pool entry, and PcDescriptors-level mapping, require instruction decoding ' +
+          '(deferred — cross-Dart-SDK version work).',
       )
+      .string('sessionId', 'Session id from dart_create_session (reuse cached snapshot)')
       .string('apkPath', 'Absolute path to APK')
       .string('libappPath', 'Absolute path to libapp.so')
       .number('maxEdges', 'Cap on emitted edges (excess sets truncated=true)', { minimum: 1 })
+      .query(),
+  ),
+  tool('dart_create_session', (t) =>
+    t
+      .desc(
+        'Parse a Dart AOT snapshot once and cache it under a sessionId, so subsequent ' +
+          'dart_load_snapshot / dart_list_functions / dart_call_graph / dart_inspect_object_pool / ' +
+          'dart_call_function / dart_trace_execution calls can pass sessionId and skip re-parsing ' +
+          'libapp.so (the dominant cost on a 10-40 MB Flutter snapshot). Destroy with ' +
+          'dart_destroy_session when done; idle sessions auto-expire (TTL + sweep, see DART_SESSION_*).',
+      )
+      .string('apkPath', 'Absolute path to APK (extracts arm64-v8a/libapp.so)')
+      .string('libappPath', 'Absolute path to libapp.so directly')
       .required('apkPath|libappPath')
+      .query(),
+  ),
+  tool('dart_destroy_session', (t) =>
+    t
+      .desc(
+        'Destroy a Dart snapshot session created by dart_create_session, releasing the cached ' +
+          'parsed snapshot. Returns destroyed=true if the session existed, false if it was unknown ' +
+          'or already swept by the idle TTL.',
+      )
+      .string('sessionId', 'Session id returned by dart_create_session')
+      .required('sessionId')
       .query(),
   ),
 ];

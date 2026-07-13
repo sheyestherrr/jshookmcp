@@ -29,6 +29,8 @@ import { ObjectPoolDumper } from '@modules/dart-inspector/ObjectPoolDumper';
 import { filterPoolSlots } from '@modules/dart-inspector/pool-filter';
 import type { DumpOptions } from '@modules/dart-inspector/pool-types';
 import type { VersionFingerprint } from '@modules/dart-inspector/snapshot-types';
+import { DartSnapshotSessionManager } from '@modules/native-emulator/dart/DartSnapshotSessionManager';
+import type { LoadedSnapshot } from '@modules/native-emulator/dart/DartAotLoader';
 import type {
   CategoryRule,
   CategoryRuleInput,
@@ -102,6 +104,7 @@ export class DartInspectorHandlers {
   private readonly packageDetector: PackageDetector;
   private readonly snapshotFingerprint: SnapshotFingerprint;
   private readonly objectPoolDumper: ObjectPoolDumper;
+  private readonly sessions: DartSnapshotSessionManager;
 
   constructor(
     extractor: StringsExtractor = new StringsExtractor(),
@@ -110,6 +113,7 @@ export class DartInspectorHandlers {
     packageDetector?: PackageDetector,
     snapshotFingerprint: SnapshotFingerprint = new SnapshotFingerprint(),
     objectPoolDumper?: ObjectPoolDumper,
+    sessions: DartSnapshotSessionManager = new DartSnapshotSessionManager(),
   ) {
     this.extractor = extractor;
     this.smiScanner = smiScanner;
@@ -117,6 +121,7 @@ export class DartInspectorHandlers {
     this.packageDetector = packageDetector ?? new PackageDetector(extractor);
     this.snapshotFingerprint = snapshotFingerprint;
     this.objectPoolDumper = objectPoolDumper ?? new ObjectPoolDumper(snapshotFingerprint);
+    this.sessions = sessions;
   }
 
   handleDartStringsExtract(args: Record<string, unknown>): Promise<ToolResponse> {
@@ -339,18 +344,7 @@ export class DartInspectorHandlers {
 
   handleDartLoadSnapshot(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
-      // Import dynamically to avoid circular dependencies
-      const { DartAotLoader } = await import('@modules/native-emulator/dart/DartAotLoader');
-
-      const apkPath = argString(args, 'apkPath');
-      const libappPath = argString(args, 'libappPath');
-
-      if (!apkPath && !libappPath) {
-        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
-      }
-
-      const loader = new DartAotLoader();
-      const snapshot = await loader.loadSnapshot(apkPath ?? libappPath!);
+      const snapshot = await this.resolveSnapshot(args);
 
       return {
         snapshot: {
@@ -377,18 +371,8 @@ export class DartInspectorHandlers {
 
   handleDartListFunctions(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
-      const { DartAotLoader } = await import('@modules/native-emulator/dart/DartAotLoader');
-
-      const apkPath = argString(args, 'apkPath');
-      const libappPath = argString(args, 'libappPath');
+      const snapshot = await this.resolveSnapshot(args);
       const maxFunctions = argNumber(args, 'maxFunctions');
-
-      if (!apkPath && !libappPath) {
-        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
-      }
-
-      const loader = new DartAotLoader();
-      const snapshot = await loader.loadSnapshot(apkPath ?? libappPath!);
 
       let functions = snapshot.codeObjects.map((code) => ({
         entryPoint: `0x${code.entryPoint.toString(16)}`,
@@ -413,18 +397,8 @@ export class DartInspectorHandlers {
 
   handleDartCallGraph(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
-      const { DartAotLoader } = await import('@modules/native-emulator/dart/DartAotLoader');
-
-      const apkPath = argString(args, 'apkPath');
-      const libappPath = argString(args, 'libappPath');
+      const snapshot = await this.resolveSnapshot(args);
       const maxEdges = argNumber(args, 'maxEdges') ?? 5000;
-
-      if (!apkPath && !libappPath) {
-        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
-      }
-
-      const loader = new DartAotLoader();
-      const snapshot = await loader.loadSnapshot(apkPath ?? libappPath!);
 
       const codes = snapshot.codeObjects;
 
@@ -503,17 +477,13 @@ export class DartInspectorHandlers {
     return handleSafe(async () => {
       const { DartAotExecutor } = await import('@modules/native-emulator/dart/DartAotExecutor');
 
-      const apkPath = argString(args, 'apkPath');
-      const libappPath = argString(args, 'libappPath');
+      const resolved = await this.resolveForExecutor(args);
+
       const functionAddress = argString(args, 'functionAddress');
       const functionName = argString(args, 'functionName');
       const argsRaw = args['args'];
       const maxSteps = argNumber(args, 'maxSteps') ?? 100000;
       const traceExecution = argBool(args, 'traceExecution') ?? false;
-
-      if (!apkPath && !libappPath) {
-        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
-      }
 
       if (!functionAddress && !functionName) {
         throw new ToolError(
@@ -534,7 +504,11 @@ export class DartInspectorHandlers {
       }
 
       const executor = new DartAotExecutor();
-      await executor.load(apkPath ?? libappPath!);
+      if (resolved.snapshot) {
+        executor.loadFromSnapshot(resolved.snapshot);
+      } else {
+        await executor.load(resolved.path!);
+      }
 
       const result = await executor.call({
         address: functionAddress ? BigInt(functionAddress) : undefined,
@@ -557,18 +531,8 @@ export class DartInspectorHandlers {
 
   handleDartInspectObjectPool(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
-      const { DartAotLoader } = await import('@modules/native-emulator/dart/DartAotLoader');
-
-      const apkPath = argString(args, 'apkPath');
-      const libappPath = argString(args, 'libappPath');
       const poolAddress = argStringRequired(args, 'poolAddress');
-
-      if (!apkPath && !libappPath) {
-        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
-      }
-
-      const loader = new DartAotLoader();
-      const snapshot = await loader.loadSnapshot(apkPath ?? libappPath!);
+      const snapshot = await this.resolveSnapshot(args);
 
       const addr = BigInt(poolAddress);
       const pool = snapshot.objectPools.find((p) => p.address === addr);
@@ -596,16 +560,12 @@ export class DartInspectorHandlers {
     return handleSafe(async () => {
       const { DartAotExecutor } = await import('@modules/native-emulator/dart/DartAotExecutor');
 
-      const apkPath = argString(args, 'apkPath');
-      const libappPath = argString(args, 'libappPath');
+      const resolved = await this.resolveForExecutor(args);
+
       const functionAddress = argString(args, 'functionAddress');
       const functionName = argString(args, 'functionName');
       const maxSteps = argNumber(args, 'maxSteps') ?? 1000;
       const argsRaw = args['args'];
-
-      if (!apkPath && !libappPath) {
-        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
-      }
 
       if (!functionAddress && !functionName) {
         throw new ToolError(
@@ -625,7 +585,11 @@ export class DartInspectorHandlers {
       }
 
       const executor = new DartAotExecutor();
-      await executor.load(apkPath ?? libappPath!);
+      if (resolved.snapshot) {
+        executor.loadFromSnapshot(resolved.snapshot);
+      } else {
+        await executor.load(resolved.path!);
+      }
 
       const result = await executor.call({
         address: functionAddress ? BigInt(functionAddress) : undefined,
@@ -646,6 +610,93 @@ export class DartInspectorHandlers {
         },
       };
     });
+  }
+
+  handleDartCreateSession(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const apkPath = argString(args, 'apkPath');
+      const libappPath = argString(args, 'libappPath');
+      if (!apkPath && !libappPath) {
+        throw new ToolError('VALIDATION', 'Either apkPath or libappPath must be provided');
+      }
+
+      const session = await this.sessions.createSession(apkPath ?? libappPath!);
+      const snapshot = session.snapshot;
+
+      return {
+        sessionId: session.id,
+        path: session.path,
+        statistics: {
+          totalClusters: snapshot.clusters.length,
+          codeObjectCount: snapshot.codeObjects.length,
+          objectPoolCount: snapshot.objectPools.length,
+        },
+        hint: 'Pass this sessionId to dart_load_snapshot / dart_list_functions / dart_call_graph / dart_inspect_object_pool / dart_call_function / dart_trace_execution to reuse the cached snapshot.',
+      };
+    });
+  }
+
+  handleDartDestroySession(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const sessionId = argStringRequired(args, 'sessionId');
+      const destroyed = this.sessions.destroySession(sessionId);
+      return { sessionId, destroyed };
+    });
+  }
+
+  /**
+   * Resolve a parsed snapshot for the read-only dynamic tools. When `sessionId`
+   * is present the cached snapshot is reused (skipping the libapp.so re-parse);
+   * otherwise the file is parsed fresh — the backward-compatible path.
+   */
+  private async resolveSnapshot(args: Record<string, unknown>): Promise<LoadedSnapshot> {
+    const sessionId = argString(args, 'sessionId');
+    if (sessionId) {
+      return this.resolveCachedSnapshot(sessionId);
+    }
+    const apkPath = argString(args, 'apkPath');
+    const libappPath = argString(args, 'libappPath');
+    if (!apkPath && !libappPath) {
+      throw new ToolError('VALIDATION', 'Provide sessionId, or apkPath/libappPath');
+    }
+    const { DartAotLoader } = await import('@modules/native-emulator/dart/DartAotLoader');
+    const loader = new DartAotLoader();
+    return loader.loadSnapshot(apkPath ?? libappPath!);
+  }
+
+  /**
+   * Look up a cached snapshot by sessionId. Throws ToolError(NOT_FOUND) when
+   * the session is unknown or already swept by the idle TTL — not a generic
+   * Error — so the MCP response carries the right error code.
+   */
+  private resolveCachedSnapshot(sessionId: string): LoadedSnapshot {
+    const session = this.sessions.getSession(sessionId);
+    if (!session) {
+      throw new ToolError('NOT_FOUND', `Unknown dart snapshot session: ${sessionId}`);
+    }
+    return session.snapshot;
+  }
+
+  /**
+   * Resolve either a cached snapshot or a source path for the executor-backed
+   * tools (`dart_call_function`, `dart_trace_execution`). The executor is
+   * built fresh per call (register state is per-call, never shared), but when
+   * a session is supplied the heavy `loadSnapshot` is skipped via
+   * `DartAotExecutor.loadFromSnapshot`.
+   */
+  private async resolveForExecutor(
+    args: Record<string, unknown>,
+  ): Promise<{ snapshot?: LoadedSnapshot; path?: string }> {
+    const sessionId = argString(args, 'sessionId');
+    if (sessionId) {
+      return { snapshot: this.resolveCachedSnapshot(sessionId) };
+    }
+    const apkPath = argString(args, 'apkPath');
+    const libappPath = argString(args, 'libappPath');
+    if (!apkPath && !libappPath) {
+      throw new ToolError('VALIDATION', 'Provide sessionId, or apkPath/libappPath');
+    }
+    return { path: apkPath ?? libappPath! };
   }
 }
 

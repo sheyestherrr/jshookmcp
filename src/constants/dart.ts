@@ -103,3 +103,23 @@ export const DART_SNAPSHOT_TABLE_PATH = str('DART_SNAPSHOT_TABLE_PATH', '');
 export const DART_PP_MAX_SLOTS = int('DART_PP_MAX_SLOTS', 4096);
 export const DART_PP_PREVIEW_BYTES = int('DART_PP_PREVIEW_BYTES', 64);
 export const DART_PP_MAX_DUMP_DURATION_MS = int('DART_PP_MAX_DUMP_DURATION_MS', 10_000);
+
+/* ================================================================== */
+/*  Dart snapshot session cache                                         */
+/* ================================================================== */
+
+/**
+ * Dart snapshot session cache (mirrors the NEMU_SESSION_* knobs of the
+ * native-emulator SessionManager). A multi-step reversing session otherwise
+ * re-parses the same `libapp.so` (10–40 MB, hundreds of clusters) on every
+ * dynamic tool call; the cache keys the already-parsed `LoadedSnapshot` by a
+ * `sessionId` so `dart_list_functions` / `dart_call_graph` / `dart_inspect_object_pool`
+ * / `dart_call_function` / `dart_trace_execution` can reuse it.
+ *
+ * Snapshots are pure data (no mapped memory / JNI tables), so the cache only
+ * stores the parsed structure — no dispose() per entry is needed (unlike
+ * NativeEmulator sessions).
+ */
+export const DART_SESSION_IDLE_TTL_MS = int('DART_SESSION_IDLE_TTL_MS', 300_000);
+export const DART_SESSION_SWEEP_MS = int('DART_SESSION_SWEEP_MS', 60_000);
+export const DART_MAX_SESSIONS = int('DART_MAX_SESSIONS', 32);
