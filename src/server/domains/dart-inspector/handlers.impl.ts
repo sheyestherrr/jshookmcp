@@ -31,6 +31,13 @@ import type { DumpOptions } from '@modules/dart-inspector/pool-types';
 import type { VersionFingerprint } from '@modules/dart-inspector/snapshot-types';
 import { DartSnapshotSessionManager } from '@modules/native-emulator/dart/DartSnapshotSessionManager';
 import type { LoadedSnapshot } from '@modules/native-emulator/dart/DartAotLoader';
+import {
+  parsePcDescriptorsData,
+  resolveCallTargets,
+  filterCallEntries,
+  buildFunctionMap,
+  type PcDescriptorEntry,
+} from '@modules/native-emulator/dart/PcDescriptorsParser';
 import type {
   CategoryRule,
   CategoryRuleInput,
@@ -395,6 +402,130 @@ export class DartInspectorHandlers {
     });
   }
 
+  handleDartPcDescriptors(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => {
+      const snapshot = await this.resolveSnapshot(args);
+      const functionName = argString(args, 'functionName');
+      const functionAddress = argString(args, 'functionAddress');
+      const resolveTargets = argBool(args, 'resolveTargets') ?? true;
+      const callSitesOnly = argBool(args, 'callSitesOnly') ?? true;
+      const maxResults = argNumber(args, 'maxResults');
+
+      // Select target functions
+      let codes = snapshot.codeObjects;
+      if (functionAddress) {
+        const addr = BigInt(functionAddress);
+        codes = codes.filter((c) => c.entryPoint === addr);
+        if (codes.length === 0) {
+          throw new ToolError('NOT_FOUND', `No function found at address ${functionAddress}`);
+        }
+      } else if (functionName) {
+        codes = codes.filter((c) => c.name === functionName);
+        if (codes.length === 0) {
+          throw new ToolError('NOT_FOUND', `No function found with name "${functionName}"`);
+        }
+      }
+
+      // Build PcDescriptors offset → raw data map from clusters
+      const pcDescDataByOffset = new Map<string, Uint8Array>();
+      for (const cluster of snapshot.clusters) {
+        if (cluster.type !== 'PcDescriptors') continue;
+        for (const obj of cluster.objects) {
+          pcDescDataByOffset.set(`0x${obj.offset.toString(16)}`, obj.data);
+        }
+      }
+
+      // Build function map for target resolution
+      const functionMap = buildFunctionMap(snapshot.codeObjects);
+
+      type PerFunction = {
+        entryPoint: string;
+        functionName?: string;
+        size: number;
+        totalDescriptors: number;
+        callSites: number;
+        descriptors: Array<Record<string, unknown>>;
+        callTargets?: Array<Record<string, unknown>>;
+      };
+
+      const results: PerFunction[] = [];
+      let totalEntries = 0;
+      let wasTruncated = false;
+
+      for (const code of codes) {
+        if (maxResults !== undefined && totalEntries >= maxResults) {
+          wasTruncated = true;
+          break;
+        }
+
+        const pcOffsetKey = `0x${code.pcDescriptors.toString(16)}`;
+        const pcData = pcDescDataByOffset.get(pcOffsetKey);
+
+        const descriptors: PcDescriptorEntry[] = pcData ? parsePcDescriptorsData(pcData) : [];
+        const filteredDescriptors = callSitesOnly ? filterCallEntries(descriptors) : descriptors;
+        const remaining = maxResults === undefined ? Infinity : maxResults - totalEntries;
+        const returnedDescriptors = filteredDescriptors.slice(0, remaining);
+        if (returnedDescriptors.length < filteredDescriptors.length) wasTruncated = true;
+        totalEntries += returnedDescriptors.length;
+
+        const descriptorsOut = returnedDescriptors.map((d) => ({
+          pcOffset: d.pcOffset,
+          kind: d.kind,
+          kindLabel: pcDescriptorKindLabel(d.kind),
+          deoptId: d.deoptId,
+          tokenPos: d.tokenPos,
+        }));
+
+        let callTargets: Record<string, unknown>[] | undefined;
+        let blResolved = 0;
+        let blUnresolved = 0;
+        let blNotBl = 0;
+
+        if (resolveTargets && returnedDescriptors.length > 0 && code.instructions.length > 0) {
+          const targets = resolveCallTargets(
+            returnedDescriptors,
+            code.instructions,
+            Number(code.entryPoint),
+            functionMap,
+          );
+          callTargets = targets.map((t) => ({
+            pcOffset: t.pcOffset,
+            targetAddress: t.targetHex,
+            functionName: t.functionName,
+            instruction: `0x${t.instruction.toString(16).padStart(8, '0')}`,
+            kind: t.kind,
+            kindLabel: pcDescriptorKindLabel(t.kind),
+          }));
+          blResolved = targets.filter((t) => t.functionName).length;
+          blUnresolved = targets.filter((t) => !t.functionName).length;
+          blNotBl = returnedDescriptors.length - blResolved - blUnresolved;
+        }
+
+        results.push({
+          entryPoint: hex(code.entryPoint),
+          functionName: code.name,
+          size: code.size,
+          totalDescriptors: descriptors.length,
+          callSites: returnedDescriptors.length,
+          descriptors: descriptorsOut,
+          callTargets,
+          ...(resolveTargets ? { blResolved, blUnresolved, blNotBl } : {}),
+        });
+      }
+
+      return {
+        functions: results,
+        totalFunctions: codes.length,
+        totalDescriptors: totalEntries,
+        truncated: wasTruncated,
+        honestBoundary:
+          'BL instruction decoding resolves only direct ARM64 BL calls. Indirect calls (BLR, ' +
+          'dispatch tables, virtual/interface calls) are not resolved. PcDescriptors cluster format ' +
+          'varies by Dart SDK version — entries parsed via uint32 array with auto-detected header offset.',
+      };
+    });
+  }
+
   handleDartCallGraph(args: Record<string, unknown>): Promise<ToolResponse> {
     return handleSafe(async () => {
       const snapshot = await this.resolveSnapshot(args);
@@ -416,38 +547,93 @@ export class DartInspectorHandlers {
         hasName: Boolean(code.name),
       }));
 
-      const edges: Array<{
+      interface Edge {
         from: string;
         to: string;
         fromName?: string;
         toName?: string;
-      }> = [];
+        resolved?: string; // "pool" | "bl"
+      }
+      const edges: Edge[] = [];
       let poolsScanned = 0;
       let poolsMissing = 0;
+      let blResolvedEdges = 0;
       let hitCap = false;
+
+      // Build PcDescriptors offset → raw data map for BL resolution
+      const pcDescDataByOffset = new Map<string, Uint8Array>();
+      for (const cluster of snapshot.clusters) {
+        if (cluster.type !== 'PcDescriptors') continue;
+        for (const obj of cluster.objects) {
+          pcDescDataByOffset.set(`0x${obj.offset.toString(16)}`, obj.data);
+        }
+      }
+
+      const functionMap = buildFunctionMap(codes);
 
       for (const code of codes) {
         if (hitCap) break;
+
+        // ---- Phase 1: ObjectPool-based edges (heuristic) ----
         const pool = snapshot.objectPools.find((p) => p.address === code.objectPool);
-        if (!pool) {
+        if (pool) {
+          poolsScanned++;
+          for (const poolEntry of pool.pool.getAllEntries()) {
+            if (hitCap) break;
+            if (poolEntry.value === 0n) continue;
+            for (const candidate of [poolEntry.value, poolEntry.value - 1n]) {
+              const target = entryByAddr.get(candidate);
+              if (target && target.entryPoint !== code.entryPoint) {
+                edges.push({
+                  from: hex(code.entryPoint),
+                  to: hex(target.entryPoint),
+                  fromName: code.name || undefined,
+                  toName: target.name || undefined,
+                  resolved: 'pool',
+                });
+                if (edges.length >= maxEdges) hitCap = true;
+                break;
+              }
+            }
+          }
+        } else {
           poolsMissing++;
-          continue;
         }
-        poolsScanned++;
-        for (const entry of pool.pool.getAllEntries()) {
-          if (hitCap) break;
-          if (entry.value === 0n) continue;
-          for (const candidate of [entry.value, entry.value - 1n]) {
-            const target = entryByAddr.get(candidate);
-            if (target && target.entryPoint !== code.entryPoint) {
-              edges.push({
-                from: hex(code.entryPoint),
-                to: hex(target.entryPoint),
-                fromName: code.name || undefined,
-                toName: target.name || undefined,
-              });
-              if (edges.length >= maxEdges) hitCap = true;
-              break;
+
+        if (hitCap) break;
+
+        // ---- Phase 2: BL instruction-based edges (resolved) ----
+        if (code.instructions.length > 0) {
+          const pcOffsetKey = `0x${code.pcDescriptors.toString(16)}`;
+          const pcData = pcDescDataByOffset.get(pcOffsetKey);
+
+          if (pcData) {
+            const descriptors = parsePcDescriptorsData(pcData);
+            const callDescriptors = filterCallEntries(descriptors);
+
+            if (callDescriptors.length > 0) {
+              const targets = resolveCallTargets(
+                callDescriptors,
+                code.instructions,
+                Number(code.entryPoint),
+                functionMap,
+              );
+
+              for (const target of targets) {
+                if (hitCap) break;
+                if (!target.functionName) continue;
+                if (target.targetAddress === Number(code.entryPoint)) continue;
+
+                edges.push({
+                  from: hex(code.entryPoint),
+                  to: target.targetHex,
+                  fromName: code.name || undefined,
+                  toName: target.functionName,
+                  resolved: 'bl',
+                });
+                blResolvedEdges++;
+                if (edges.length >= maxEdges) hitCap = true;
+              }
             }
           }
         }
@@ -463,12 +649,13 @@ export class DartInspectorHandlers {
         entryPoints,
         poolsScanned,
         poolsMissing,
+        blResolvedEdges,
         truncated: hitCap,
         honestBoundary:
-          'Edges are derived from ObjectPool entries whose value matches a known Code entry point ' +
-          '(caller to callee, tag-stripped fallback). Indirect calls via BL/B instructions without a ' +
-          'pool entry, and dynamic-dispatch edges, require PcDescriptors / instruction-level decoding ' +
-          '(deferred — cross-Dart-SDK version work).',
+          'Edges are derived from (1) ObjectPool entries matching Code entry points (resolved=pool) ' +
+          'and (2) ARM64 BL instruction decoding at PcDescriptors call-site PC offsets (resolved=bl). ' +
+          'Indirect calls (BLR, dispatch tables, virtual/interface) are not resolved. PcDescriptors ' +
+          'cluster format varies by Dart SDK version.',
       };
     });
   }
@@ -757,4 +944,28 @@ function pickArch(value: unknown): VersionFingerprint['targetArch'] {
 function pickSource(value: unknown): VersionFingerprint['source'] {
   if (value === 'symbol' || value === 'byte-scan') return value;
   return 'byte-scan';
+}
+
+/** Human-readable label for PcDescriptor kind. */
+function pcDescriptorKindLabel(kind: number): string {
+  switch (kind) {
+    case 0:
+      return 'deopt';
+    case 1:
+      return 'icCall';
+    case 2:
+      return 'unoptStaticCall';
+    case 3:
+      return 'runtimeCall';
+    case 4:
+      return 'osrEntry';
+    case 5:
+      return 'rewind';
+    case 6:
+      return 'bssRelaxation';
+    case 7:
+      return 'other';
+    default:
+      return `unknown(${kind})`;
+  }
 }

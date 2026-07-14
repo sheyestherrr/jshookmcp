@@ -16,3 +16,4 @@ export * from './ObjectPool';
 export * from './DartBuiltins';
 export * from './DartAotLoader';
 export * from './DartAotExecutor';
+export * from './PcDescriptorsParser';

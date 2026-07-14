@@ -348,6 +348,39 @@ export const dartInspectorTools: Tool[] = [
       .required('apkPath|libappPath')
       .query(),
   ),
+  tool('dart_pc_descriptors', (t) =>
+    t
+      .desc(
+        'Parse PcDescriptors for one or all Dart functions in a loaded snapshot and resolve ' +
+          'call targets by decoding ARM64 BL instructions at each call-site PC offset. ' +
+          'Returns structured call-site entries with pcOffset, kind (1=icCall, 2=unoptStaticCall, ' +
+          '3=runtimeCall), and optionally resolved target addresses when code section bytes are ' +
+          'available. Pass a sessionId or file path to load the snapshot.',
+      )
+      .string('sessionId', 'Session id from dart_create_session (reuse cached snapshot)')
+      .string('apkPath', 'Absolute path to APK')
+      .string('libappPath', 'Absolute path to libapp.so')
+      .string(
+        'functionName',
+        'Only return PcDescriptors for this named function; omit for all functions',
+      )
+      .string(
+        'functionAddress',
+        'Only return PcDescriptors for the function at this hex entry point',
+      )
+      .boolean('resolveTargets', 'Decode ARM64 BL instructions and resolve call targets', {
+        default: true,
+      })
+      .boolean(
+        'callSitesOnly',
+        'Only return entries with call-site kinds (icCall/unoptStaticCall/runtimeCall)',
+        {
+          default: true,
+        },
+      )
+      .number('maxResults', 'Cap on total entries returned', { minimum: 1 })
+      .query(),
+  ),
   tool('dart_destroy_session', (t) =>
     t
       .desc(

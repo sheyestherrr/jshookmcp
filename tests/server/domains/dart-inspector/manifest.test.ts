@@ -27,7 +27,7 @@ describe('dart-inspector manifest', () => {
     expect(manifest.profiles).not.toContain('search');
   });
 
-  it('registers the dart_strings_extract, dart_smi_scan, dart_symbolize, flutter_packages_detect, dart_snapshot_header_parse, dart_version_fingerprint, dart_object_pool_dump, dart_load_snapshot, dart_list_functions, dart_call_function, dart_inspect_object_pool, dart_trace_execution, dart_call_graph tools', () => {
+  it('registers the dart_strings_extract, dart_smi_scan, dart_symbolize, flutter_packages_detect, dart_snapshot_header_parse, dart_version_fingerprint, dart_object_pool_dump, dart_load_snapshot, dart_list_functions, dart_call_function, dart_inspect_object_pool, dart_trace_execution, dart_call_graph, dart_pc_descriptors tools', () => {
     const toolNames = manifest.registrations.map((r) => r.tool.name);
     expect(toolNames).toContain('dart_strings_extract');
     expect(toolNames).toContain('dart_smi_scan');
@@ -42,9 +42,10 @@ describe('dart-inspector manifest', () => {
     expect(toolNames).toContain('dart_inspect_object_pool');
     expect(toolNames).toContain('dart_trace_execution');
     expect(toolNames).toContain('dart_call_graph');
+    expect(toolNames).toContain('dart_pc_descriptors');
     expect(toolNames).toContain('dart_create_session');
     expect(toolNames).toContain('dart_destroy_session');
-    expect(toolNames).toHaveLength(15);
+    expect(toolNames).toHaveLength(16);
   });
 
   it('every registration is bound to the dart-inspector domain', () => {
