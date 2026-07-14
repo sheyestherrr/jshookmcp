@@ -9,7 +9,9 @@ import { correlateSkiaToJS } from './handlers/skia-correlator';
 import { correlateMojoToCDP } from './handlers/mojo-cdp-correlator';
 import { correlateSyscallToJS } from './handlers/syscall-js-correlator';
 import { buildBinaryToJSPipeline } from './handlers/binary-to-js-pipeline';
+import { correlateNetworkToV8 } from './handlers/network-v8-correlator';
 import { LiveStateFetcher } from './handlers/live-state-fetcher';
+import { querySynonyms, getSynonymGraphMeta } from './handlers/synonym-engine';
 import {
   extractCDPEvents,
   extractGhidraOutput,
@@ -373,6 +375,10 @@ export class CrossDomainHandlers {
     return handleSafe(async () => await this.handleEvidenceStats());
   }
 
+  async handleSynonymTool(args: Record<string, unknown>): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleSynonym(args));
+  }
+
   async handleCapabilities(_args: Record<string, unknown>): Promise<ToolResponse> {
     const capabilities = {
       evidenceGraphAvailable: true,
@@ -468,6 +474,47 @@ export class CrossDomainHandlers {
       }
     } catch (e) {
       errors.push(`BIN-04: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    // NET-V8 (network↔v8 correlator with bidirectional edges)
+    try {
+      const netRequests = extractNetworkRequests(correlateArgs['networkRequests']);
+      if (netRequests.length > 0) {
+        const netV8Result = correlateNetworkToV8(this.evidenceBridge, netRequests);
+        results['networkV8'] = netV8Result;
+        // Add bidirectional reverse edges: for each correlation, add a
+        // v8-triggers-network edge pointing opposite direction so the graph
+        // can be traversed both forward (initiator→request) and backward
+        // (request→initiator). We iterate the snapshot edges to find
+        // the matching network-initiated-by edges just created.
+        const snapshot = this.evidenceBridge.exportGraph();
+        for (const corr of netV8Result.correlations) {
+          const matchingEdges = snapshot.edges.filter(
+            (e: {
+              type: string;
+              metadata?: Record<string, unknown>;
+              source: string;
+              target: string;
+            }) =>
+              e.type === 'network-initiated-by' &&
+              e.metadata &&
+              (e.metadata as Record<string, unknown>)['requestId'] === corr.requestId,
+          );
+          for (const edge of matchingEdges) {
+            this.evidenceBridge
+              .getGraph()
+              .addEdge(edge.target, edge.source, 'v8-triggers-network', {
+                domain: 'cross-domain',
+                relation: 'v8-function-triggers-network-request',
+                confidence: corr.confidence,
+                matchType: corr.matchType,
+                requestId: corr.requestId,
+              });
+          }
+        }
+      }
+    } catch (e) {
+      errors.push(`NET-V8: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     const snapshot = filterEvidenceSnapshot(
@@ -568,6 +615,25 @@ export class CrossDomainHandlers {
     const base = this.evidenceBridge.getStats();
     const snapshot = this.evidenceBridge.exportGraph();
     return asJsonResponse({ ...base, ...computeEvidenceGraphQuality(snapshot) });
+  }
+
+  async handleSynonym(args: Record<string, unknown>): Promise<ToolResponse> {
+    const query = argString(args, 'query', '');
+    if (!query.trim()) {
+      return asJsonResponse({
+        message: 'Provide a natural-language query describing the task or concept.',
+        graphMeta: getSynonymGraphMeta(),
+      });
+    }
+    const maxResults = Math.max(1, Math.min(20, Math.floor(argNumber(args, 'maxResults', 10))));
+    const matches = querySynonyms(query, maxResults);
+    return asJsonResponse({
+      query,
+      matchCount: matches.length,
+      maxResults,
+      matches,
+      graphMeta: getSynonymGraphMeta(),
+    });
   }
 }
 

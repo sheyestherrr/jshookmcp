@@ -25,6 +25,7 @@ const registrations = defineMethodRegistrations<
     { tool: 'cross_domain_evidence_export', method: 'handleEvidenceExportTool' },
     { tool: 'cross_domain_evidence_query', method: 'handleEvidenceQueryTool' },
     { tool: 'cross_domain_evidence_stats', method: 'handleEvidenceStatsTool' },
+    { tool: 'cross_domain_synonym', method: 'handleSynonymTool' },
   ],
 });
 

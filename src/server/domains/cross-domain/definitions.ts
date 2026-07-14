@@ -175,4 +175,16 @@ export const crossDomainToolDefinitions: Tool[] = [
   tool('cross_domain_evidence_stats', (t) =>
     t.desc('Get node and edge statistics for the shared cross-domain evidence graph.').query(),
   ),
+  tool('cross_domain_synonym', (t) =>
+    t
+      .desc(
+        'Map natural-language queries to tool recommendations using a lightweight synonym graph. ' +
+          'Pure TS — no LLM. Useful for discovering which tools implement a concept described in ' +
+          'plain English (e.g. "find where the app signs requests" → deobfuscation, crypto, network).',
+      )
+      .string('query', 'Natural-language description of the task or concept to find tools for')
+      .number('maxResults', 'Maximum results to return', { default: 10, minimum: 1, maximum: 20 })
+      .required('query')
+      .query(),
+  ),
 ];
