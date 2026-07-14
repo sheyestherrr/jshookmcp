@@ -548,17 +548,22 @@ export class CoordinationHandlers {
     // Capture IndexedDB metadata (database / store / keyPath / count) for
     // forensic diagnosis. Modern web apps keep auth tokens / draft state in
     // IndexedDB (not localStorage); without this the snapshot misses the
-    // dominant "restore logged-in session" surface. Data payloads are NOT
-    // captured (size + cross-origin limits) — only schema + counts. The probe
-    // is a serialized async IIFE run via page.evaluate(string), so it carries
-    // no Node-side type/lint surface.
+    // dominant "restore logged-in session" surface.
     let indexedDB: IndexedDBDatabaseSummary[] | undefined;
+    let indexedDBData: IndexedDBRecordData[] | undefined;
     try {
       const captured = (await page.evaluate(INDEXEDDB_CAPTURE_SCRIPT)) as
         | IndexedDBDatabaseSummary[]
         | null;
       if (Array.isArray(captured) && captured.length > 0) {
         indexedDB = captured;
+      }
+      // Also capture record data for restore support (limited to 100 records per store)
+      const recordData = (await page.evaluate(INDEXEDDB_DATA_CAPTURE_SCRIPT)) as
+        | IndexedDBRecordData[]
+        | null;
+      if (Array.isArray(recordData) && recordData.length > 0) {
+        indexedDBData = recordData;
       }
     } catch {
       // IndexedDB capture may fail (no browser / cross-origin) — proceed without
@@ -571,6 +576,7 @@ export class CoordinationHandlers {
       localStorage,
       sessionStorage,
       ...(indexedDB ? { indexedDB } : {}),
+      ...(indexedDBData ? { indexedDBData } : {}),
       timestamp: Date.now(),
       label,
     };
@@ -584,6 +590,11 @@ export class CoordinationHandlers {
       localStorageKeys: Object.keys(snapshot.localStorage).length,
       sessionStorageKeys: Object.keys(snapshot.sessionStorage).length,
       indexedDBDatabaseCount: snapshot.indexedDB?.length ?? 0,
+      indexedDBRecordCount:
+        snapshot.indexedDBData?.reduce(
+          (sum, r) => sum + (Array.isArray(r.records) ? r.records.length : 0),
+          0,
+        ) ?? 0,
       label: snapshot.label,
     };
   }
@@ -671,10 +682,217 @@ export class CoordinationHandlers {
       cookieCount: s.cookies.length,
       localStorageKeys: Object.keys(s.localStorage).length,
       sessionStorageKeys: Object.keys(s.sessionStorage).length,
+      indexedDBDatabaseCount: s.indexedDB?.length ?? 0,
+      indexedDBRecordCount:
+        s.indexedDBData?.reduce(
+          (sum, r) => sum + (Array.isArray(r.records) ? r.records.length : 0),
+          0,
+        ) ?? 0,
       createdAt: new Date(s.timestamp).toISOString(),
     }));
 
     return { snapshots: list, total: list.length };
+  }
+
+  // ── coordination_restore_snapshot ──
+
+  async handleCoordinationRestoreSnapshotTool(
+    args: Record<string, unknown>,
+  ): Promise<ToolResponse> {
+    return handleSafe(async () => await this.handleCoordinationRestoreSnapshot(args));
+  }
+
+  async handleCoordinationRestoreSnapshot(args: Record<string, unknown>): Promise<unknown> {
+    const snapshotId = args.snapshotId as string;
+    if (!snapshotId) throw new Error('snapshotId is required');
+
+    const snapshot = this.snapshots.get(snapshotId);
+    if (!snapshot) throw new Error(`Snapshot "${snapshotId}" not found`);
+
+    const pc = this.ctx.pageController;
+    if (!pc) throw new Error('No page controller available');
+
+    const page = await pc.getPage();
+    if (!page) throw new Error('No active page for restoration');
+
+    // Navigate to saved URL
+    await page.goto(snapshot.url, {
+      waitUntil: 'domcontentloaded',
+      timeout: COORDINATION_GOTO_TIMEOUT_MS,
+    });
+
+    // Restore cookies via CDP
+    let cookiesRestored = 0;
+    if (snapshot.cookies.length > 0) {
+      try {
+        const cdp = await page.createCDPSession();
+        await cdp.send('Network.setCookies', {
+          cookies: snapshot.cookies.map((c) => ({
+            name: c.name,
+            value: c.value,
+            domain: c.domain,
+            path: c.path,
+          })),
+        });
+        await cdp.detach();
+        cookiesRestored = snapshot.cookies.length;
+      } catch {
+        // Cookie restore may fail — proceed
+      }
+    }
+
+    // Restore localStorage and sessionStorage
+    let storageRestored = false;
+    try {
+      await page.evaluate(
+        (ls: Record<string, string>, ss: Record<string, string>) => {
+          window.localStorage.clear();
+          for (const [k, v] of Object.entries(ls)) {
+            window.localStorage.setItem(k, v);
+          }
+          window.sessionStorage.clear();
+          for (const [k, v] of Object.entries(ss)) {
+            window.sessionStorage.setItem(k, v);
+          }
+        },
+        snapshot.localStorage,
+        snapshot.sessionStorage,
+      );
+      storageRestored = true;
+    } catch {
+      // Storage restore may fail on some pages
+    }
+
+    // Restore IndexedDB data
+    let indexedDBRestored = false;
+    let indexedDBRecordsRestored = 0;
+    if (snapshot.indexedDBData && snapshot.indexedDBData.length > 0) {
+      try {
+        const dataJson = JSON.stringify({
+          records: snapshot.indexedDBData,
+          schemas: snapshot.indexedDB ?? [],
+        });
+        const restored = (await page.evaluate(async (json: string) => {
+          const idb = (globalThis as Record<string, unknown>).indexedDB as IDBFactory | undefined;
+          if (!idb) return { restored: false, recordCount: 0 };
+          const captured = JSON.parse(json) as {
+            records: Array<{
+              database?: string;
+              store?: string;
+              records?: Array<{ key: unknown; value: unknown }>;
+            }>;
+            schemas: Array<{
+              name: string;
+              version?: number;
+              stores?: Array<{
+                name: string;
+                keyPath?: string | string[];
+                autoIncrement?: boolean;
+              }>;
+            }>;
+          };
+          const data = captured.records;
+          if (!Array.isArray(data) || data.length === 0) return { restored: false, recordCount: 0 };
+
+          // Group by database
+          const dbMap = new Map<
+            string,
+            Array<{ store: string; records: Array<{ key: unknown; value: unknown }> }>
+          >();
+          for (const entry of data) {
+            if (!entry.database || !entry.store || !Array.isArray(entry.records)) continue;
+            if (!dbMap.has(entry.database)) dbMap.set(entry.database, []);
+            dbMap.get(entry.database)!.push({ store: entry.store, records: entry.records });
+          }
+
+          let totalRecords = 0;
+          for (const [dbName, entries] of dbMap) {
+            try {
+              // Delete existing
+              await new Promise<void>((resolve, reject) => {
+                const delReq = idb.deleteDatabase(dbName);
+                // eslint-disable-next-line unicorn/prefer-add-event-listener
+                delReq.onsuccess = () => resolve();
+                // eslint-disable-next-line unicorn/prefer-add-event-listener
+                delReq.onerror = () => reject(delReq.error);
+                // eslint-disable-next-line unicorn/prefer-add-event-listener
+                delReq.onblocked = () => reject(new Error(`Deletion blocked for ${dbName}`));
+              });
+
+              // Create and populate
+              await new Promise<void>((resolve, reject) => {
+                const schema = captured.schemas.find((item) => item.name === dbName);
+                const openReq = idb.open(dbName, schema?.version ?? 1);
+                openReq.onupgradeneeded = () => {
+                  const db = openReq.result;
+                  for (const entry of entries) {
+                    if (!db.objectStoreNames.contains(entry.store)) {
+                      const storeSchema = schema?.stores?.find((item) => item.name === entry.store);
+                      db.createObjectStore(entry.store, {
+                        ...(storeSchema?.keyPath !== undefined
+                          ? { keyPath: storeSchema.keyPath }
+                          : {}),
+                        autoIncrement: storeSchema?.autoIncrement ?? false,
+                      });
+                    }
+                  }
+                };
+                openReq.onsuccess = async () => {
+                  const db = openReq.result;
+                  for (const entry of entries) {
+                    try {
+                      await new Promise<void>((resolveStore) => {
+                        const tx = db.transaction(entry.store, 'readwrite');
+                        // eslint-disable-next-line unicorn/prefer-add-event-listener
+                        tx.oncomplete = () => resolveStore();
+                        // eslint-disable-next-line unicorn/prefer-add-event-listener
+                        tx.onerror = () => resolveStore();
+                        // eslint-disable-next-line unicorn/prefer-add-event-listener
+                        tx.onabort = () => resolveStore();
+                        const store = tx.objectStore(entry.store);
+                        for (const rec of entry.records) {
+                          try {
+                            if (store.keyPath === null)
+                              store.add(rec.value, rec.key as IDBValidKey);
+                            else store.add(rec.value);
+                            totalRecords++;
+                          } catch {
+                            /* skip */
+                          }
+                        }
+                      });
+                    } catch {
+                      /* skip store */
+                    }
+                  }
+                  db.close();
+                  resolve();
+                };
+                // eslint-disable-next-line unicorn/prefer-add-event-listener
+                openReq.onerror = () => reject(openReq.error);
+              });
+            } catch {
+              /* skip db */
+            }
+          }
+          return { restored: totalRecords > 0, recordCount: totalRecords };
+        }, dataJson)) as { restored: boolean; recordCount: number };
+        indexedDBRestored = restored.restored;
+        indexedDBRecordsRestored = restored.recordCount;
+      } catch {
+        // IndexedDB restore may fail — proceed
+      }
+    }
+
+    return {
+      restored: true,
+      snapshotId: snapshot.id,
+      url: snapshot.url,
+      cookiesRestored,
+      storageRestored,
+      indexedDBRestored,
+      indexedDBRecordsRestored,
+    };
   }
 }
 
@@ -716,7 +934,8 @@ const INDEXEDDB_CAPTURE_SCRIPT = `(async () => {
             const c = s.count();
             c.onsuccess = () => {
               const kp = s.keyPath;
-              stores.push(kp === null || kp === undefined ? { name: sn, count: c.result } : { name: sn, count: c.result, keyPath: kp });
+              const base = { name: sn, count: c.result, autoIncrement: s.autoIncrement };
+              stores.push(kp === null || kp === undefined ? base : { ...base, keyPath: kp });
             };
             c.onerror = () => stores.push({ name: sn, count: 0 });
           }
@@ -736,6 +955,7 @@ export interface IndexedDBStoreSummary {
   name: string;
   count: number;
   keyPath?: string | string[];
+  autoIncrement?: boolean;
 }
 
 export interface IndexedDBDatabaseSummary {
@@ -746,6 +966,14 @@ export interface IndexedDBDatabaseSummary {
   error?: string;
 }
 
+export interface IndexedDBRecordData {
+  database: string;
+  store: string;
+  key: unknown;
+  value: unknown;
+  records: Array<{ key: unknown; value: unknown }>;
+}
+
 export interface PageSnapshot {
   id: string;
   url: string;
@@ -754,15 +982,80 @@ export interface PageSnapshot {
   sessionStorage: Record<string, string>;
   /**
    * IndexedDB metadata (database / store / keyPath / count) captured for
-   * forensic diagnosis. Modern apps keep auth tokens / draft state here rather
-   * than in localStorage. Data payloads are intentionally NOT captured (size +
-   * cross-origin limits); IndexedDB is also NOT restored — restore only
-   * re-applies cookies + Web Storage.
+   * forensic diagnosis.
    */
   indexedDB?: IndexedDBDatabaseSummary[];
+  /**
+   * Captured IndexedDB record data for snapshot restore. Limited to 100 records
+   * per store to bound memory usage. Stored as serializable JSON-safe values.
+   */
+  indexedDBData?: IndexedDBRecordData[];
   timestamp: number;
   label?: string;
 }
+
+/**
+ * In-page IndexedDB record data capture. Opens each database and reads up to
+ * MAX_RECORDS_PER_STORE records from each object store. Returns an array of
+ * { database, store, key, value, records } objects suitable for serialization.
+ * Records must be JSON-serializable; non-serializable values (Buffer, Blob,
+ * etc.) are replaced with a type marker string.
+ */
+const INDEXEDDB_DATA_CAPTURE_SCRIPT = `(async () => {
+  const MAX_RECORDS_PER_STORE = 100;
+  const idb = globalThis.indexedDB;
+  if (!idb) return [];
+  let dbs = [];
+  try { if (typeof idb.databases === 'function') dbs = await idb.databases(); } catch (e) {}
+  const out = [];
+  for (const info of dbs) {
+    const name = info && info.name;
+    if (typeof name !== 'string') continue;
+    try {
+      const db = await new Promise((resolve, reject) => {
+        const r = idb.open(name);
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+      });
+      const storeNames = Array.from(db.objectStoreNames);
+      for (const sn of storeNames) {
+        try {
+          const records = [];
+          let count = 0;
+          await new Promise((resolve) => {
+            const tx = db.transaction(sn, 'readonly');
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+            tx.onabort = () => resolve();
+            const store = tx.objectStore(sn);
+            const cursorReq = store.openCursor();
+            cursorReq.onsuccess = (event) => {
+              const cursor = event.target.result;
+              if (cursor && count < MAX_RECORDS_PER_STORE) {
+                try {
+                  records.push({ key: JSON.parse(JSON.stringify(cursor.key)), value: JSON.parse(JSON.stringify(cursor.value)) });
+                } catch (e) {
+                  records.push({ key: String(cursor.key), value: '<non-serializable>' });
+                }
+                count++;
+                cursor.continue();
+              }
+            };
+          });
+          if (records.length > 0) {
+            out.push({ database: name, store: sn, records });
+          }
+        } catch (e) {
+          // skip unreadable stores
+        }
+      }
+      db.close();
+    } catch (e) {
+      // skip unopenable databases
+    }
+  }
+  return out;
+})()`;
 
 function cloneHandoff(handoff: TaskHandoff): TaskHandoff {
   return {

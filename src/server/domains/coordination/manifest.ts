@@ -30,6 +30,11 @@ const registrations = defineMethodRegistrations<H, (typeof coordinationTools)[nu
     { tool: 'save_page_snapshot', method: 'handleSavePageSnapshotTool', profiles: ['full'] },
     { tool: 'restore_page_snapshot', method: 'handleRestorePageSnapshotTool', profiles: ['full'] },
     { tool: 'list_page_snapshots', method: 'handleListPageSnapshotsTool', profiles: ['full'] },
+    {
+      tool: 'coordination_restore_snapshot',
+      method: 'handleCoordinationRestoreSnapshotTool',
+      profiles: ['full'],
+    },
   ],
 });
 const stateBoardRegistrations = defineMethodRegistrations<

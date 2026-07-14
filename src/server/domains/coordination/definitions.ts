@@ -88,4 +88,16 @@ export const coordinationTools: Tool[] = [
       .idempotent(),
   ),
   tool('list_page_snapshots', (t) => t.desc('List saved page snapshots.').query()),
+
+  // ── Snapshot Restore ──
+  tool('coordination_restore_snapshot', (t) =>
+    t
+      .desc(
+        'Restore a saved page snapshot including IndexedDB data. Navigates to the captured URL, ' +
+          're-injects cookies, localStorage, sessionStorage, and IndexedDB records from the snapshot.',
+      )
+      .string('snapshotId', 'Snapshot ID from save_page_snapshot')
+      .required('snapshotId')
+      .idempotent(),
+  ),
 ];

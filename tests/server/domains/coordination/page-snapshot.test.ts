@@ -84,4 +84,136 @@ describe('CoordinationHandlers — page snapshots (IndexedDB capture)', () => {
     expect(res.snapshotId).toBeDefined();
     expect(res.indexedDBDatabaseCount).toBe(0);
   });
+
+  it('does not open a replacement database when deletion is blocked', async () => {
+    const open = vi.fn();
+    const deleteDatabase = vi.fn(() => {
+      const request: any = {};
+      queueMicrotask(() => request.onblocked?.());
+      return request;
+    });
+    vi.stubGlobal('indexedDB', { deleteDatabase, open });
+
+    const page: any = {
+      goto: vi.fn(),
+      createCDPSession: vi.fn(),
+      evaluate: vi.fn(async (fn: any, ...args: unknown[]) => {
+        if (typeof args[0] === 'string') return fn(args[0]);
+        return {};
+      }),
+    };
+    pageController.getPage.mockResolvedValue(page);
+    (handlers as any).snapshots.set('blocked', {
+      id: 'blocked',
+      url: withPath(TEST_URLS.root, 'app'),
+      cookies: [],
+      localStorage: {},
+      sessionStorage: {},
+      indexedDB: [{ name: 'authDB', version: 1, stores: [{ name: 'tokens' }] }],
+      indexedDBData: [
+        { database: 'authDB', store: 'tokens', records: [{ key: 1, value: { token: 'x' } }] },
+      ],
+      timestamp: Date.now(),
+    });
+
+    try {
+      const result = (await handlers.handleCoordinationRestoreSnapshot({
+        snapshotId: 'blocked',
+      })) as Record<string, unknown>;
+
+      expect(deleteDatabase).toHaveBeenCalledWith('authDB');
+      expect(open).not.toHaveBeenCalled();
+      expect(result.indexedDBRestored).toBe(false);
+      expect(result.indexedDBRecordsRestored).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('recreates IndexedDB schemas and restores out-of-line keys', async () => {
+    const createObjectStore = vi.fn();
+    const outOfLineAdd = vi.fn();
+    const inlineAdd = vi.fn();
+    const transaction = vi.fn((storeName: string) => {
+      const tx: any = {
+        objectStore: () =>
+          storeName === 'by-id'
+            ? { keyPath: null, add: outOfLineAdd }
+            : { keyPath: 'id', add: inlineAdd },
+      };
+      queueMicrotask(() => tx.oncomplete?.());
+      return tx;
+    });
+    const db = {
+      objectStoreNames: { contains: vi.fn(() => false) },
+      createObjectStore,
+      transaction,
+      close: vi.fn(),
+    };
+    const deleteDatabase = vi.fn(() => {
+      const request: any = {};
+      queueMicrotask(() => request.onsuccess?.());
+      return request;
+    });
+    const open = vi.fn(() => {
+      const request: any = { result: db };
+      queueMicrotask(() => {
+        request.onupgradeneeded?.();
+        request.onsuccess?.();
+      });
+      return request;
+    });
+    vi.stubGlobal('indexedDB', { deleteDatabase, open });
+
+    const page: any = {
+      goto: vi.fn(),
+      createCDPSession: vi.fn(),
+      evaluate: vi.fn(async (fn: any, ...args: unknown[]) => {
+        if (typeof args[0] === 'string') return fn(args[0]);
+        return {};
+      }),
+    };
+    pageController.getPage.mockResolvedValue(page);
+    (handlers as any).snapshots.set('schema-keys', {
+      id: 'schema-keys',
+      url: withPath(TEST_URLS.root, 'app'),
+      cookies: [],
+      localStorage: {},
+      sessionStorage: {},
+      indexedDB: [
+        {
+          name: 'authDB',
+          version: 4,
+          stores: [
+            { name: 'by-id', autoIncrement: false },
+            { name: 'inline', keyPath: 'id', autoIncrement: false },
+          ],
+        },
+      ],
+      indexedDBData: [
+        { database: 'authDB', store: 'by-id', records: [{ key: 7, value: { token: 'x' } }] },
+        { database: 'authDB', store: 'inline', records: [{ key: 9, value: { id: 9 } }] },
+      ],
+      timestamp: Date.now(),
+    });
+
+    try {
+      const result = (await handlers.handleCoordinationRestoreSnapshot({
+        snapshotId: 'schema-keys',
+      })) as Record<string, unknown>;
+
+      expect(open).toHaveBeenCalledWith('authDB', 4);
+      expect(createObjectStore).toHaveBeenCalledWith('by-id', { autoIncrement: false });
+      expect(createObjectStore).toHaveBeenCalledWith('inline', {
+        keyPath: 'id',
+        autoIncrement: false,
+      });
+      expect(outOfLineAdd).toHaveBeenCalledWith({ token: 'x' }, 7);
+      expect(inlineAdd).toHaveBeenCalledWith({ id: 9 });
+      expect(result.indexedDBRestored).toBe(true);
+      expect(result.indexedDBRecordsRestored).toBe(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
