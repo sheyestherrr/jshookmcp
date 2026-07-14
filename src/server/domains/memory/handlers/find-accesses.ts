@@ -101,35 +101,22 @@ export class FindAccessesHandlers {
     return await resolveMemoryDomainPid(value, this.processManager, this.ctx);
   }
 
-  // NOTE: find_accesses disassembly is only functional on Windows. On macOS/Linux
-  // the tool is filtered out at registration (WIN32_ONLY_TOOLS in manifest.ts) and
-  // `bpEngine` is constructed as null, so this handler throws early below. The capstone
-  // WASM disassembler itself is cross-platform (needs no native binding); the real
-  // cross-platform gap is the hardware-breakpoint engine + the process-memory reader.
-  // macOS/Linux fallback is a raw hex dump only — no instruction decode. Cross-platform
-  // parity tracked at research/memory.md #3.
+  // NOTE: find_accesses is only functional on Windows today. On macOS/Linux the
+  // tool is filtered out at registration (WIN32_ONLY_TOOLS in manifest.ts) and
+  // `bpEngine` is constructed as null, so this handler throws early below.
+  //
+  // The cross-platform native primitives the former TODO markers below called for
+  // now EXIST as standalone modules (status 2026-07-14):
+  //   - process_vm_readv (Linux cross-process read)         → src/native/platform/linux/ProcessVmIo.ts
+  //   - task_for_pid + mach_vm_read (Darwin cross-process)  → src/native/platform/darwin/DarwinMemoryProvider.ts
+  //   - INT3/SIGTRAP execute-breakpoint engine (Linux)      → src/native/platform/linux/LinuxInt3AccessBreakpoint.ts
+  //   - Mach exception-port page-guard engine (Darwin)      → src/native/platform/darwin/DarwinMachAccessBreakpoint.ts
+  //     (its mach_msg exception receive loop is a documented gap)
+  // What remains is wiring those behind the AccessBreakpointEngine interface
+  // (src/native/platform/AccessBreakpointEngine.ts) as a non-Win32 bpEngine so
+  // this handler stops throwing on macOS/Linux.
   async handleFindAccesses(args: Record<string, unknown>) {
     return handleSafe(async () => {
-      // TODO(macOS): mach_vm_protect + EXC_BAD_ACCESS page-level breakpoint via koffi
-      // FFI — uses mach_vm_protect to set page protections and installs an
-      // EXC_BAD_ACCESS exception handler to trap on access. Re-arm by re-protecting
-      // the page after each hit. Requires task_for_pid + mach_vm_read for instruction
-      // byte reads. See research/memory.md #3.
-      //
-      // TODO(Linux): ptrace(PTRACE_ATTACH) + INT3 (0xCC) injection + SIGTRAP capture
-      // + single-step re-arm via koffi FFI. Combine with perf_event_open for
-      // hardware-assisted breakpoint counters on recent kernels (>=4.3).
-      // See research/memory.md #3.
-      //
-      // TODO(Linux): process_vm_readv via koffi FFI — a zero-syscall cross-process
-      // memory reader that transfers bytes between address spaces without ptrace or
-      // /proc/pid/mem. Useful as a lighter alternative when the caller already holds
-      // CAP_SYS_PTRACE. See research/memory.md #3.
-      //
-      // TODO(macOS): task_for_pid + mach_vm_read via koffi FFI — the Mach VM
-      // cross-process memory reader. Requires the calling process to be code-signed
-      // with the com.apple.security.cs.debugger entitlement or run as root
-      // (System Integrity Protection permitting). See research/memory.md #3.
       if (!this.bpEngine) {
         throw new Error(WIN32_UNSUPPORTED_MSG);
       }
