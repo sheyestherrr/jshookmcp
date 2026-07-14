@@ -173,6 +173,18 @@ export const wasmTools: Tool[] = [
       )
       .required('inputPath'),
   ),
+  tool('wasm_instrument_block', (t) =>
+    t
+      .desc(
+        'Real wasm-level basic-block instrumentation: disassembles via wasm2wat, inserts a call to an imported trace function at every block/loop/if body entry (and function entry), and reassembles via wat2wasm. Unlike wasm_instrument_binary (function-entry-only) and wasm_instrument_trace (JS-proxy-only), this observes structured control-flow entries — branch targets (br/br_if/br_table) are covered because Wasm resolves them to block/loop/if labels. The host must supply the trace_block import at instantiation.',
+      )
+      .string('inputPath', 'Path to the .wasm file to instrument')
+      .string(
+        'outputPath',
+        'Output instrumented .wasm file path. If omitted, auto-generates in artifacts/wasm/',
+      )
+      .required('inputPath'),
+  ),
   tool('wasm_inspect', (t) =>
     t
       .desc(
