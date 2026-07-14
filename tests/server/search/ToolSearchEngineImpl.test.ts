@@ -171,6 +171,23 @@ describe('search/ToolSearchEngineImpl', () => {
     expect(results).toEqual([]);
   });
 
+  it('normalises query casing and whitespace so the cache key stays stable', async () => {
+    const { ToolSearchEngine } = await import('@server/search/ToolSearchEngineImpl');
+    const engine = new ToolSearchEngine([
+      makeTool('page_navigate', 'Navigate a page'),
+      makeTool('page_click', 'Click a page element'),
+    ]);
+
+    // The same logical query phrased with different casing / surrounding
+    // spaces must resolve to the same cache entry, so LLM casing fluctuations
+    // don't fragment the cache and rank/score stay identical across calls.
+    const capitalised = await engine.search('Page Navigate', 5);
+    const padded = await engine.search('  page navigate  ', 5);
+
+    expect(capitalised.map((r) => r.name)).toEqual(padded.map((r) => r.name));
+    expect(capitalised.map((r) => r.score)).toEqual(padded.map((r) => r.score));
+  });
+
   it('updates isActive from cache hits without changing scores', async () => {
     const { ToolSearchEngine } = await import('@server/search/ToolSearchEngineImpl');
     const engine = new ToolSearchEngine([

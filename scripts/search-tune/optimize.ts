@@ -601,12 +601,19 @@ async function orchestrate(): Promise<void> {
   }
   console.log(`\nResults: ${outFile}`);
 
-  // Auto-apply best params to .env
-  const best = bestRerank ?? bestProfile ?? bestLexical;
-  if (best) {
-    const envPath = pathResolve(ROOT, '.env');
-    await applyToEnv(envPath, best.params, best.metrics.objectiveScore);
-  }
+  // Auto-apply best params to .env.
+  // Merge by phase rather than taking one trial's full param set: lexical
+  // params come from the best lexical trial, then profile/rerank overrides
+  // are layered on top.  This prevents the small profile/rerank datasets
+  // from silently degrading the lexical defaults through cross-phase param
+  // spill (e.g. SEARCH_RRF_BM25_BLEND being pulled from a profile trial).
+  const mergedParams: Record<string, number> = {
+    ...bestLexical?.params,
+  };
+  if (bestProfile) Object.assign(mergedParams, bestProfile.params);
+  if (bestRerank) Object.assign(mergedParams, bestRerank.params);
+  const envPath = pathResolve(ROOT, '.env');
+  await applyToEnv(envPath, mergedParams, bestLexical?.metrics.objectiveScore ?? 0);
 }
 
 async function applyToEnv(

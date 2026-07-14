@@ -168,6 +168,10 @@ const TOOLS: readonly Tool[] = [
     'console_inject_fetch_interceptor',
     'Inject a Fetch API interceptor to capture requests',
   ),
+  makeTool(
+    'console_inject_xhr_interceptor',
+    'Inject an XMLHttpRequest interceptor to capture calls',
+  ),
   // network
   makeTool('network_enable', 'Enable network request monitoring and capture'),
   makeTool('network_monitor', 'Start monitoring network traffic and intercept requests'),
@@ -175,9 +179,20 @@ const TOOLS: readonly Tool[] = [
   makeTool('network_extract_auth', 'Extract authentication tokens from network traffic'),
   makeTool('network_export_har', 'Export network capture as HAR file'),
   makeTool('network_replay_request', 'Replay a previously captured network request'),
+  // network interference: real-registry tools that crowd generic queries like
+  // "capture"/"sniff traffic" — without these the fixture under-models the
+  // ranking difficulty present in the 636-tool catalog.
+  makeTool('network_intercept', 'Intercept and modify network requests in flight'),
+  makeTool('http_plain_request', 'Send a raw plain HTTP request over TCP'),
+  makeTool('http_request_build', 'Build a raw HTTP request payload'),
+  makeTool('http2_probe', 'Probe an HTTP/2 endpoint'),
   makeTool('ws_monitor', 'Enable or disable WebSocket frame monitoring'),
   makeTool('ws_get_frames', 'Get captured WebSocket frames'),
+  makeTool('ws_export_capture', 'Export captured WebSocket frames as JSON or NDJSON'),
   makeTool('sse_monitor_enable', 'Enable Server-Sent Events monitoring'),
+  makeTool('sse_export_capture', 'Export captured SSE events as JSON or NDJSON'),
+  makeTool('webrtc_export_capture', 'Export captured WebRTC data-channel messages'),
+  makeTool('fetch_stream_export_capture', 'Export captured fetch-based stream events'),
   // debugger
   makeTool('debug_pause', 'Pause JavaScript execution'),
   makeTool('debug_resume', 'Resume paused JavaScript execution'),
@@ -203,6 +218,10 @@ const TOOLS: readonly Tool[] = [
   // memory
   makeTool('memory_scan', 'Scan process memory for patterns'),
   makeTool('heap_snapshot', 'Capture a heap snapshot'),
+  // memory interference: tools sharing the "capture/export" suffix that crowd
+  // generic "capture" queries in the real registry.
+  makeTool('memory_dump', 'Dump process memory region to a binary buffer'),
+  makeTool('memory_snapshot', 'Capture a memory snapshot of the target process'),
   // evidence
   makeTool('evidence_query', 'Query evidence graph by URL, function name, or script ID'),
   makeTool('evidence_export', 'Export evidence graph as JSON or Markdown'),

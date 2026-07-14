@@ -87,7 +87,9 @@ function buildSearchCacheKey(
   visibleDomains?: ReadonlySet<string>,
   extensionEtag?: string,
 ): string {
-  const base = `${query}\0${topK}`;
+  // Normalise casing / whitespace so queries that differ only in
+  // capitalisation or surrounding spaces hit the same cache entry.
+  const base = `${query.toLowerCase().trim()}\0${topK}`;
   const domains =
     !visibleDomains || visibleDomains.size === 0
       ? ''
@@ -339,7 +341,14 @@ export class ToolSearchEngine {
 
     // ── Self-RAG quick path: skip expensive signals for simple queries ──
     if (SEARCH_SELF_RAG_ENABLED && this.isSimpleQuery(query, queryTokens)) {
-      return this.quickPathSearch(query, queryTokens, topK, activeToolNames);
+      return this.quickPathSearch(
+        query,
+        queryTokens,
+        topK,
+        activeToolNames,
+        visibleDomains,
+        profile,
+      );
     }
 
     // ── IDF-based query distillation ──
@@ -368,8 +377,12 @@ export class ToolSearchEngine {
     queryTokens.push(...synonymTokens);
 
     // ── Explicit tool name mention short-circuit (Scheme 1) ──
-    // If the user explicitly mentions a known tool name *and* uses an invocation verb,
-    // promote that tool to top-1 to avoid unrelated maintenance tools stealing rank.
+    // If the user explicitly mentions a known tool name *and* uses an
+    // invocation verb, promote that tool to top-1.  Instead of scanning
+    // every tool name (O(N) indexOf per search), we reverse-index from
+    // the query: split into word tokens, generate consecutive n-grams,
+    // and probe docNameIndex in O(1).  Typical queries have 3-10 tokens,
+    // so the inner loop shrinks from 1096 iterations to ~25-55.
     const explicitToolMention = (() => {
       const lower = query.toLowerCase();
       const hasInvokeVerb = /(?:\b(?:call|use|run|invoke|execute)\b|调用|执行|使用|运行)/i.test(
@@ -380,24 +393,40 @@ export class ToolSearchEngine {
       const wordCharIdent = /[a-z0-9_]/;
       const wordCharPlain = /[a-z0-9]/;
 
+      // Split on non-identifier characters, preserving snake_case tokens.
+      const tokens = lower.split(/[^a-z0-9_]+/).filter((t) => t.length > 0);
+      const maxN = Math.min(tokens.length, 5); // longest tool name has 5 segments
+
       let bestTool: string | null = null;
       let bestIdx = Number.POSITIVE_INFINITY;
 
-      for (const toolName of this.docNameIndex.keys()) {
-        // Exact tool name form (snake_case) with strict identifier boundaries.
-        let idx = findDelimitedIndex(lower, toolName, wordCharIdent);
-        if (idx < 0 && toolName.includes('_')) {
-          // Normalized variants: kebab-case / spaced words (underscores ↔ hyphens/spaces).
-          idx = findDelimitedIndex(lower, toolName.replace(/_/g, '-'), wordCharPlain);
-          if (idx < 0) {
-            idx = findDelimitedIndex(lower, toolName.replace(/_/g, ' '), wordCharPlain);
-          }
-        }
-        if (idx < 0) continue;
+      for (let n = 1; n <= maxN; n++) {
+        for (let start = 0; start <= tokens.length - n; start++) {
+          const candidate = tokens.slice(start, start + n).join('_');
 
-        if (idx < bestIdx || (idx === bestIdx && toolName.length > (bestTool?.length ?? 0))) {
-          bestTool = toolName;
-          bestIdx = idx;
+          // Base snake_case form — if it's a known tool name, verify
+          // exact position with identifier-boundary matching.
+          let idx = -1;
+          if (this.docNameIndex.has(candidate)) {
+            idx = findDelimitedIndex(lower, candidate, wordCharIdent);
+          }
+
+          // Kebab-case / space-separated variants for multi-segment names.
+          if (idx < 0 && n > 1) {
+            const kebab = candidate.replace(/_/g, '-');
+            idx = findDelimitedIndex(lower, kebab, wordCharPlain);
+            if (idx < 0) {
+              const spaced = candidate.replace(/_/g, ' ');
+              idx = findDelimitedIndex(lower, spaced, wordCharPlain);
+            }
+          }
+
+          if (idx < 0) continue;
+
+          if (idx < bestIdx || (idx === bestIdx && candidate.length > (bestTool?.length ?? 0))) {
+            bestTool = candidate;
+            bestIdx = idx;
+          }
         }
       }
 
@@ -611,6 +640,8 @@ export class ToolSearchEngine {
     queryTokens: string[],
     topK: number,
     activeToolNames?: ReadonlySet<string>,
+    visibleDomains?: ReadonlySet<string>,
+    profile?: ToolProfile,
   ): ToolSearchResult[] {
     const scores = new Float64Array(this.docCount);
 
@@ -644,6 +675,10 @@ export class ToolSearchEngine {
       const idx = this.docNameIndex.get(queryNormalised)!;
       scores[idx]! *= SEARCH_EXACT_NAME_MATCH_MULTIPLIER;
     }
+
+    // Mirror the full-path tier penalty so tool visibility is consistent
+    // between the simple-query fast path and the full RRF path.
+    this.applyTierPenalty(scores, visibleDomains, profile);
 
     const active = activeToolNames ?? new Set<string>();
     const candidates: ToolSearchResult[] = [];
@@ -724,11 +759,10 @@ export class ToolSearchEngine {
       // If no visible domains (search tier), all domains are "out of tier"
       const isOutOfTier = hasVisibleDomains ? !visibleDomains.has(domain) : true;
       if (isOutOfTier) {
+        // Penalty is multiplicative on positive scores (line 741 already
+        // skipped ≤0 entries); 0 < score × penalty ≤ score for any valid
+        // penalty in (0, 1), so scores never need a lower-bound clamp.
         scores[i]! *= penalty;
-        // Clamp to epsilon so penalized results remain discoverable for auto-activation
-        if (scores[i]! <= 0 && penalty > 0) {
-          scores[i] = 1e-6;
-        }
       }
     }
   }

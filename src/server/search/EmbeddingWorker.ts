@@ -50,39 +50,24 @@ async function getEmbedder(): Promise<EmbedderPipeline> {
 }
 
 /**
- * Normalise a raw embedding tensor to a unit-length Float32Array.
- */
-function normalise(data: Float32Array): Float32Array {
-  let norm = 0;
-  for (let i = 0; i < data.length; i++) {
-    norm += data[i]! * data[i]!;
-  }
-  norm = Math.sqrt(norm);
-  if (norm > 0) {
-    for (let i = 0; i < data.length; i++) {
-      data[i]! /= norm;
-    }
-  }
-  return data;
-}
-
-/**
  * Slice a flattened batch tensor back into one Float32Array per input text.
  *
  * A batched pipeline call returns `data` as a single flat Float32Array of
  * length `batchSize × dim`. The per-row embedding dimension comes from the
  * tensor's `dims` when available (last axis), falling back to the model
- * constant. Each row is copied into its own buffer (worker transfer requires
- * independent backing buffers) and L2-normalised.
+ * constant. Each row is copied into its own backing buffer so the worker can
+ * transfer ownership to the host thread.
+ *
+ * Normalisation is delegated to the pipeline (`normalize: true`); no extra
+ * L2 pass is applied here.
  */
 function sliceBatch(data: Float32Array, batchSize: number, dims?: number[]): Float32Array[] {
   const dim = (dims && dims.length > 0 ? dims[dims.length - 1] : EMBEDDING_DIM) ?? EMBEDDING_DIM;
   const out: Float32Array[] = [];
   for (let i = 0; i < batchSize; i++) {
     const row = new Float32Array(dim);
-    const src = data.subarray(i * dim, (i + 1) * dim);
-    row.set(src);
-    out.push(normalise(row));
+    row.set(data.subarray(i * dim, (i + 1) * dim));
+    out.push(row);
   }
   return out;
 }
@@ -97,7 +82,9 @@ parentPort?.on(
         const pipe = await getEmbedder();
         const output = await pipe(msg.text!, { pooling: 'mean', normalize: true });
         const raw = output.data as Float32Array;
-        const embedding = normalise(new Float32Array(raw));
+        // pipeline `normalize:true` already L2-normalises per text;
+        // the copy below is only needed for transfer-list ownership.
+        const embedding = new Float32Array(raw);
         parentPort!.postMessage({ type: 'result', id: msg.id, embedding }, [
           embedding.buffer as ArrayBuffer,
         ]);
@@ -124,7 +111,8 @@ parentPort?.on(
             // fall back to single-item inference for this chunk.
             for (const text of chunk) {
               const single = await pipe(text, { pooling: 'mean', normalize: true });
-              embeddings.push(normalise(new Float32Array(single.data as Float32Array)));
+              // normalize:true already L2-normalises; copy needed for transfer.
+              embeddings.push(new Float32Array(single.data as Float32Array));
             }
           }
         }

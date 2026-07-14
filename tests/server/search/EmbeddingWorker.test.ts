@@ -226,11 +226,14 @@ describe('EmbeddingWorker', () => {
     });
   });
 
-  describe('normalise function', () => {
-    it('normalizes embedding to unit length', async () => {
-      // The embedder returns [3, 4, 0] → normalized [0.6, 0.8, 0]
-      const unnormalized = new Float32Array([3, 4, 0]);
-      const embedderFn = vi.fn().mockResolvedValue({ data: unnormalized });
+  describe('embed output pass-through', () => {
+    // Normalisation is delegated to the pipeline (`normalize: true`); the
+    // worker thread just copies the already-normalised Float32Array into a
+    // transfer-owned buffer. These tests verify the raw pass-through works
+    // for both a unit-length vector and a zero vector (edge case).
+    it('passes through a pre-normalised embedding unchanged', async () => {
+      const normalised = new Float32Array([0.6, 0.8, 0.0]); // ‖v‖ = 1
+      const embedderFn = vi.fn().mockResolvedValue({ data: normalised });
       mockPipeline.mockResolvedValue(embedderFn);
 
       await loadWorker();
@@ -240,15 +243,12 @@ describe('EmbeddingWorker', () => {
       const resultArg = mockParentPort.postMessage.mock.calls[0][0];
       const embedding = resultArg.embedding as Float32Array;
 
-      // Verify it's normalized (unit length)
-      let norm = 0;
-      for (let i = 0; i < embedding.length; i++) {
-        norm += embedding[i]! * embedding[i]!;
-      }
-      expect(Math.abs(Math.sqrt(norm) - 1.0)).toBeLessThan(0.001);
+      expect(embedding.length).toBe(3);
+      expect(Math.abs(embedding[0]! - 0.6)).toBeLessThan(0.001);
+      expect(Math.abs(embedding[1]! - 0.8)).toBeLessThan(0.001);
     });
 
-    it('handles zero vector without division by zero', async () => {
+    it('handles zero vector without NaN', async () => {
       const zeroVector = new Float32Array([0, 0, 0]);
       const embedderFn = vi.fn().mockResolvedValue({ data: zeroVector });
       mockPipeline.mockResolvedValue(embedderFn);
