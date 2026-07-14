@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
+import { SYSCALL_TRACE_SPAWN_TIMEOUT_MS } from '@src/constants';
 
 export type SyscallBackend = 'etw' | 'strace' | 'dtrace';
 
@@ -43,7 +44,6 @@ interface SyntheticEventSeed {
 }
 
 const SUPPORTED_BACKENDS: ReadonlyArray<SyscallBackend> = ['etw', 'strace', 'dtrace'];
-const TRACE_SPAWN_TIMEOUT_MS = 3000;
 
 /**
  * Named ETW kernel providers (Windows) beyond the legacy "NT Kernel Logger"
@@ -245,8 +245,10 @@ function createSpawnReadyGuard<TProcess extends ChildProcess>(
     try {
       terminate?.();
     } catch {}
-    reject(new Error(`${label} did not signal readiness within ${TRACE_SPAWN_TIMEOUT_MS}ms`));
-  }, TRACE_SPAWN_TIMEOUT_MS);
+    reject(
+      new Error(`${label} did not signal readiness within ${SYSCALL_TRACE_SPAWN_TIMEOUT_MS}ms`),
+    );
+  }, SYSCALL_TRACE_SPAWN_TIMEOUT_MS);
 
   return {
     resolveReady(process: TProcess) {
