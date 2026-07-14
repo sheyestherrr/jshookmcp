@@ -4,6 +4,7 @@
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { findKernelModule } from './NtModuleEnumerator';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,33 @@ export interface ResolvedNtdll {
   syscallGadgetRva: number;
   /** Non-fatal parse warnings (e.g. functions whose prologue didn't match). */
   warnings: string[];
+  /** Runtime base address of the loaded ntoskrnl image (Win32, best-effort via
+   *  NtQuerySystemInformation — see resolveRuntimeKernelBase). Undefined when
+   *  runtime enumeration is unavailable (off-Win32, insufficient privilege). */
+  kernelImageBase?: string;
+}
+
+// ── Runtime augmentation ────────────────────────────────────────────────────
+
+/**
+ * Resolve the loaded ntoskrnl image base at runtime via
+ * NtQuerySystemInformation(SystemModuleInformation) (NtModuleEnumerator).
+ *
+ * Complementary to the on-disk SSN table above: SSN extraction stays static
+ * (kernel modules don't carry user-mode ntdll stubs), but the live kernel base
+ * is genuine runtime data callers can use for kernel-relative addressing.
+ * Best-effort: returns undefined off-Win32, when NtQuerySystemInformation is
+ * unavailable, or when ntoskrnl isn't found among loaded modules.
+ */
+export function resolveRuntimeKernelBase(): string | undefined {
+  try {
+    const mod = findKernelModule('ntoskrnl');
+    if (!mod) return undefined;
+    return `0x${mod.imageBase.toString(16).toUpperCase()}`;
+  } catch {
+    // Non-Win32, koffi/ntdll unavailable, or insufficient privilege.
+    return undefined;
+  }
 }
 
 // ── Implementation ───────────────────────────────────────────────────────────
@@ -185,12 +213,16 @@ export function resolveNtdll(ntdllPath?: string): ResolvedNtdll {
     throw new Error('SyscallResolver: no syscall;ret gadget found in ntdll .text');
   }
 
+  // Runtime ntoskrnl base (best-effort); SSNs stay static-on-disk above.
+  const kernelImageBase = resolveRuntimeKernelBase();
+
   _resolved = {
     path: resolvedPath,
     syscalls,
     byName,
     syscallGadgetRva,
     warnings,
+    kernelImageBase,
   };
 
   return _resolved;

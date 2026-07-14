@@ -1,8 +1,22 @@
 /**
  * SyscallResolver / ScanObfuscator unit tests.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { resolveNtdll, resetNtdllCache, createScanWalker } from '@native/syscall';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  resolveNtdll,
+  resetNtdllCache,
+  resolveRuntimeKernelBase,
+  createScanWalker,
+} from '@native/syscall';
+
+// Mock the runtime kernel-module enumerator so resolveRuntimeKernelBase is
+// testable on non-Win32 hosts. SyscallResolver imports findKernelModule from
+// this module; mocking it here intercepts that import.
+const mockFindKernelModule = vi.fn<(name: string) => unknown>();
+vi.mock('@native/syscall/NtModuleEnumerator', () => ({
+  findKernelModule: (name: string) => mockFindKernelModule(name),
+  enumerateKernelModules: () => [],
+}));
 
 describe('SyscallResolver', () => {
   beforeEach(() => {
@@ -28,6 +42,33 @@ describe('SyscallResolver', () => {
       // Non-Windows: ELF → invalid PE signature → expected to throw.
       expect(String(e)).toMatch(/invalid PE|cannot read|resolver/);
     }
+  });
+});
+
+describe('resolveRuntimeKernelBase', () => {
+  beforeEach(() => {
+    mockFindKernelModule.mockReset();
+  });
+
+  it('returns the ntoskrnl image base as hex when findKernelModule succeeds', () => {
+    mockFindKernelModule.mockReturnValue({
+      imageBase: 0xfffff80012340000n,
+      shortName: 'ntoskrnl.exe',
+    });
+    expect(resolveRuntimeKernelBase()).toBe('0xFFFFF80012340000');
+    expect(mockFindKernelModule).toHaveBeenCalledWith('ntoskrnl');
+  });
+
+  it('returns undefined when ntoskrnl is not among loaded modules', () => {
+    mockFindKernelModule.mockReturnValue(null);
+    expect(resolveRuntimeKernelBase()).toBeUndefined();
+  });
+
+  it('returns undefined when the runtime enumerator throws (non-Win32 / no privilege)', () => {
+    mockFindKernelModule.mockImplementation(() => {
+      throw new Error('NtQuerySystemInformation module enumeration is Windows-only');
+    });
+    expect(resolveRuntimeKernelBase()).toBeUndefined();
   });
 });
 

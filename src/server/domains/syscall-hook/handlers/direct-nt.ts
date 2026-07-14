@@ -7,38 +7,22 @@
  *
  * Win32 only — both tools are filtered at registration time on non-Win32 platforms.
  *
- * Cross-platform roadmap (honest boundaries):
+ * Cross-platform roadmap — status as of 2026-07-14:
  *
- * TODO(Linux): bpftime (OSDI'25) — user-space eBPF runtime that can intercept
- * syscalls without kernel modules or root. Injects eBPF programs into target
- * processes via LD_PRELOAD or ptrace, rewriting the syscall dispatch to route
- * through eBPF probes. See bpftime.org.
+ * IMPLEMENTED — no longer carry TODO markers here:
+ *   - Linux process_vm_readv cross-process read
+ *       → src/native/platform/linux/ProcessVmIo.ts (koffi, needs CAP_SYS_PTRACE)
+ *   - Win32 runtime module enumeration via NtQuerySystemInformation(SystemModuleInformation)
+ *       → src/native/syscall/NtModuleEnumerator.ts; wired into SyscallResolver via
+ *       resolveRuntimeKernelBase() to expose the live ntoskrnl image base. SSN
+ *       extraction stays on-disk static (kernel modules carry no user-mode ntdll stubs).
  *
- * TODO(Linux): zpoline (ATC'23) — binary rewriting technique that replaces the
- * `syscall` instruction with a `call` into a trampoline, enabling per-process
- * syscall interception without ptrace or seccomp. Rewrites .text at load time
- * via a preload shim. See github.com/yasukata/zpoline.
- *
- * TODO(Linux): process_vm_readv via koffi FFI — cross-process memory read for
- * inspecting syscall arguments in another process's address space. Requires
- * CAP_SYS_PTRACE.
- *
- * TODO(macOS): Endpoint Security framework (ESF) — Apple's blessed syscall
- * monitoring interface (macOS 10.15+). Requires com.apple.developer.endpoint-security
- * entitlement and TCC approval; obtains a kernel-userspace event stream via the
- * ES client API. koffi FFI bridge needed.
- *
- * TODO(Win32): DirectNtApi live hook via NtQuerySystemInformation — enumerate
- * loaded kernel modules and extract per-version syscall stubs, replacing the
- * static ntdll.dll export-table approach with runtime discovery.
- *
- * TODO(Win32): ETW Threat Intelligence provider — the Microsoft-Windows-Threat-Intelligence
- * ETW provider (available since Win10 1809) surfaces syscall events without a
- * kernel driver. Consume via StartTrace/OpenTrace.
- *
- * TODO(cross-platform): eBPF CO-RE (Compile Once, Run Everywhere) — Linux kernel
- * 5.4+ supports BTF-based field relocations, allowing a single eBPF bytecode
- * image to hook syscalls across kernel versions without per-kernel recompilation.
+ * BLOCKED — documented in the backlog, deliberately NOT stubbed with fake code:
+ *   - Linux bpftime (user-space eBPF runtime): external runtime; needs install + integration policy
+ *   - Linux zpoline (syscall-instruction binary rewriting): research-grade; needs a Linux test bed
+ *   - macOS Endpoint Security framework: requires Apple `endpoint-security` entitlement (vendor-gated)
+ *   - Win32 ETW Threat Intelligence provider: PPL/admin-gated; needs a Windows lab environment
+ *   - Linux eBPF CO-RE: needs libbpf + a BTF-enabled kernel + Linux host
  */
 
 import { argString, argStringRequired } from '@server/domains/shared/parse-args';
@@ -55,6 +39,8 @@ interface ResolveSsnResult {
   tableSize?: number;
   lookup?: Record<string, SyscallEntry>;
   warnings?: string[];
+  /** Live ntoskrnl image base (Win32 runtime, best-effort). */
+  kernelImageBase?: string;
 }
 
 interface DirectInvokeResult {
@@ -99,6 +85,7 @@ export class DirectNtApiHandlers {
         tableSize: resolved.syscalls.length,
         lookup: resolved.byName,
         warnings: resolved.warnings.length > 0 ? resolved.warnings : undefined,
+        kernelImageBase: resolved.kernelImageBase,
       };
     } catch (err) {
       return {

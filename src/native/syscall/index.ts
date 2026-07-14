@@ -9,7 +9,7 @@ export {
   ntResumeProcess,
   ntSuccess,
 } from './DirectNtApi';
-export { resolveNtdll, resetNtdllCache } from './SyscallResolver';
+export { resolveNtdll, resetNtdllCache, resolveRuntimeKernelBase } from './SyscallResolver';
 export type { SyscallEntry, ResolvedNtdll } from './SyscallResolver';
 export { createScanWalker, DEFAULT_OBFUSCATION_CONFIG } from './ScanObfuscator';
 export type { ScanObfuscationConfig, ScanWalker } from './ScanObfuscator';
@@ -22,3 +22,5 @@ export {
   ntClose,
   ntCreateThreadExSafe,
 } from './NtInjection';
+export { enumerateKernelModules, findKernelModule } from './NtModuleEnumerator';
+export type { KernelModule } from './NtModuleEnumerator';
