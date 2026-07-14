@@ -49,6 +49,7 @@ export type EvidenceEdgeType =
   | 'mojo-routed-to' // cdp-event/network → mojo-message
   | 'binary-exports' // js-function → binary-symbol
   | 'proto-parses' // proto-message → captured-data
+  | 'v8-triggers-network' // network-request → v8 function/heap-object (reverse of network-initiated-by)
   | 'correlates'; // generic cross-domain correlation
 
 /** A node in the evidence graph. */
