@@ -19,7 +19,7 @@
 - cross-domain + instrumentation
 - cross-domain + v8-inspector + canvas
 
-## 工具清单（7）
+## 工具清单（8）
 
 | 工具 | 说明 |
 | --- | --- |
@@ -30,3 +30,4 @@
 | `cross_domain_evidence_export` | 将共享跨域证据图导出为 JSON。 |
 | `cross_domain_evidence_query` | 按 URL、堆地址、函数、脚本、节点类型、元数据或证据链查询共享跨域证据图。 |
 | `cross_domain_evidence_stats` | 获取共享跨域证据图的节点和边统计。 |
+| `cross_domain_synonym` | 待补充中文：Map natural-language queries to tool recommendations using a lightweight synonym graph. Pure TS — no LLM. Useful for discovering which tools implement a concept described in plain English (e.g. "find where the app signs requests" → deobfuscation, crypto, network). |

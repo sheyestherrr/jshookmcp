@@ -19,7 +19,7 @@ Android Debug Bridge integration domain for device management, application analy
 - adb-bridge + process
 - adb-bridge + network
 
-## Full tool list (24)
+## Full tool list (26)
 
 | Tool | Description |
 | --- | --- |
@@ -47,3 +47,5 @@ Android Debug Bridge integration domain for device management, application analy
 | `adb_pull_native_libs` | Pull native shared libraries (.so) for an installed app from a device. |
 | `adb_webview_list` | List debuggable WebView targets connected via ADB. |
 | `adb_webview_attach` | Attach to a WebView via ADB; returns WebSocket debugger URL for CDP. |
+| `adb_dumpsys` | Run adb shell dumpsys for a service and return parsed structured output. Supports key-value extraction, array parsing, and section detection. Common services: package, activity, window, battery, meminfo, alarm, cpuinfo, diskstats, netstats, usagestats. |
+| `adb_ui_dump` | Capture Android UI hierarchy via uiautomator dump. Runs uiautomator dump on-device, pulls the XML, and returns parsed UI tree. Useful for UI automation verification, layout inspection, and accessibility tree analysis. |

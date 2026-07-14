@@ -19,7 +19,7 @@ Cross-domain correlation domain that bridges analysis results across multiple do
 - cross-domain + instrumentation
 - cross-domain + v8-inspector + canvas
 
-## Full tool list (7)
+## Full tool list (8)
 
 | Tool | Description |
 | --- | --- |
@@ -30,3 +30,4 @@ Cross-domain correlation domain that bridges analysis results across multiple do
 | `cross_domain_evidence_export` | Export the shared cross-domain evidence graph as JSON. |
 | `cross_domain_evidence_query` | Query the shared evidence graph by URL, heap address, function, script, node type, metadata, or chain. |
 | `cross_domain_evidence_stats` | Get node and edge statistics for the shared cross-domain evidence graph. |
+| `cross_domain_synonym` | Map natural-language queries to tool recommendations using a lightweight synonym graph. Pure TS — no LLM. Useful for discovering which tools implement a concept described in plain English (e.g. "find where the app signs requests" → deobfuscation, crypto, network). |

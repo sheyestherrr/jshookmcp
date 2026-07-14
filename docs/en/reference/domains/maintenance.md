@@ -21,7 +21,7 @@ Operations and maintenance domain covering cache hygiene, token budget, environm
 - maintenance + workflow
 - maintenance + extensions
 
-## Full tool list (13)
+## Full tool list (14)
 
 | Tool | Description |
 | --- | --- |
@@ -33,6 +33,7 @@ Operations and maintenance domain covering cache hygiene, token budget, environm
 | `clear_all_caches` | Clear all internal caches. Destructive — prefer smart_cache_cleanup. |
 | `cleanup_artifacts` | Clean generated artifacts by age and size. |
 | `doctor_environment` | Run environment doctor: dependencies, bridges, platform limits. |
+| `maintenance_detect_gpu` | Detect GPU family from WebGL/WebGPU renderer strings. Classifies into NVIDIA, AMD, Intel, Apple, Mali, Adreno, PowerVR, Vivante, Broadcom, Qualcomm, Microsoft. Pure-TS classifier — no browser needed. Provide at least one of webglRenderer, webgpuDescription, or deviceName. |
 | `list_extensions` | List all loaded plugins, workflows, and extension tools. |
 | `reload_extensions` | Reload plugins and workflows from configured directories, and directly register extension tools visible in the current profile. |
 | `browse_extension_registry` | Browse the online extension registry for installable plugins and workflows. |

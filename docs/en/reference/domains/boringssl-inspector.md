@@ -24,7 +24,7 @@ BoringSSL/TLS inspection domain supporting TLS traffic analysis and certificate 
 
 | Tool | Description |
 | --- | --- |
-| `tls_keylog_enable` | Enable SSLKEYLOGFILE output for BoringSSL-compatible clients. |
+| `tls_keylog_enable` | Enable SSLKEYLOGFILE output for TLS library clients. |
 | `tls_keylog_parse` | Parse an SSLKEYLOGFILE and summarize available key material. |
 | `tls_keylog_disable` | Disable SSLKEYLOGFILE capture and unset the environment variable. |
 | `tls_decrypt_payload` | Decrypt a TLS payload using a provided key, nonce, and algorithm. |
@@ -47,7 +47,7 @@ BoringSSL/TLS inspection domain supporting TLS traffic analysis and certificate 
 | `websocket_send_frame` | Send a WebSocket frame. |
 | `websocket_read_frame` | Read the next queued WebSocket frame from an open session. |
 | `websocket_close` | Close an open WebSocket session. |
-| `tls_cert_pin_bypass_frida` | Bypass certificate pinning via Frida injection (supports BoringSSL, Chrome, OkHttp). |
+| `tls_cert_pin_bypass_frida` | Bypass certificate pinning via Frida injection (supports the target TLS library and HTTP client frameworks). |
 | `net_raw_tcp_send` | Send raw TCP data to a remote host; accepts hex or text input. |
 | `net_raw_tcp_listen` | Listen on a local TCP port for one incoming connection. |
 | `net_raw_udp_send` | Send a raw UDP datagram and wait for a response. |

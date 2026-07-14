@@ -19,7 +19,7 @@ Process, module, memory diagnostics, and controlled injection domain for host-le
 - process + debugger
 - process + platform
 
-## Full tool list (27)
+## Full tool list (28)
 
 | Tool | Description |
 | --- | --- |
@@ -46,6 +46,7 @@ Process, module, memory diagnostics, and controlled injection domain for host-le
 | `enumerate_modules` | List all loaded modules (DLLs) in a process with their base addresses. |
 | `process_enum_threads` | Enumerate all threads in a process. Returns thread IDs, with optional per-thread context and diagnostics. Cross-platform: Win32 uses CreateToolhelp32Snapshot; Linux reads /proc/{pid}/task; macOS uses `ps -M`. |
 | `process_detect_hollowing` | Detect process hollowing (malware technique that unmaps original process image and injects malicious code). Compares process memory sections (.text, .data, .rdata) with on-disk PE file using SHA-256 hashes. Returns detection result with confidence score and list of differing sections. WARNING: autoRestore=true is HIGH RISK, may crash the target process, and is Win32-only. Cross-platform: Win32 compares PE sections; Linux/macOS compare ELF/Mach-O executable sections via IntegrityScanner (autoRestore unavailable). |
+| `process_hollowing_scan` | Pure-TS static hollowing indicator scan. Analyses /proc/pid/maps (RWX regions), /proc/pid/exe (deleted backing file), and PE headers (suspicious section names, RWX sections, entry point anomalies, mismatched binary path) without requiring native OS APIs. Complements process_detect_hollowing (which does live memory comparison). Provide at least one of: mapsContent, exeLink, peHex, or expectedImagePath. Honest boundary: Win32 live detection needs native API — use process_detect_hollowing for confirmed detection. |
 | `process_enum_handles` | Enumerate open handles for a process using NtQuerySystemInformation. Resolves handle type and object name, decodes access masks, identifies security risks (high-privilege handles to sensitive processes, dangerous Token handles, inheritable sensitive handles, Section handles to executables). Skips name resolution for File/EtwRegistration types (known to hang). Requires elevated privileges (run as Administrator). Win32 only. |
 | `process_detect_apc` | Detect APC (Asynchronous Procedure Call) injection in a process. Enumerates threads, probes each thread APC queue via NtQueryInformationThread(ThreadApcState), and detects threads in alertable wait state (SleepEx/WaitForMultipleObjectsEx). Returns verdict (clean/suspicious/infected), confidence score, and risk reasons. Requires elevated privileges (run as Administrator). Win32 only. |
 | `process_suspend` | Suspend a process for forensic snapshotting. Cross-platform: NtSuspendProcess (Win32), SIGSTOP (Linux), task_suspend (macOS). Pair with process_resume to restore. Use before memory_scan/dump for a consistent snapshot. Requires admin/root on most platforms. |

@@ -20,7 +20,7 @@ Extract and classify strings, recover Smi integer constants, and resolve obfusca
 - dart-inspector + binary-instrument
 - dart-inspector + adb-bridge
 
-## Full tool list (15)
+## Full tool list (16)
 
 | Tool | Description |
 | --- | --- |
@@ -37,5 +37,6 @@ Extract and classify strings, recover Smi integer constants, and resolve obfusca
 | `dart_inspect_object_pool` | Dump an ObjectPool at a specific address, showing all entries with types and values. Pass a sessionId to reuse a cached snapshot. |
 | `dart_trace_execution` | Trace Dart function execution step-by-step, emitting each instruction with register state (PC, x0-x30, PP, THR). Pass a sessionId to reuse the cached snapshot. |
 | `dart_call_graph` | Build a best-effort static call graph from a Dart AOT snapshot: nodes are Code objects, edges are ObjectPool entries whose value matches another Code entry point (caller to callee). Pass a sessionId to reuse a cached snapshot. Honest boundary: indirect/dynamic calls without a pool entry, and PcDescriptors-level mapping, require instruction decoding (deferred — cross-Dart-SDK version work). |
+| `dart_pc_descriptors` | Parse PcDescriptors for one or all Dart functions in a loaded snapshot and resolve call targets by decoding ARM64 BL instructions at each call-site PC offset. Returns structured call-site entries with pcOffset, kind (1=icCall, 2=unoptStaticCall, 3=runtimeCall), and optionally resolved target addresses when code section bytes are available. Pass a sessionId or file path to load the snapshot. |
 | `dart_create_session` | Parse a Dart AOT snapshot once and cache it under a sessionId, so subsequent dart_load_snapshot / dart_list_functions / dart_call_graph / dart_inspect_object_pool / dart_call_function / dart_trace_execution calls can pass sessionId and skip re-parsing libapp.so (the dominant cost on a 10-40 MB Flutter snapshot). Destroy with dart_destroy_session when done; idle sessions auto-expire (TTL + sweep, see DART_SESSION_*). |
 | `dart_destroy_session` | Destroy a Dart snapshot session created by dart_create_session, releasing the cached parsed snapshot. Returns destroyed=true if the session existed, false if it was unknown or already swept by the idle TTL. |

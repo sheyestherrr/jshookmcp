@@ -20,7 +20,7 @@ Coordination domain for session insights, MCP Task Handoff, and cross-agent shar
 - coordination + workflow
 - coordination + browser
 
-## Full tool list (11)
+## Full tool list (12)
 
 | Tool | Description |
 | --- | --- |
@@ -32,6 +32,7 @@ Coordination domain for session insights, MCP Task Handoff, and cross-agent shar
 | `save_page_snapshot` | Save current page state. |
 | `restore_page_snapshot` | Restore a saved page snapshot. |
 | `list_page_snapshots` | List saved page snapshots. |
+| `coordination_restore_snapshot` | Restore a saved page snapshot including IndexedDB data. Navigates to the captured URL, re-injects cookies, localStorage, sessionStorage, and IndexedDB records from the snapshot. |
 | `state_board` | CRUD operations on the cross-tool shared state board. |
 | `state_board_watch` | Watch state board keys for changes with configurable polling. |
 | `state_board_io` | Serialize state board to JSON or restore from a previous export. |

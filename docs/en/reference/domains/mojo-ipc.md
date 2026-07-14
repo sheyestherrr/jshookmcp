@@ -19,7 +19,7 @@ Mojo IPC monitoring domain for Chromium inter-process communication analysis.
 - mojo-ipc + browser
 - mojo-ipc + network
 
-## Full tool list (7)
+## Full tool list (8)
 
 | Tool | Description |
 | --- | --- |
@@ -30,3 +30,4 @@ Mojo IPC monitoring domain for Chromium inter-process communication analysis.
 | `mojo_list_interfaces` | List discovered Mojo IPC interfaces and their pending message counts. |
 | `mojo_messages_get` | Retrieve captured Mojo IPC messages from the active monitoring session. |
 | `mojo_messages_summarize` | Aggregate the captured Mojo IPC buffer (non-destructive) into interface/method/direction breakdowns, top-N lists, and a capture time window. Does not drain the buffer. |
+| `mojo_verify_live` | Generate a Frida verification script that probes a target Chromium process for known Mojo C-API exports (MojoWriteMessage, MojoWriteMessageNew) across modules. Uses a curated symbol database covering Chromium M96+ across Win32, Linux, and macOS. Returns a ready-to-run Frida script and probe metadata. Honest boundary (B-class): symbol DB is manually curated; symbols may vary by build config. Verified flag is always false — confirm against the live binary. |
