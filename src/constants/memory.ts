@@ -99,6 +99,9 @@ export const SCAN_POINTER_MAX_RESULTS = int('SCAN_POINTER_MAX_RESULTS', 5_000);
 /** Max composite pattern size (bytes) for a group scan. */
 export const SCAN_GROUP_MAX_PATTERN_SIZE = int('SCAN_GROUP_MAX_PATTERN_SIZE', 256);
 
+/** Max data length (bytes) for a memory pattern match input. */
+export const MEMORY_PATTERN_MAX_DATA = int('MEMORY_PATTERN_MAX_DATA', 1_048_576);
+
 /** Max concurrent scan sessions. */
 export const SCAN_SESSION_MAX_COUNT = int('SCAN_SESSION_MAX_COUNT', 20);
 /** Scan session inactivity TTL (ms). Default: 30 min. */
@@ -154,6 +157,10 @@ export const CODE_CAVE_MIN_SIZE = int('CODE_CAVE_MIN_SIZE', 16);
 export const BREAKPOINT_HIT_TIMEOUT_MS = int('BREAKPOINT_HIT_TIMEOUT_MS', 10_000);
 /** Max hits collected during a breakpoint trace. */
 export const BREAKPOINT_TRACE_MAX_HITS = int('BREAKPOINT_TRACE_MAX_HITS', 100);
+
+/* ================================================================== */
+/*  Memory pattern scan                                                 */
+/* ================================================================== */
 
 /* ================================================================== */
 /*  Memory freeze & write history                                      */

@@ -110,11 +110,26 @@ export class FindAccessesHandlers {
   // parity tracked at research/memory.md #3.
   async handleFindAccesses(args: Record<string, unknown>) {
     return handleSafe(async () => {
-      // TODO(macOS/Linux): wire a cross-platform hardware-breakpoint engine so this
-      // stub can be removed — Linux needs ptrace(PTRACE_ATTACH) + INT3 (0xCC) injection
-      // + SIGTRAP capture + single-step re-arm; macOS needs mach_vm_protect +
-      // EXC_BAD_ACCESS exception handler. Also requires a process_vm_readv (Linux) /
-      // mach_vm_read (macOS) memory reader for instructionBytes. See research/memory.md #3.
+      // TODO(macOS): mach_vm_protect + EXC_BAD_ACCESS page-level breakpoint via koffi
+      // FFI — uses mach_vm_protect to set page protections and installs an
+      // EXC_BAD_ACCESS exception handler to trap on access. Re-arm by re-protecting
+      // the page after each hit. Requires task_for_pid + mach_vm_read for instruction
+      // byte reads. See research/memory.md #3.
+      //
+      // TODO(Linux): ptrace(PTRACE_ATTACH) + INT3 (0xCC) injection + SIGTRAP capture
+      // + single-step re-arm via koffi FFI. Combine with perf_event_open for
+      // hardware-assisted breakpoint counters on recent kernels (>=4.3).
+      // See research/memory.md #3.
+      //
+      // TODO(Linux): process_vm_readv via koffi FFI — a zero-syscall cross-process
+      // memory reader that transfers bytes between address spaces without ptrace or
+      // /proc/pid/mem. Useful as a lighter alternative when the caller already holds
+      // CAP_SYS_PTRACE. See research/memory.md #3.
+      //
+      // TODO(macOS): task_for_pid + mach_vm_read via koffi FFI — the Mach VM
+      // cross-process memory reader. Requires the calling process to be code-signed
+      // with the com.apple.security.cs.debugger entitlement or run as root
+      // (System Integrity Protection permitting). See research/memory.md #3.
       if (!this.bpEngine) {
         throw new Error(WIN32_UNSUPPORTED_MSG);
       }
