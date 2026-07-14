@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getTlsKeyLogDir } from '@utils/outputPaths';
+import { TLS_KEYLOG_PATH } from '@src/constants';
 
 export interface KeyLogEntry {
   label: string;
@@ -199,9 +200,7 @@ export class TLSKeyLogExtractor {
   }
 }
 
-const LEGACY_DEFAULT_PATH = '/tmp/sslkeylog.log';
-
-export function enableKeyLog(path = LEGACY_DEFAULT_PATH): string {
+export function enableKeyLog(path = TLS_KEYLOG_PATH): string {
   process.env.SSLKEYLOGFILE = path;
   return path;
 }

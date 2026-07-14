@@ -25,6 +25,7 @@ import {
   parseClientHello,
   tlsVersionName,
 } from './shared';
+import { TLS_KEYLOG_PATH } from '@src/constants';
 import { BoringsslInspectorBaseHandlers } from './base';
 
 const CIPHER_PROTOCOL_FILTERS = new Set(['all', '1.3', '1.2'] as const);
@@ -37,12 +38,12 @@ export class BoringsslInspectorTlsHandlers extends BoringsslInspectorBaseHandler
       keyLogPath,
       environmentVariable: 'SSLKEYLOGFILE',
       // Honesty: SSLKEYLOGFILE env only covers Node-spawned processes. A CDP-driven
-      // Chrome browser ignores it unless launched with --ssl-key-log (browser_launch
+      // browser ignores it unless launched with --ssl-key-log (browser_launch
       // sslKeyLogFile). Surface the exact flag so callers wire the browser side.
       scope: 'node-process',
       browserLaunch: {
         flag: `--ssl-key-log=${keyLogPath}`,
-        hint: 'Env var covers Node-side TLS only. To keylog a CDP-driven Chrome browser, relaunch via browser_launch with sslKeyLogFile set (or pass this flag in args) so Chrome emits NSS secrets to the same path.',
+        hint: 'Env var covers Node-side TLS only. To keylog a CDP-driven browser, relaunch via browser_launch with sslKeyLogFile set (or pass this flag in args) so the browser emits TLS secrets to the same path.',
       },
     };
   }
@@ -256,7 +257,7 @@ export class BoringsslInspectorTlsHandlers extends BoringsslInspectorBaseHandler
   }
 
   async handleKeyLogEnable(args: Record<string, unknown>): Promise<ToolResponse> {
-    const filePath = argString(args, 'filePath') ?? '/tmp/sslkeylog.log';
+    const filePath = argString(args, 'filePath') ?? TLS_KEYLOG_PATH;
     enableKeyLog(filePath);
     void this.eventBus?.emit('tls:keylog_started', {
       filePath,

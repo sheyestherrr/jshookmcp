@@ -2,7 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { objectTool, TLS_VERSION_VALUES } from './support';
 
 export const tlsAnalysisTools: Tool[] = [
-  objectTool('tls_keylog_enable', 'Enable SSLKEYLOGFILE output for BoringSSL-compatible clients.'),
+  objectTool('tls_keylog_enable', 'Enable SSLKEYLOGFILE output for TLS library clients.'),
   objectTool('tls_keylog_parse', 'Parse an SSLKEYLOGFILE and summarize available key material.', {
     path: {
       type: 'string',
