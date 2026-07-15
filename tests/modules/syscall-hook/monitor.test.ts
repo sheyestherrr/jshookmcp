@@ -375,14 +375,16 @@ describe('SyscallMonitor', () => {
 
   it('exposes pid/simulate/etwProviders in getStats for an active etw session', async () => {
     await monitor.start({
-      backend: process.platform === 'win32' ? 'etw' : 'strace',
+      backend:
+        process.platform === 'win32' ? 'etw' : process.platform === 'linux' ? 'strace' : 'dtrace',
       pid: 5555,
       simulate: true,
       etwProviders: ['kernel-network'],
     });
     const stats = monitor.getStats();
     expect(stats).toMatchObject({
-      backend: process.platform === 'win32' ? 'etw' : 'strace',
+      backend:
+        process.platform === 'win32' ? 'etw' : process.platform === 'linux' ? 'strace' : 'dtrace',
       pid: 5555,
       simulate: true,
     });
@@ -406,7 +408,8 @@ describe('SyscallMonitor', () => {
       return child as any;
     });
     await monitor.start({
-      backend: process.platform === 'win32' ? 'etw' : 'strace',
+      backend:
+        process.platform === 'win32' ? 'etw' : process.platform === 'linux' ? 'strace' : 'dtrace',
       pid: 7777,
       simulate: false,
     });
@@ -417,7 +420,8 @@ describe('SyscallMonitor', () => {
 
   it('clears session config after stop()', async () => {
     await monitor.start({
-      backend: process.platform === 'win32' ? 'etw' : 'strace',
+      backend:
+        process.platform === 'win32' ? 'etw' : process.platform === 'linux' ? 'strace' : 'dtrace',
       pid: 5555,
       simulate: true,
     });
