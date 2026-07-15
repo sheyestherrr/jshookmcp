@@ -7,7 +7,7 @@
  *
  * Win32 only — both tools are filtered at registration time on non-Win32 platforms.
  *
- * Cross-platform roadmap — status as of 2026-07-14:
+ * Cross-platform roadmap — status as of 2026-07-15 (runtime-verified on Windows):
  *
  * IMPLEMENTED — no longer carry TODO markers here:
  *   - Linux process_vm_readv cross-process read
@@ -16,6 +16,11 @@
  *       → src/native/syscall/NtModuleEnumerator.ts; wired into SyscallResolver via
  *       resolveRuntimeKernelBase() to expose the live ntoskrnl image base. SSN
  *       extraction stays on-disk static (kernel modules carry no user-mode ntdll stubs).
+ *       Runtime-verified on a Windows host by NtModuleEnumerator.runtime.test.ts
+ *       (real NtQSI; also caught+fixed an x64 RTL_PROCESS_MODULES layout bug) and
+ *       SyscallResolver.runtime.test.ts (real on-disk ntdll SSN extraction; also
+ *       caught+fixed a prologue-match bug that silently returned 0 syscalls while
+ *       the mocked tests stayed green).
  *
  * BLOCKED — documented in the backlog, deliberately NOT stubbed with fake code:
  *   - Linux bpftime (user-space eBPF runtime): external runtime; needs install + integration policy

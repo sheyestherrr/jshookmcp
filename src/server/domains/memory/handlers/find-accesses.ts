@@ -106,7 +106,7 @@ export class FindAccessesHandlers {
   // `bpEngine` is constructed as null, so this handler throws early below.
   //
   // The cross-platform native primitives the former TODO markers below called for
-  // now EXIST as standalone modules (status 2026-07-14):
+  // now EXIST as standalone modules (file presence verified 2026-07-15):
   //   - process_vm_readv (Linux cross-process read)         → src/native/platform/linux/ProcessVmIo.ts
   //   - task_for_pid + mach_vm_read (Darwin cross-process)  → src/native/platform/darwin/DarwinMemoryProvider.ts
   //   - INT3/SIGTRAP execute-breakpoint engine (Linux)      → src/native/platform/linux/LinuxInt3AccessBreakpoint.ts
@@ -114,7 +114,8 @@ export class FindAccessesHandlers {
   //     (its mach_msg exception receive loop is a documented gap)
   // What remains is wiring those behind the AccessBreakpointEngine interface
   // (src/native/platform/AccessBreakpointEngine.ts) as a non-Win32 bpEngine so
-  // this handler stops throwing on macOS/Linux.
+  // this handler stops throwing on macOS/Linux — a genuine B-class gap tracked
+  // in the memory domain audit (9.9/10), NOT a missing primitive.
   async handleFindAccesses(args: Record<string, unknown>) {
     return handleSafe(async () => {
       if (!this.bpEngine) {
