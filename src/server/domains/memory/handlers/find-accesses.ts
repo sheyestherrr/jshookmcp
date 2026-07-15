@@ -105,6 +105,11 @@ export class FindAccessesHandlers {
   // tool is filtered out at registration (WIN32_ONLY_TOOLS in manifest.ts) and
   // `bpEngine` is constructed as null, so this handler throws early below.
   //
+  // The Win32 hardware-breakpoint write-trace path is runtime-verified against a
+  // cooperating target process by find-accesses.runtime.test.ts (DR0 write bp →
+  // EXCEPTION_SINGLE_STEP trap → real faulting-instruction bytes via
+  // ReadProcessMemory). Only the non-Win32 bpEngine wiring is unverified.
+  //
   // The cross-platform native primitives the former TODO markers below called for
   // now EXIST as standalone modules (file presence verified 2026-07-15):
   //   - process_vm_readv (Linux cross-process read)         → src/native/platform/linux/ProcessVmIo.ts
