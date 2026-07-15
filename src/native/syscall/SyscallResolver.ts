@@ -68,7 +68,16 @@ function getDefaultNtdllPath(): string {
   return path.join(systemRoot, 'System32', 'ntdll.dll');
 }
 const SYSCALL_GADGET_BYTES = Buffer.from([0x0f, 0x05, 0xc3]); // syscall;ret
-const MOV_R10_RCX = 0xd18b4c; // little-endian bytes of "4C 8B D1"
+/**
+ * Win x64 ntdll Zw stub prologue: `4C 8B D1` (mov r10, rcx) + `B8` (mov eax,
+ * imm32 opcode). Compared byte-wise below — a 3-byte `readUInt32LE` would
+ * wrongly fold the following `B8` opcode into the comparison and never match
+ * (this was the pre-runtime-test bug: SSN extraction silently returned 0 on a
+ * real ntdll while mocked tests passed). Verified against
+ * C:\Windows\System32\ntdll.dll by SyscallResolver.runtime.test.ts.
+ */
+const MOV_R10_RCX = [0x4c, 0x8b, 0xd1] as const; // "mov r10, rcx"
+const MOV_EAX_IMM = 0xb8; // "mov eax, imm32" opcode
 
 /**
  * Read and parse a clean ntdll.dll from disk to extract SSNs and a
@@ -170,7 +179,18 @@ export function resolveNtdll(ntdllPath?: string): ResolvedNtdll {
 
     const body = fileData.subarray(bodyOff, bodyOff + 8);
     // Match: 4C 8B D1  B8 XX XX 00 00
-    if (body.readUInt32LE(0) !== MOV_R10_RCX || body[4] !== 0xb8) {
+    //   offset 0-2: `mov r10, rcx` (4C 8B D1)
+    //   offset 3  : `mov eax, imm32` opcode (B8)
+    //   offset 4-7: the SSN imm32 (read via readUInt32LE(4) below)
+    // Byte-wise: a 3-byte `readUInt32LE` check would wrongly fold the B8 opcode
+    // into the comparison and never match (pre-runtime-test bug: SSN extraction
+    // silently returned 0 on a real ntdll while mocked tests passed).
+    if (
+      body[0] !== MOV_R10_RCX[0] ||
+      body[1] !== MOV_R10_RCX[1] ||
+      body[2] !== MOV_R10_RCX[2] ||
+      body[3] !== MOV_EAX_IMM
+    ) {
       warnings.push(
         `${name}: prologue does not match "mov r10, rcx; mov eax, imm" — ` +
           `got ${[...body.subarray(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`,
