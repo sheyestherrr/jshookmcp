@@ -8,7 +8,7 @@
 
 [English](./README.md) | 中文
 
-为 AI 赋予 **36 个技术域、402 个原子工具** 的 JavaScript 分析与安全研究 MCP 服务器——浏览器自动化、CDP 调试、网络拦截、JS Hook、LLM 代码分析、进程/内存取证、WASM 逆向、Source Map 重建、AST 变换与复合工作流，一应俱全。
+为 AI 赋予 **34 个技术域、600+ 个原子工具** 的 JavaScript 分析与安全研究 MCP 服务器——浏览器自动化、CDP 调试、网络拦截、JS Hook、LLM 代码分析、进程/内存取证、WASM 逆向、Source Map 重建、AST 变换与复合工作流，一应俱全。
 
 ## 快速导航
 

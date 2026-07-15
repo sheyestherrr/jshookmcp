@@ -10,7 +10,7 @@ repository-code: "https://github.com/vmoranv/jshookmcp"
 url: "https://vmoranv.github.io/jshookmcp/"
 license: AGPL-3.0-only
 abstract: >
-  MCP server with 36 domains and 470+ tools for AI-assisted
+  MCP server with 34 domains and 600+ tools for AI-assisted
   JavaScript analysis and security research — browser automation,
   CDP debugging, network monitoring, JS hooks, deobfuscation,
   symbolic execution, and workflow orchestration.

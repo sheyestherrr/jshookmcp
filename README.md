@@ -8,7 +8,7 @@
 
 English | [中文](./README.zh.md)
 
-An MCP server that gives AI agents **402 tools across 36 domains** for JavaScript analysis and security research — browser automation, CDP debugging, network interception, JS hooks, LLM-powered code analysis, process/memory forensics, WASM reverse engineering, source-map reconstruction, AST transforms, and composite workflows in a single server.
+An MCP server that gives AI agents **600+ tools across 34 domains** for JavaScript analysis and security research — browser automation, CDP debugging, network interception, JS hooks, LLM-powered code analysis, process/memory forensics, WASM reverse engineering, source-map reconstruction, AST transforms, and composite workflows in a single server.
 
 ## Quick Links
 
