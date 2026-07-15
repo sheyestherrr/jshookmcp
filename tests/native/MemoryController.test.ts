@@ -38,14 +38,24 @@ vi.mock('@src/constants', () => ({
 
 describe('MemoryController', () => {
   let ctrl: MemoryController;
+  const originalPlatform = process.platform;
 
   beforeEach(() => {
+    // These tests assert Win32API behaviour (ReadProcessMemory, WriteProcessMemory,
+    // VirtualProtectEx), so pin the win32 code path on every OS. Without this,
+    // Linux CI takes the portable branch (getPortableProvider) which calls a real
+    // LinuxMemoryProvider that opens /proc/<pid>/mem and throws ENOENT, and the
+    // freeze test's WriteProcessMemory/VirtualProtectEx assertions no longer hold.
+    // The portable (Linux/Darwin) provider path is covered by
+    // MemoryController.portable.test.ts.
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
     ctrl = new MemoryController();
     vi.useFakeTimers();
     vi.clearAllMocks();
   });
 
   afterEach(() => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform });
     vi.useRealTimers();
   });
 
