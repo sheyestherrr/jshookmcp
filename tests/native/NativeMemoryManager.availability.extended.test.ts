@@ -31,15 +31,14 @@ describe('NativeMemoryManager.availability', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
-  describe('unsupported platform', () => {
-    it('returns unavailable when not on Windows or macOS', async () => {
+  describe('Linux path', () => {
+    it('reports the implemented Linux provider as available', async () => {
       Object.defineProperty(process, 'platform', { value: 'linux' });
       state.isWindows.mockReturnValue(false);
 
       const result = await checkNativeMemoryAvailability(state.execAsync);
 
-      expect(result.available).toBe(false);
-      expect(result.reason).toContain('require Windows or macOS');
+      expect(result).toEqual({ available: true });
       expect(state.execAsync).not.toHaveBeenCalled();
     });
   });

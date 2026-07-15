@@ -7,6 +7,9 @@
 import { randomUUID } from 'node:crypto';
 import { FREEZE_DEFAULT_INTERVAL_MS, WRITE_HISTORY_MAX } from '@src/constants';
 import type { FreezeEntry, WriteHistoryEntry } from './MemoryController.types';
+import { createPlatformProvider } from '@native/platform/factory';
+import type { PlatformMemoryAPI } from '@native/platform/PlatformMemoryAPI';
+import { MemoryProtection } from '@native/platform/types';
 import {
   openProcessForMemory,
   CloseHandle,
@@ -21,6 +24,70 @@ export class MemoryController {
   private freezes = new Map<string, FreezeEntry & { timer?: ReturnType<typeof setInterval> }>();
   private writeHistory: WriteHistoryEntry[] = [];
   private undoneStack: WriteHistoryEntry[] = [];
+  private platformProvider: PlatformMemoryAPI | null = null;
+
+  private getPortableProvider(): PlatformMemoryAPI {
+    this.platformProvider ??= createPlatformProvider();
+    return this.platformProvider;
+  }
+
+  private readBuffer(pid: number, address: bigint, size: number): Buffer {
+    if (process.platform === 'win32') {
+      const handle = openProcessForMemory(pid, false);
+      try {
+        return ReadProcessMemory(handle, address, size);
+      } finally {
+        CloseHandle(handle);
+      }
+    }
+
+    const provider = this.getPortableProvider();
+    const handle = provider.openProcess(pid, false);
+    try {
+      const result = provider.readMemory(handle, address, size);
+      return result.data.subarray(0, result.bytesRead);
+    } finally {
+      provider.closeProcess(handle);
+    }
+  }
+
+  private writeBuffer(pid: number, address: bigint, data: Buffer): void {
+    if (process.platform === 'win32') {
+      const handle = openProcessForMemory(pid, true);
+      try {
+        const { oldProtect } = VirtualProtectEx(handle, address, data.length, PAGE.READWRITE);
+        WriteProcessMemory(handle, address, data);
+        VirtualProtectEx(handle, address, data.length, oldProtect);
+      } finally {
+        CloseHandle(handle);
+      }
+      return;
+    }
+
+    const provider = this.getPortableProvider();
+    const handle = provider.openProcess(pid, true);
+    let oldProtection: MemoryProtection | undefined;
+    try {
+      const region = provider.queryRegion(handle, address);
+      if (!region?.isWritable) {
+        oldProtection = provider.changeProtection(
+          handle,
+          address,
+          data.length,
+          MemoryProtection.ReadWrite,
+        ).oldProtection;
+      }
+      provider.writeMemory(handle, address, data);
+    } finally {
+      try {
+        if (oldProtection !== undefined) {
+          provider.changeProtection(handle, address, data.length, oldProtection);
+        }
+      } finally {
+        provider.closeProcess(handle);
+      }
+    }
+  }
 
   /** Write a typed value to memory (with undo support) */
   async writeValue(
@@ -33,38 +100,28 @@ export class MemoryController {
     const { patternBytes } = parsePattern(value, valueType as Parameters<typeof parsePattern>[1]);
     const newBuf = Buffer.from(patternBytes);
 
-    const handle = openProcessForMemory(pid, true);
-    try {
-      // Read old value
-      const oldBuf = ReadProcessMemory(handle, addr, newBuf.length);
+    const oldBuf = this.readBuffer(pid, addr, newBuf.length);
+    this.writeBuffer(pid, addr, newBuf);
 
-      // Make writable and write
-      const { oldProtect } = VirtualProtectEx(handle, addr, newBuf.length, PAGE.READWRITE);
-      WriteProcessMemory(handle, addr, newBuf);
-      VirtualProtectEx(handle, addr, newBuf.length, oldProtect);
+    const entry: WriteHistoryEntry = {
+      id: randomUUID(),
+      pid,
+      address: `0x${addr.toString(16).toUpperCase()}`,
+      oldValue: Array.from(oldBuf),
+      newValue: Array.from(newBuf),
+      timestamp: Date.now(),
+      undone: false,
+    };
 
-      const entry: WriteHistoryEntry = {
-        id: randomUUID(),
-        pid,
-        address: `0x${addr.toString(16).toUpperCase()}`,
-        oldValue: Array.from(oldBuf),
-        newValue: Array.from(newBuf),
-        timestamp: Date.now(),
-        undone: false,
-      };
+    this.writeHistory.push(entry);
+    this.undoneStack = []; // Clear redo stack on new write
 
-      this.writeHistory.push(entry);
-      this.undoneStack = []; // Clear redo stack on new write
-
-      // Trim history
-      if (this.writeHistory.length > WRITE_HISTORY_MAX) {
-        this.writeHistory = this.writeHistory.slice(-WRITE_HISTORY_MAX);
-      }
-
-      return entry;
-    } finally {
-      CloseHandle(handle);
+    // Trim history
+    if (this.writeHistory.length > WRITE_HISTORY_MAX) {
+      this.writeHistory = this.writeHistory.slice(-WRITE_HISTORY_MAX);
     }
+
+    return entry;
   }
 
   /**
@@ -86,14 +143,7 @@ export class MemoryController {
       const addr = BigInt(entry.address);
       const oldBuf = Buffer.from(entry.oldValue);
 
-      const handle = openProcessForMemory(entry.pid, true);
-      try {
-        const { oldProtect } = VirtualProtectEx(handle, addr, oldBuf.length, PAGE.READWRITE);
-        WriteProcessMemory(handle, addr, oldBuf);
-        VirtualProtectEx(handle, addr, oldBuf.length, oldProtect);
-      } finally {
-        CloseHandle(handle);
-      }
+      this.writeBuffer(entry.pid, addr, oldBuf);
 
       entry.undone = true;
       this.undoneStack.push(entry);
@@ -118,14 +168,7 @@ export class MemoryController {
       const addr = BigInt(entry.address);
       const newBuf = Buffer.from(entry.newValue);
 
-      const handle = openProcessForMemory(entry.pid, true);
-      try {
-        const { oldProtect } = VirtualProtectEx(handle, addr, newBuf.length, PAGE.READWRITE);
-        WriteProcessMemory(handle, addr, newBuf);
-        VirtualProtectEx(handle, addr, newBuf.length, oldProtect);
-      } finally {
-        CloseHandle(handle);
-      }
+      this.writeBuffer(entry.pid, addr, newBuf);
 
       entry.undone = false;
       return entry;
@@ -159,14 +202,7 @@ export class MemoryController {
     // Start periodic write
     entry.timer = setInterval(() => {
       try {
-        const handle = openProcessForMemory(pid, true);
-        try {
-          const { oldProtect } = VirtualProtectEx(handle, addr, valueBuf.length, PAGE.READWRITE);
-          WriteProcessMemory(handle, addr, valueBuf);
-          VirtualProtectEx(handle, addr, valueBuf.length, oldProtect);
-        } finally {
-          CloseHandle(handle);
-        }
+        this.writeBuffer(pid, addr, valueBuf);
       } catch {
         // If write fails, deactivate and fully evict from the index
         // so stale entries don't accumulate.
@@ -210,12 +246,7 @@ export class MemoryController {
   /** Dump memory region to Buffer */
   async dumpMemory(pid: number, address: string, size: number): Promise<Buffer> {
     const addr = BigInt(address.startsWith('0x') ? address : `0x${address}`);
-    const handle = openProcessForMemory(pid, false);
-    try {
-      return ReadProcessMemory(handle, addr, size);
-    } finally {
-      CloseHandle(handle);
-    }
+    return this.readBuffer(pid, addr, size);
   }
 
   /** Dump memory region as hex string */

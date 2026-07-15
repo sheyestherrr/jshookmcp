@@ -42,12 +42,12 @@ describe('NativeMemoryManager.availability', () => {
 
   describe('unsupported platforms', () => {
     it('rejects unsupported platforms', async () => {
-      Object.defineProperty(process, 'platform', { value: 'linux' });
+      Object.defineProperty(process, 'platform', { value: 'freebsd' });
       state.isWindows.mockReturnValue(false);
 
       await expect(checkNativeMemoryAvailability(execAsync)).resolves.toEqual({
         available: false,
-        reason: expect.stringContaining('require Windows or macOS'),
+        reason: expect.stringContaining('require Windows, macOS, or Linux'),
       });
       expect(execAsync).not.toHaveBeenCalled();
     });

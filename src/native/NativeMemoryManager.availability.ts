@@ -11,11 +11,18 @@ export async function checkNativeMemoryAvailability(
     return checkDarwinAvailability(execAsync);
   }
 
+  // Linux has a complete PlatformMemoryAPI provider. Permission failures are
+  // target-specific (ptrace policy, uid, capabilities) and are reported by the
+  // actual operation, so platform availability must not reject Linux outright.
+  if (process.platform === 'linux') {
+    return { available: true };
+  }
+
   // ── Windows path ──
   if (!isWindows()) {
     return {
       available: false,
-      reason: `Native memory operations require Windows or macOS. Current platform: ${process.platform}`,
+      reason: `Native memory operations require Windows, macOS, or Linux. Current platform: ${process.platform}`,
     };
   }
 
