@@ -15,7 +15,6 @@
  * @module @modules/z3/Z3Solver
  */
 
-import { init as initZ3 } from 'z3-solver';
 import { logger } from '@utils/logger';
 import { Z3_ENABLED, Z3_INIT_TIMEOUT_MS } from '@src/constants';
 
@@ -25,7 +24,8 @@ import { Z3_ENABLED, Z3_INIT_TIMEOUT_MS } from '@src/constants';
  * generated d.ts generics into every caller — callers get the typed API by
  * destructuring inside `withContext`.
  */
-export type Z3Api = Awaited<ReturnType<typeof initZ3>>;
+type Z3Module = typeof import('z3-solver');
+export type Z3Api = Awaited<ReturnType<Z3Module['init']>>;
 
 let apiPromise: Promise<Z3Api | null> | null = null;
 let initFailed = false;
@@ -63,7 +63,7 @@ export function getZ3Api(): Promise<Z3Api | null> {
   if (!Z3_ENABLED) return Promise.resolve(null);
   if (initFailed) return Promise.resolve(null);
   if (!apiPromise) {
-    apiPromise = withInitTimeout(initZ3())
+    apiPromise = withInitTimeout(import('z3-solver').then(({ init }) => init()))
       .then((api) => {
         logger.info('[z3] WASM initialized');
         return api as Z3Api;
