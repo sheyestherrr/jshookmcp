@@ -111,7 +111,8 @@
     "metadata:check": "node scripts/generate-metadata.mjs --check",
     "check:docs-format": "corepack pnpm run lint:md",
     "search:tune": "tsx scripts/search-tune/optimize.ts",
-    "search:tune:report": "tsx scripts/search-tune/report.ts"
+    "search:tune:report": "tsx scripts/search-tune/report.ts",
+    "search:benchmark-model": "tsx scripts/search-tune/compare-static-model.ts"
   },
   "dependencies": {
     "@alexaltea/capstone-js": "^5.0.9",
