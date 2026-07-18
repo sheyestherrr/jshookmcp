@@ -26,13 +26,19 @@ No global install needed — add to your MCP client config and you're ready:
     "jshook": {
       "command": "npx",
       "args": ["-y", "@jshookmcp/jshook@latest"],
-      "env": { "JSHOOK_BASE_PROFILE": "search" }
+      "env": {
+        "MCP_TOOL_PROFILE": "search",
+        "npm_config_omit": "optional"
+      }
     }
   }
 }
 ```
 
 *(Windows: use `npx.cmd` absolute path if `npx` is not found)*
+
+This lightweight configuration skips optional ONNX, Z3, Binaryen, Camoufox, and Playwright
+packages. Remove `npm_config_omit` when those full-profile runtimes are required.
 
 ### Share one daemon across multiple agents
 
@@ -43,6 +49,9 @@ embedding model, browser runtime, and caches, start one local Streamable HTTP da
 pnpm build
 pnpm daemon
 ```
+
+Vector search defaults to off for per-client stdio processes and on (lazy-loaded) for the shared
+HTTP daemon. Set `SEARCH_VECTOR_ENABLED=false` when lexical search is sufficient.
 
 Then point every MCP client at `http://127.0.0.1:3000/mcp` using its HTTP/URL server
 configuration. Each client receives its own MCP session and response route while heavyweight

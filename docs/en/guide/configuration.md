@@ -16,12 +16,16 @@ Pass environment variables in your MCP client config's `env` field:
       "args": ["-y", "@jshookmcp/jshook@latest"],
       "env": {
         "MCP_TOOL_PROFILE": "workflow",
+        "npm_config_omit": "optional",
         "PUPPETEER_HEADLESS": "true"
       }
     }
   }
 }
 ```
+
+Remove `npm_config_omit` when optional ONNX, Z3, Binaryen, Camoufox, or Playwright runtimes are
+required.
 
 ### Source Developers
 
@@ -42,6 +46,7 @@ Runtime configuration is defined by `src/utils/config.ts`. The current runtime d
 | `PUPPETEER_EXECUTABLE_PATH`  | Explicit browser executable path.                   | no default                                        |
 | `CHROME_PATH`                | Alternate browser executable path variable.         | no default                                        |
 | `BROWSER_EXECUTABLE_PATH`    | Another alternate browser executable path variable. | no default                                        |
+| `BROWSER_IDLE_TIMEOUT_MS`    | Reclaim launched browsers, or disconnect attached browsers, after inactivity; `0` disables it. | `300000` |
 | `CAPTCHA_SCREENSHOT_DIR`     | Fallback directory for CAPTCHA screenshots.         | `./screenshots/captcha`                           |
 | `MCP_SCREENSHOT_DIR`         | Root directory for regular screenshots.             | `./screenshots`                                   |
 | `MCP_DEBUGGER_SESSIONS_DIR`  | Directory used for persisted debugger sessions.     | `./debugger-sessions`                             |
@@ -72,6 +77,8 @@ Runtime configuration is defined by `src/utils/config.ts`. The current runtime d
 | `RUNTIME_ERROR_WINDOW_MS` | Recovery window length for runtime error counting.           | `60000`                 |
 | `RUNTIME_ERROR_THRESHOLD` | Recoverable error threshold inside the runtime error window. | `8`                     |
 | `SHUTDOWN_TIMEOUT_MS`     | Graceful shutdown timeout in milliseconds.                    | `20000`                 |
+| `JSHOOK_INSTANCE_WARN_AT` | Live server process count that triggers a warning.             | `2`                     |
+| `JSHOOK_MAX_INSTANCES`    | Optional live server process hard cap; `0` disables it.        | `0`                     |
 
 ### 3. Profiles, search, and tool selection
 
@@ -82,7 +89,7 @@ Runtime configuration is defined by `src/utils/config.ts`. The current runtime d
 | `SEARCH_INTENT_TOOL_BOOST_RULES_JSON`     | JSON override for explicit intent-to-tool ranking boosts.         | no default                       |
 | `MCP_DEFAULT_PLUGIN_BOOST_TIER`           | Default tier for plugin auto-registration during boost.           | `full`                           |
 | `SEARCH_AUTO_ACTIVATE_DOMAINS`            | Auto-activate a domain when its tool is searched.                 | `true`                           |
-| `SEARCH_VECTOR_ENABLED`                   | Master switch for embedding-based search signal (BGE-micro-v2).   | `true`                           |
+| `SEARCH_VECTOR_ENABLED`                   | Master switch for embedding-based search signal (BGE-micro-v2).   | stdio: `false`; HTTP: `true`     |
 | `SEARCH_VECTOR_MODEL_ID`                  | HuggingFace model ID for embedding inference.                     | `Xenova/bge-micro-v2`            |
 | `SEARCH_VECTOR_COSINE_WEIGHT`             | Initial weight of the vector cosine signal in RRF fusion.         | `0.69`                           |
 | `SEARCH_VECTOR_DYNAMIC_WEIGHT`            | Self-tune vector weight based on tool-call feedback.              | `true`                           |
@@ -90,7 +97,8 @@ Runtime configuration is defined by `src/utils/config.ts`. The current runtime d
 | `SEARCH_VECTOR_LEARN_DOWN`                | Weight step-down when selected tool is outside vector top-N.      | `0.02`                           |
 | `SEARCH_VECTOR_LEARN_TOP_N`               | Rank threshold separating "hit" from "miss" for learning.         | `6`                              |
 | `SEARCH_VECTOR_PREWARM`                   | Load ONNX when the search engine starts; shared daemons load lazily by default. | `false`             |
-| `SEARCH_VECTOR_WORKER_IDLE_MS`            | Release the embedding worker after this idle period; `0` keeps it resident. | `15000`              |
+| `SEARCH_VECTOR_WORKER_IDLE_MS`            | Release the embedding worker after this idle period; `0` keeps it resident. | stdio: `15000`; HTTP: `300000` |
+| `SEARCH_VECTOR_FETCH_TIMEOUT_MS`          | Per-request timeout for remote model/tokenizer downloads.         | `15000`                          |
 | `SEARCH_VECTOR_RETRY_COOLDOWN_MS`         | Retry cooldown after an embedding load failure.                   | `60000`                          |
 | `SEARCH_VECTOR_CACHE_ENABLED`             | Persist catalog embeddings on disk.                               | `true`                           |
 | `JSHOOK_EMBEDDING_CACHE_DIR`              | Override the embedding cache directory.                           | `~/.jshookmcp/cache/embeddings`  |
@@ -261,6 +269,9 @@ any non-local interface.
 | `NETWORK_REPLAY_TIMEOUT_MS`           | Network request replay timeout.            | `30000`                 |
 | `NETWORK_REPLAY_MAX_BODY_BYTES`       | Max body size for replayed requests.       | `512000`                |
 | `NETWORK_REPLAY_MAX_REDIRECTS`        | Max redirects for replayed requests.       | `5`                     |
+| `NETWORK_BODY_CACHE_MAX_ENTRIES`      | Maximum retained response-body entries.    | `200`                   |
+| `NETWORK_BODY_CACHE_MAX_BODY_BYTES`   | Per-response retained body limit.           | `1048576`               |
+| `NETWORK_BODY_CACHE_MAX_TOTAL_BYTES`  | Aggregate response-body cache byte budget.  | `67108864`              |
 | `WASM_TOOL_TIMEOUT_MS`                | WASM tool general timeout.                 | `60000`                 |
 | `WASM_OFFLINE_RUN_TIMEOUT_MS`         | WASM offline run timeout.                  | `10000`                 |
 | `WASM_OPTIMIZE_TIMEOUT_MS`            | WASM optimization timeout.                 | `120000`                |

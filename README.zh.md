@@ -26,13 +26,19 @@
     "jshook": {
       "command": "npx",
       "args": ["-y", "@jshookmcp/jshook@latest"],
-      "env": { "JSHOOK_BASE_PROFILE": "search" }
+      "env": {
+        "MCP_TOOL_PROFILE": "search",
+        "npm_config_omit": "optional"
+      }
     }
   }
 }
 ```
 
 *(Windows 用户：若找不到 `npx`，请使用 `npx.cmd` 绝对路径)*
+
+该轻量配置会跳过可选的 ONNX、Z3、Binaryen、Camoufox 和 Playwright 包；需要这些完整档
+运行时时，移除 `npm_config_omit`。
 
 ### 多个 Agent 共用一个本地进程
 
@@ -43,6 +49,9 @@
 pnpm build
 pnpm daemon
 ```
+
+每客户端 stdio 进程默认关闭向量搜索；共享 HTTP daemon 默认按需开启。只需词法搜索时可
+设置 `SEARCH_VECTOR_ENABLED=false`。
 
 然后在各 MCP 客户端的 HTTP/URL server 配置中统一指向
 `http://127.0.0.1:3000/mcp`。每个客户端拥有独立的 MCP 会话和响应路由，重量级运行时

@@ -15,7 +15,11 @@
   "mcpServers": {
     "jshook": {
       "command": "npx",
-      "args": ["-y", "@jshookmcp/jshook"]
+      "args": ["-y", "@jshookmcp/jshook"],
+      "env": {
+        "MCP_TOOL_PROFILE": "search",
+        "npm_config_omit": "optional"
+      }
     }
   }
 }
@@ -24,6 +28,9 @@
 ::: warning 注意
 `args` 里的 `-y` 必须保留，否则会自动安装阻塞导致客户端超时挂起。
 :::
+
+该轻量安装会省略可选的 ONNX、Z3、Binaryen、Camoufox 和 Playwright 包；需要这些运行时
+时移除 `npm_config_omit`。
 
 ## 3. 重启并验证
 

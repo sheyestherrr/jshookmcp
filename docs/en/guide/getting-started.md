@@ -15,7 +15,11 @@ Append the following server definition to your MCP client configuration file (e.
   "mcpServers": {
     "jshook": {
       "command": "npx",
-      "args": ["-y", "@jshookmcp/jshook"]
+      "args": ["-y", "@jshookmcp/jshook"],
+      "env": {
+        "MCP_TOOL_PROFILE": "search",
+        "npm_config_omit": "optional"
+      }
     }
   }
 }
@@ -24,6 +28,9 @@ Append the following server definition to your MCP client configuration file (e.
 ::: warning Note
 The `-y` flag in the arguments is strictly required. Omitting it causes `npx` to await user prompt confirmation, resulting in an indefinite client timeout lock.
 :::
+
+This lightweight install omits optional ONNX, Z3, Binaryen, Camoufox, and Playwright packages.
+Remove `npm_config_omit` when those runtimes are needed.
 
 ## 3. Restart and Verify
 

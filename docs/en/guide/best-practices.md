@@ -17,7 +17,8 @@ Users installing via `npx` or an MCP client pass environment variables in the MC
       "command": "npx",
       "args": ["-y", "@jshookmcp/jshook@latest"],
       "env": {
-        "MCP_TOOL_PROFILE": "workflow"
+        "MCP_TOOL_PROFILE": "workflow",
+        "npm_config_omit": "optional"
       }
     }
   }
@@ -29,6 +30,7 @@ Add more parameters as needed in the `env` object:
 ```json
 "env": {
   "MCP_TOOL_PROFILE": "workflow",
+  "npm_config_omit": "optional",
   "PUPPETEER_HEADLESS": "true",
   "ENABLE_CACHE": "true",
   "EXTENSION_REGISTRY_BASE_URL": "https://raw.githubusercontent.com/vmoranv/jshookmcpextension/master/registry"
@@ -107,6 +109,9 @@ PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
 # or on Windows
 CHROME_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 
+# Reclaim a launched browser after five idle minutes; 0 disables reclamation
+BROWSER_IDLE_TIMEOUT_MS=300000
+
 ```
 
 ### Performance Tuning
@@ -123,6 +128,16 @@ MAX_CONCURRENT_ANALYSIS=3      # Analysis task concurrency cap
 # Cache (recommended — reduces redundant collection)
 ENABLE_CACHE=true
 CACHE_TTL=3600
+
+# Bound retained network response bodies
+NETWORK_BODY_CACHE_MAX_TOTAL_BYTES=67108864
+
+# Per-client stdio processes default to lexical search; HTTP defaults to vectors
+SEARCH_VECTOR_ENABLED=false
+
+# Warn on duplicate stdio processes; optionally hard-cap them
+JSHOOK_INSTANCE_WARN_AT=2
+JSHOOK_MAX_INSTANCES=0
 ```
 
 ### Timeout Settings
