@@ -7,13 +7,13 @@ import {
   unregisterExtensionToolRecord,
 } from '@server/extensions/ExtensionManager.tools';
 import { asTextResponse } from '@server/domains/shared/response';
-import { getToolDomain } from '@server/ToolCatalog';
 import { createToolHandlerMap } from '@server/ToolHandlerMap';
 import type { MCPServerContext } from '@server/MCPServer.context';
 import type { ToolResponse } from '@server/types';
 import { normalizeToolName, validateToolNameArray } from '@server/MCPServer.search.validation';
-import { getActiveToolNames, getToolByName } from '@server/MCPServer.search.helpers';
-import { ensureAllDomainsLoaded } from '@server/registry/index';
+import { getActiveToolNames } from '@server/MCPServer.search.helpers';
+import { loadSearchCatalog } from '@server/registry/SearchCatalog';
+import { ensureDomainLoaded, getRegistrationByName } from '@server/registry/index';
 
 interface ActivationSummary {
   activated: string[];
@@ -38,9 +38,6 @@ export async function activateToolNames(
   ctx: MCPServerContext,
   names: string[],
 ): Promise<ActivationSummary> {
-  // Ensure all domains are loaded so tool lookup can find any tool
-  await ensureAllDomainsLoaded();
-
   const activeNames = getActiveToolNames(ctx);
   const activated: string[] = [];
   const alreadyActive: string[] = [];
@@ -53,23 +50,26 @@ export async function activateToolNames(
       continue;
     }
 
-    const toolDef = (await getToolByName(ctx)).get(name);
-    if (!toolDef) {
-      notFound.push(name);
-      continue;
-    }
-
     const extensionRecord = ctx.extensionToolsByName.get(name);
     if (extensionRecord) {
       registerExtensionToolRecord(ctx, extensionRecord, 'activate_tools');
     } else {
+      const catalog = await loadSearchCatalog();
+      const catalogEntry = catalog.entryByName.get(name);
+      if (!catalogEntry) {
+        notFound.push(name);
+        continue;
+      }
+      await ensureDomainLoaded(catalogEntry.domain);
+      const toolDef = getRegistrationByName(name)?.tool;
+      if (!toolDef) {
+        notFound.push(name);
+        continue;
+      }
       const registeredTool = ctx.registerSingleTool(toolDef);
       ctx.activatedToolNames.add(name);
       ctx.activatedRegisteredTools.set(name, registeredTool);
-      const domain = getToolDomain(name);
-      if (domain) {
-        ctx.enabledDomains.add(domain);
-      }
+      ctx.enabledDomains.add(catalogEntry.domain);
       const newToolNames = new Set([name]);
       const newHandlers = createToolHandlerMap(ctx.handlerDeps, newToolNames);
       ctx.router.addHandlers(newHandlers);

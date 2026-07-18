@@ -4,20 +4,13 @@
  * Provides tool name resolution, search engine construction with caching,
  * and domain description generation.
  */
-import {
-  allTools,
-  getProfileDomains,
-  getToolDomain,
-  getToolsForProfile,
-} from '@server/ToolCatalog';
+import { getProfileDomains, getToolDomain, getToolsForProfile } from '@server/ToolCatalog';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolProfile } from '@server/ToolCatalog';
 import type { MCPServerContext } from '@server/MCPServer.context';
 import { ToolSearchEngine } from '@server/ToolSearch';
-import {
-  getAllRegistrations,
-  ensureAllDomainsLoaded,
-  getAllManifests,
-} from '@server/registry/index';
+import { DOMAIN_TOOL_COUNT_MAP } from '@server/registry/generated-domains';
+import { loadSearchCatalog } from '@server/registry/SearchCatalog';
 import { SEARCH_WORKFLOW_DOMAIN_BOOST_MULTIPLIER } from '@src/constants';
 
 // ── active-tool helpers ──
@@ -76,18 +69,16 @@ export function getExtensionDomainMap(ctx: MCPServerContext): Map<string, string
   return map;
 }
 
-export async function getCombinedTools(ctx: MCPServerContext): Promise<typeof allTools> {
-  await ensureAllDomainsLoaded();
-  const tools = new Map(allTools.map((tool) => [tool.name, tool]));
+export async function getCombinedTools(ctx: MCPServerContext): Promise<Tool[]> {
+  const catalog = await loadSearchCatalog();
+  const tools = new Map(catalog.tools.map((tool) => [tool.name, tool]));
   for (const record of ctx.extensionToolsByName.values()) {
     tools.set(record.name, record.tool);
   }
   return [...tools.values()];
 }
 
-export async function getToolByName(
-  ctx: MCPServerContext,
-): Promise<Map<string, (typeof allTools)[number]>> {
+export async function getToolByName(ctx: MCPServerContext): Promise<Map<string, Tool>> {
   return new Map((await getCombinedTools(ctx)).map((tool) => [tool.name, tool]));
 }
 
@@ -99,24 +90,6 @@ interface CachedSearchEngine {
 }
 
 const searchEngineCache = new WeakMap<MCPServerContext, CachedSearchEngine>();
-
-/**
- * Collect per-tool scene keywords from all loaded domain manifests.
- * These are generic technology terms that improve BM25 recall for domain-specific
- * queries (e.g., "signature" for encryption tools, "opcode" for debugger tools).
- */
-function buildSceneKeywordsFromManifests(): ReadonlyMap<string, readonly string[]> {
-  const map = new Map<string, readonly string[]>();
-  for (const manifest of getAllManifests()) {
-    if (!manifest.sceneKeywords) continue;
-    for (const [toolName, keywords] of Object.entries(manifest.sceneKeywords)) {
-      if (keywords.length > 0) {
-        map.set(toolName, keywords);
-      }
-    }
-  }
-  return map;
-}
 
 /**
  * Build a cache signature from all inputs that affect ToolSearchEngine construction.
@@ -134,15 +107,14 @@ export function buildSearchSignature(ctx: MCPServerContext): string {
 }
 
 export async function getSearchEngine(ctx: MCPServerContext): Promise<ToolSearchEngine> {
-  // Ensure all domains are loaded for full search coverage
-  await ensureAllDomainsLoaded();
-
   const signature = buildSearchSignature(ctx);
   const cached = searchEngineCache.get(ctx);
   if (cached?.signature === signature) return cached.engine;
 
+  const catalog = await loadSearchCatalog();
   const tools = await getCombinedTools(ctx);
-  const extensionDomains = getExtensionDomainMap(ctx);
+  const toolDomains = new Map(catalog.domainByToolName);
+  for (const [name, domain] of getExtensionDomainMap(ctx)) toolDomains.set(name, domain);
   const domainScoreMultipliers = new Map<string, number>();
   const toolScoreMultipliers = new Map<string, number>();
   for (const record of ctx.extensionToolsByName.values()) {
@@ -157,11 +129,11 @@ export async function getSearchEngine(ctx: MCPServerContext): Promise<ToolSearch
 
   const engine = new ToolSearchEngine(
     tools,
-    extensionDomains,
+    toolDomains,
     domainScoreMultipliers,
     toolScoreMultipliers,
     ctx.config.search,
-    buildSceneKeywordsFromManifests(),
+    catalog.sceneKeywordsByToolName,
   );
   engine.extensionEtag = signature;
   searchEngineCache.set(ctx, { signature, engine });
@@ -172,14 +144,11 @@ export async function getSearchEngine(ctx: MCPServerContext): Promise<ToolSearch
 
 /** Generate domain summary description. Uses metadata when not all domains are loaded. */
 export function buildDomainDescription(ctx: MCPServerContext): string {
-  const groups: Record<string, number> = {};
-  for (const r of getAllRegistrations()) {
-    groups[r.domain!] = (groups[r.domain!] ?? 0) + 1;
-  }
+  const groups: Record<string, number> = { ...DOMAIN_TOOL_COUNT_MAP };
   for (const record of ctx.extensionToolsByName.values()) {
     groups[record.domain] = (groups[record.domain] ?? 0) + 1;
   }
-  const loadedCount = getAllRegistrations().length;
+  const loadedCount = Object.values(DOMAIN_TOOL_COUNT_MAP).reduce((sum, count) => sum + count, 0);
   const extensionCount = ctx.extensionToolsByName.size;
   const totalTools = loadedCount + extensionCount;
   const domainCount = Object.keys(groups).length;

@@ -10,6 +10,7 @@ import { activateToolNames } from '@server/MCPServer.search.handlers.activate';
 import { handleActivateDomain } from '@server/MCPServer.search.handlers.domain';
 import { getSearchEngine } from '@server/MCPServer.search.helpers';
 import { ACTIVATION_TTL_MINUTES } from '@src/constants';
+import { loadSearchCatalog } from '@server/registry/SearchCatalog';
 
 function populateCallCommands(response: RouterResponse): RouterResponse {
   return {
@@ -146,6 +147,7 @@ export async function handleDescribeTool(
     );
   }
 
+  await loadSearchCatalog();
   const toolInfo = describeTool(name, ctx);
 
   if (!toolInfo) {

@@ -23,7 +23,33 @@ const mocks = vi.hoisted(() => ({
     { domain: 'network', tool: tool('network_get_requests') },
   ],
   engineInstances: [] as any[],
+  searchCatalog: null as any,
 }));
+
+mocks.searchCatalog = {
+  tools: mocks.allTools,
+  entries: mocks.allTools.map((candidate: any) => ({
+    tool: candidate,
+    domain: candidate.name.startsWith('network_') ? 'network' : 'browser',
+  })),
+  entryByName: new Map(
+    mocks.allTools.map((candidate: any) => [
+      candidate.name,
+      {
+        tool: candidate,
+        domain: candidate.name.startsWith('network_') ? 'network' : 'browser',
+      },
+    ]),
+  ),
+  toolByName: new Map(mocks.allTools.map((candidate: any) => [candidate.name, candidate])),
+  domainByToolName: new Map(
+    mocks.allTools.map((candidate: any) => [
+      candidate.name,
+      candidate.name.startsWith('network_') ? 'network' : 'browser',
+    ]),
+  ),
+  sceneKeywordsByToolName: new Map(),
+};
 
 vi.mock('@server/ToolCatalog', () => ({
   allTools: mocks.allTools,
@@ -40,6 +66,14 @@ vi.mock('@server/registry/index', () => ({
   getAllRegistrations: () => mocks.registrations,
   ensureAllDomainsLoaded: vi.fn().mockResolvedValue(undefined),
   getAllManifests: () => [],
+}));
+
+vi.mock('@server/registry/SearchCatalog', () => ({
+  loadSearchCatalog: vi.fn(async () => mocks.searchCatalog),
+}));
+
+vi.mock('@server/registry/generated-domains', () => ({
+  DOMAIN_TOOL_COUNT_MAP: { browser: 2, network: 1 },
 }));
 
 vi.mock('@src/constants', async (importOriginal) => ({
@@ -179,6 +213,7 @@ describe('MCPServer.search.helpers', () => {
     const second = await getSearchEngine(ctx);
 
     expect(first).toBe(second);
+    expect((await import('@server/registry/index')).ensureAllDomainsLoaded).not.toHaveBeenCalled();
     expect(mocks.engineInstances).toHaveLength(1);
     expect(mocks.engineInstances[0].args[0]).toEqual(
       expect.arrayContaining([
@@ -186,7 +221,14 @@ describe('MCPServer.search.helpers', () => {
         expect.objectContaining({ name: 'custom_tool' }),
       ]),
     );
-    expect(mocks.engineInstances[0].args[1]).toEqual(new Map([['custom_tool', 'workflow']]));
+    expect([...mocks.engineInstances[0].args[1]]).toEqual(
+      expect.arrayContaining([
+        ['browser_launch', 'browser'],
+        ['page_navigate', 'browser'],
+        ['network_get_requests', 'network'],
+        ['custom_tool', 'workflow'],
+      ]),
+    );
     expect(mocks.engineInstances[0].args[2]).toEqual(new Map([['workflow', 1.5]]));
     expect(mocks.engineInstances[0].args[3]).toEqual(
       new Map([

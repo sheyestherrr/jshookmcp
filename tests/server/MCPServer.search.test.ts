@@ -64,6 +64,44 @@ vi.mock('@server/ToolCatalog', () => {
   };
 });
 
+vi.mock('@server/registry/SearchCatalog', () => {
+  const tools = [
+    tool('browser_launch', 'Launch a browser'),
+    tool('page_navigate', 'Navigate a page'),
+    tool('network_enable', 'Enable network monitoring'),
+    tool('network_get_requests', 'Inspect network requests'),
+    tool('get_token_budget_stats', 'Inspect token budget state'),
+  ];
+  const domainFor = (name: string) =>
+    name === 'get_token_budget_stats'
+      ? 'maintenance'
+      : name.startsWith('network_')
+        ? 'network'
+        : 'browser';
+  const entries = tools.map((candidate) => ({
+    tool: candidate,
+    domain: domainFor(candidate.name),
+  }));
+  const catalog = {
+    tools,
+    entries,
+    entryByName: new Map(entries.map((entry) => [entry.tool.name, entry])),
+    toolByName: new Map(tools.map((candidate) => [candidate.name, candidate])),
+    domainByToolName: new Map(
+      tools.map((candidate) => [candidate.name, domainFor(candidate.name)]),
+    ),
+    sceneKeywordsByToolName: new Map(),
+  };
+  return {
+    loadSearchCatalog: vi.fn(async () => catalog),
+    getLoadedSearchCatalog: vi.fn(() => catalog),
+  };
+});
+
+vi.mock('@server/registry/generated-domains', () => ({
+  DOMAIN_TOOL_COUNT_MAP: { browser: 2, network: 2 },
+}));
+
 vi.mock('@server/ToolHandlerMap', () => ({
   createToolHandlerMap: vi.fn(() => ({})),
 }));
@@ -72,6 +110,17 @@ vi.mock('@server/registry/index', () => ({
   getAllDomains: () => new Set(['browser', 'network', 'workflow']),
   getAllKnownDomains: () => new Set(['browser', 'network', 'workflow']),
   ensureDomainLoaded: vi.fn().mockResolvedValue(null),
+  getRegistrationByName: (name: string) => {
+    const definitions = new Map([
+      ['browser_launch', tool('browser_launch', 'Launch a browser')],
+      ['page_navigate', tool('page_navigate', 'Navigate a page')],
+      ['network_enable', tool('network_enable', 'Enable network monitoring')],
+      ['network_get_requests', tool('network_get_requests', 'Inspect network requests')],
+      ['get_token_budget_stats', tool('get_token_budget_stats', 'Inspect token budget state')],
+    ]);
+    const candidate = definitions.get(name);
+    return candidate ? { tool: candidate } : undefined;
+  },
   getAllRegistrations: () => [
     { domain: 'browser', tool: tool('browser_launch') },
     { domain: 'browser', tool: tool('page_navigate') },

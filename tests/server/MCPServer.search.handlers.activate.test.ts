@@ -20,7 +20,27 @@ const state = vi.hoisted(() => ({
     debug: vi.fn(),
     error: vi.fn(),
   },
+  ensureDomainLoaded: vi.fn().mockResolvedValue(undefined),
+  getRegistrationByName: vi.fn((name: string) => ({
+    domain: name.startsWith('network_') ? 'network' : 'browser',
+    tool: tool(name),
+  })),
+  searchCatalog: null as any,
 }));
+
+state.searchCatalog = {
+  entries: [],
+  tools: [],
+  entryByName: new Map(
+    ['browser_launch', 'page_navigate', 'network_get_requests'].map((name) => [
+      name,
+      { tool: tool(name), domain: name.startsWith('network_') ? 'network' : 'browser' },
+    ]),
+  ),
+  toolByName: new Map(),
+  domainByToolName: new Map(),
+  sceneKeywordsByToolName: new Map(),
+};
 
 vi.mock('@server/domains/shared/response', () => ({
   asTextResponse: (text: string) => ({
@@ -51,6 +71,12 @@ vi.mock('@utils/logger', () => ({
 
 vi.mock('@server/registry/index', () => ({
   ensureAllDomainsLoaded: vi.fn().mockResolvedValue(undefined),
+  ensureDomainLoaded: state.ensureDomainLoaded,
+  getRegistrationByName: state.getRegistrationByName,
+}));
+
+vi.mock('@server/registry/SearchCatalog', () => ({
+  loadSearchCatalog: vi.fn(async () => state.searchCatalog),
 }));
 
 import {
@@ -104,6 +130,8 @@ describe('MCPServer.search.handlers.activate', () => {
     );
     expect(ctx.activatedToolNames.has('page_navigate')).toBe(true);
     expect(ctx.enabledDomains.has('browser')).toBe(true);
+    expect(state.ensureDomainLoaded).toHaveBeenCalledWith('browser');
+    expect((await import('@server/registry/index')).ensureAllDomainsLoaded).not.toHaveBeenCalled();
     expect(state.createToolHandlerMap).toHaveBeenCalledWith(
       ctx.handlerDeps,
       new Set(['page_navigate']),

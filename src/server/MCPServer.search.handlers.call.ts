@@ -14,6 +14,7 @@ import type { ToolResponse } from '@server/types';
 import { normalizeToolName } from '@server/MCPServer.search.validation';
 import { getSearchEngine } from '@server/MCPServer.search.helpers';
 import { getToolInputSchema } from '@server/ToolRouter.probe';
+import { loadSearchCatalog } from '@server/registry/SearchCatalog';
 import { validateToolArgsAgainstSchema } from '@server/MCPServer.search.validation.runtime';
 
 interface CallToolMetadata {
@@ -70,6 +71,7 @@ export async function handleCallTool(
   ctx: MCPServerContext,
   args: Record<string, unknown>,
 ): Promise<ToolResponse> {
+  const searchCatalog = await loadSearchCatalog();
   const rawName = typeof args.name === 'string' ? args.name : '';
   const defaultMetadata = buildCallToolMetadata(false, []);
 
@@ -128,21 +130,12 @@ export async function handleCallTool(
   // but not yet activated (e.g., when search returned 0 results and domain
   // fallback activation was triggered).
   if (!ctx.router.has(name)) {
-    // Try auto-activation only when the registry is already initialised
-    // (it may not be in unit-test contexts with minimal mocks).
     let autoActivated = false;
     try {
-      const { ensureAllDomainsLoaded } = await import('@server/registry/index');
-      await ensureAllDomainsLoaded();
-
-      const { getToolByName } = await import('@server/MCPServer.search.helpers');
-      const toolMap = await getToolByName(ctx);
-      const toolDef = toolMap.get(name);
-
-      if (toolDef) {
+      const catalogEntry = searchCatalog.entryByName.get(name);
+      if (catalogEntry) {
         const { activateToolNames } = await import('@server/MCPServer.search.handlers.activate');
-        const { getToolDomain } = await import('@server/ToolCatalog');
-        const domain = getToolDomain(name);
+        const domain = catalogEntry.domain;
         if (domain && !ctx.enabledDomains.has(domain)) {
           const { handleActivateDomain } = await import('@server/MCPServer.search.handlers.domain');
           try {

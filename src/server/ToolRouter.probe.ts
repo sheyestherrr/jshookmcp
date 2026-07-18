@@ -6,6 +6,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { MCPServerContext } from '@server/MCPServer.context';
 import { allTools, getToolDomain } from '@server/ToolCatalog';
 import { normalizeToolName } from '@server/MCPServer.search.validation';
+import { getLoadedSearchCatalog } from '@server/registry/SearchCatalog';
 
 // ── Routing State Type ──
 
@@ -20,6 +21,8 @@ export interface RoutingState {
 let allToolsByNameCache: Map<string, Tool> | null = null;
 
 export function getAllToolsByName(): Map<string, Tool> {
+  const loadedCatalog = getLoadedSearchCatalog();
+  if (loadedCatalog) return loadedCatalog.toolByName as Map<string, Tool>;
   if (!allToolsByNameCache) allToolsByNameCache = new Map(allTools.map((t) => [t.name, t]));
   return allToolsByNameCache;
 }
@@ -81,11 +84,18 @@ export function isToolActive(toolName: string, ctx: MCPServerContext): boolean {
 }
 
 export function getAvailableToolNames(ctx: MCPServerContext): Set<string> {
-  return new Set([...allTools.map((tool) => tool.name), ...ctx.extensionToolsByName.keys()]);
+  const builtInNames =
+    getLoadedSearchCatalog()?.toolByName.keys() ?? allTools.map((tool) => tool.name);
+  return new Set([...builtInNames, ...ctx.extensionToolsByName.keys()]);
 }
 
 export function getToolDomainFromContext(toolName: string, ctx: MCPServerContext): string | null {
-  return getToolDomain(toolName) ?? ctx.extensionToolsByName.get(toolName)?.domain ?? null;
+  return (
+    getLoadedSearchCatalog()?.domainByToolName.get(toolName) ??
+    getToolDomain(toolName) ??
+    ctx.extensionToolsByName.get(toolName)?.domain ??
+    null
+  );
 }
 
 // ── Runtime State Probing ──
