@@ -24,9 +24,10 @@ interface SafeTensorHeader {
 }
 
 export interface StaticEmbeddingTensor {
+  dtype: 'F16' | 'F32';
   rows: number;
   dimensions: number;
-  values: Uint16Array;
+  values: Uint16Array | Float32Array;
 }
 
 const MODEL_FILENAMES = ['tokenizer.json', 'model.safetensors'] as const;
@@ -88,8 +89,8 @@ export function parseStaticEmbeddingTensor(bytes: Uint8Array): StaticEmbeddingTe
   }
 
   const descriptor = header.embeddings;
-  if (!descriptor || descriptor.dtype !== 'F16') {
-    throw new Error('Static embedding model must contain an F16 "embeddings" tensor');
+  if (!descriptor || (descriptor.dtype !== 'F16' && descriptor.dtype !== 'F32')) {
+    throw new Error('Static embedding model must contain an F16 or F32 "embeddings" tensor');
   }
   if (
     !Array.isArray(descriptor.shape) ||
@@ -113,7 +114,10 @@ export function parseStaticEmbeddingTensor(bytes: Uint8Array): StaticEmbeddingTe
   const startOffset = descriptor.data_offsets[0] as number;
   const endOffset = descriptor.data_offsets[1] as number;
   const valueCount = rows * dimensions;
-  const expectedBytes = valueCount * Uint16Array.BYTES_PER_ELEMENT;
+  const dtype = descriptor.dtype;
+  const bytesPerValue =
+    dtype === 'F16' ? Uint16Array.BYTES_PER_ELEMENT : Float32Array.BYTES_PER_ELEMENT;
+  const expectedBytes = valueCount * bytesPerValue;
   if (
     !Number.isSafeInteger(valueCount) ||
     startOffset < 0 ||
@@ -125,14 +129,19 @@ export function parseStaticEmbeddingTensor(bytes: Uint8Array): StaticEmbeddingTe
   }
 
   const absoluteOffset = bytes.byteOffset + dataStart + startOffset;
-  let values: Uint16Array;
-  if (absoluteOffset % Uint16Array.BYTES_PER_ELEMENT === 0) {
+  let values: Uint16Array | Float32Array;
+  if (dtype === 'F16' && absoluteOffset % Uint16Array.BYTES_PER_ELEMENT === 0) {
     values = new Uint16Array(bytes.buffer, absoluteOffset, valueCount);
+  } else if (dtype === 'F32' && absoluteOffset % Float32Array.BYTES_PER_ELEMENT === 0) {
+    values = new Float32Array(bytes.buffer, absoluteOffset, valueCount);
   } else {
     const copy = bytes.slice(dataStart + startOffset, dataStart + endOffset);
-    values = new Uint16Array(copy.buffer, copy.byteOffset, valueCount);
+    values =
+      dtype === 'F16'
+        ? new Uint16Array(copy.buffer, copy.byteOffset, valueCount)
+        : new Float32Array(copy.buffer, copy.byteOffset, valueCount);
   }
-  return { rows, dimensions, values };
+  return { dtype, rows, dimensions, values };
 }
 
 function getModelCacheDirectory(modelId: string): string {
@@ -235,14 +244,14 @@ export class StaticEmbeddingModel {
     const output = new Float32Array(this.tensor.dimensions);
     if (tokenIds.length === 0) return output;
 
-    const lookup = getFloat16Lookup();
+    const lookup = this.tensor.dtype === 'F16' ? getFloat16Lookup() : null;
     let includedTokens = 0;
     for (const tokenId of tokenIds) {
       if (!Number.isInteger(tokenId) || tokenId < 0 || tokenId >= this.tensor.rows) continue;
       const rowOffset = tokenId * this.tensor.dimensions;
       for (let dimension = 0; dimension < this.tensor.dimensions; dimension++) {
-        output[dimension] =
-          output[dimension]! + lookup[this.tensor.values[rowOffset + dimension]!]!;
+        const rawValue = this.tensor.values[rowOffset + dimension]!;
+        output[dimension] = output[dimension]! + (lookup ? lookup[rawValue]! : rawValue);
       }
       includedTokens++;
     }

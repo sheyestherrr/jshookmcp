@@ -96,6 +96,7 @@ describe('config utilities', () => {
     expect(config.search.cjkQueryAliases.length).toBeGreaterThan(0);
     expect(config.search.intentToolBoostRules.length).toBeGreaterThan(0);
     expect(config.search.vectorEnabled).toBe(false);
+    expect(config.search.vectorModelId).toBe('minishlab/potion-code-16M-v2');
   });
 
   it('resolves transport-sensitive vector defaults after environment loading', async () => {

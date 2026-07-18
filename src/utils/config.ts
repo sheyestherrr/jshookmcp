@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { config as dotenvConfig } from 'dotenv';
 import { z } from 'zod';
 import { DEFAULT_SEARCH_CONFIG } from '@src/config/search-defaults';
+import { DEFAULT_SEARCH_VECTOR_MODEL_ID } from '@src/constants/search-model';
 import { getPackageVersion } from './packageVersion';
 import type {
   Config,
@@ -526,7 +527,7 @@ function buildSearchConfig(): SearchConfig {
     vectorEnabled: coerceBooleanEnv(process.env.SEARCH_VECTOR_ENABLED, httpTransport),
     vectorModelId: stringEnv(
       process.env.SEARCH_VECTOR_MODEL_ID,
-      defaults.vectorModelId ?? 'Xenova/bge-micro-v2',
+      defaults.vectorModelId ?? DEFAULT_SEARCH_VECTOR_MODEL_ID,
     ),
     vectorCosineWeight: coerceFloatEnv(
       process.env.SEARCH_VECTOR_COSINE_WEIGHT,
