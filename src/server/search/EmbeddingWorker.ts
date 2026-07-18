@@ -1,8 +1,9 @@
 /**
- * Worker thread script for embedding inference using Transformers.js.
+ * Worker thread script for static Model2Vec or Transformers.js embedding inference.
  *
- * Runs the BGE-micro-v2 ONNX model in a separate thread to avoid blocking
- * the main event loop. Communicates with the host via `parentPort` messages.
+ * Keeps model loading and embedding work outside the main event loop. The
+ * default static model avoids ONNX; configured transformer models remain
+ * available through the compatibility backend.
  *
  * Message protocol:
  *   → { type: 'embed',       id: number, text: string }
@@ -11,6 +12,9 @@
  *   ← { type: 'error',       id: number, message: string }
  */
 import { parentPort } from 'worker_threads';
+import { DEFAULT_SEARCH_VECTOR_MODEL_ID } from '../../constants/search-model.ts';
+import { isStaticEmbeddingModel } from './EmbeddingModels.ts';
+import { StaticEmbeddingModel } from './StaticEmbeddingModel.ts';
 
 // ── Lazy model singleton ──
 
@@ -22,7 +26,10 @@ type EmbedderPipeline = (
 
 let embedder: EmbedderPipeline | null = null;
 let loadedModelId: string | null = null;
-const DEFAULT_MODEL_ID = 'Xenova/bge-micro-v2';
+let staticModel: StaticEmbeddingModel | null = null;
+let staticModelPromise: Promise<StaticEmbeddingModel> | null = null;
+let loadedStaticModelId: string | null = null;
+const DEFAULT_MODEL_ID = DEFAULT_SEARCH_VECTOR_MODEL_ID;
 const FETCH_TIMEOUT_MS = Math.max(
   1,
   Number.parseInt(process.env.SEARCH_VECTOR_FETCH_TIMEOUT_MS ?? '15000', 10) || 15_000,
@@ -76,6 +83,29 @@ async function getEmbedder(modelId: string): Promise<EmbedderPipeline> {
   return embedder;
 }
 
+async function getStaticModel(modelId: string): Promise<StaticEmbeddingModel> {
+  if (loadedStaticModelId && loadedStaticModelId !== modelId) {
+    throw new Error(
+      `Embedding worker already loaded model ${loadedStaticModelId}; cannot switch to ${modelId}`,
+    );
+  }
+  if (staticModel) return staticModel;
+  if (!staticModelPromise) {
+    loadedStaticModelId = modelId;
+    staticModelPromise = StaticEmbeddingModel.load(modelId)
+      .then((model) => {
+        staticModel = model;
+        return model;
+      })
+      .catch((error: unknown) => {
+        loadedStaticModelId = null;
+        staticModelPromise = null;
+        throw error;
+      });
+  }
+  return staticModelPromise;
+}
+
 /**
  * Slice a flattened batch tensor back into one Float32Array per input text.
  *
@@ -116,6 +146,26 @@ parentPort?.on(
   async (msg: { type: string; id: number; modelId?: string; text?: string; texts?: string[] }) => {
     try {
       const modelId = msg.modelId?.trim() || DEFAULT_MODEL_ID;
+      if (msg.type === 'embed_batch' && msg.texts!.length === 0) {
+        parentPort!.postMessage({ type: 'result', id: msg.id, embedding: [] });
+        return;
+      }
+      if (isStaticEmbeddingModel(modelId)) {
+        const model = await getStaticModel(modelId);
+        if (msg.type === 'embed') {
+          const embedding = model.embed(msg.text!);
+          parentPort!.postMessage({ type: 'result', id: msg.id, embedding }, [
+            embedding.buffer as ArrayBuffer,
+          ]);
+        } else if (msg.type === 'embed_batch') {
+          parentPort!.postMessage({
+            type: 'result',
+            id: msg.id,
+            embedding: model.embedBatch(msg.texts!),
+          });
+        }
+        return;
+      }
       if (msg.type === 'embed') {
         const pipe = await getEmbedder(modelId);
         const output = await pipe(msg.text!, { pooling: 'mean', normalize: true });

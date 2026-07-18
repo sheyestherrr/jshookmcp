@@ -320,7 +320,7 @@ export class ToolSearchEngine {
     // ── Query result cache (§4.3 CSAPC) ──
     this.queryCache = new LRUCache<string, CachedSearchEntry>(SEARCH_QUERY_CACHE_CAPACITY);
 
-    // A shared daemon should not load ONNX until vector scoring is actually needed.
+    // A shared daemon should not load the embedding model until vector scoring is needed.
     // Operators can opt back into background prewarm for latency-sensitive deployments.
     if (this.embeddingEngine && SEARCH_VECTOR_PREWARM) {
       void this.ensureToolEmbeddings();

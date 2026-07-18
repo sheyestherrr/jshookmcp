@@ -19,9 +19,19 @@ vi.mock('node:worker_threads', () => ({
 
 const mockPipeline = vi.fn();
 const mockTransformerEnv = { fetch: vi.fn() };
+const mockStaticLoad = vi.fn();
+const ONNX_MODEL_ID = 'Xenova/bge-micro-v2';
+const onnxMessage = <T extends object>(message: T): T & { modelId: string } => ({
+  ...message,
+  modelId: ONNX_MODEL_ID,
+});
 vi.mock('@huggingface/transformers', () => ({
   pipeline: mockPipeline,
   env: mockTransformerEnv,
+}));
+
+vi.mock('@server/search/StaticEmbeddingModel', () => ({
+  StaticEmbeddingModel: { load: mockStaticLoad },
 }));
 
 describe('EmbeddingWorker', () => {
@@ -63,7 +73,7 @@ describe('EmbeddingWorker', () => {
     });
 
     await loadWorker();
-    const pending = messageHandler!({ type: 'embed', id: 99, text: 'timeout' });
+    const pending = messageHandler!(onnxMessage({ type: 'embed', id: 99, text: 'timeout' }));
     await vi.advanceTimersByTimeAsync(6);
     await pending;
 
@@ -81,6 +91,33 @@ describe('EmbeddingWorker', () => {
   }
 
   describe('embed message type', () => {
+    it('uses the lightweight static model by default', async () => {
+      const embedding = new Float32Array([1, 0]);
+      const staticEmbed = vi.fn(() => embedding);
+      mockStaticLoad.mockResolvedValue({ embed: staticEmbed, embedBatch: vi.fn() });
+
+      await loadWorker();
+      await messageHandler!({ type: 'embed', id: 0, text: 'tool query' });
+
+      expect(mockStaticLoad).toHaveBeenCalledWith('minishlab/potion-code-16M-v2');
+      expect(staticEmbed).toHaveBeenCalledWith('tool query');
+      expect(mockPipeline).not.toHaveBeenCalled();
+    });
+
+    it('shares one static model load across concurrent first requests', async () => {
+      const staticEmbed = vi.fn(() => new Float32Array([1, 0]));
+      mockStaticLoad.mockResolvedValue({ embed: staticEmbed, embedBatch: vi.fn() });
+
+      await loadWorker();
+      await Promise.all([
+        messageHandler!({ type: 'embed', id: 20, text: 'first' }),
+        messageHandler!({ type: 'embed', id: 21, text: 'second' }),
+      ]);
+
+      expect(mockStaticLoad).toHaveBeenCalledTimes(1);
+      expect(staticEmbed).toHaveBeenCalledTimes(2);
+    });
+
     it('processes embed message and returns normalized embedding', async () => {
       // Setup mock pipeline to return a fake embedding
       const fakeEmbedding = new Float32Array([1, 2, 3, 0]);
@@ -89,7 +126,7 @@ describe('EmbeddingWorker', () => {
       await loadWorker();
       expect(messageHandler).not.toBeNull();
 
-      await messageHandler!({ type: 'embed', id: 1, text: 'test query' });
+      await messageHandler!(onnxMessage({ type: 'embed', id: 1, text: 'test query' }));
 
       expect(mockPipeline).toHaveBeenCalledWith('feature-extraction', 'Xenova/bge-micro-v2', {
         quantized: true,
@@ -109,7 +146,7 @@ describe('EmbeddingWorker', () => {
 
       await loadWorker();
 
-      await messageHandler!({ type: 'embed', id: 2, text: 'will fail' });
+      await messageHandler!(onnxMessage({ type: 'embed', id: 2, text: 'will fail' }));
 
       expect(mockParentPort.postMessage).toHaveBeenCalledWith({
         type: 'error',
@@ -124,7 +161,7 @@ describe('EmbeddingWorker', () => {
 
       await loadWorker();
 
-      await messageHandler!({ type: 'embed', id: 3, text: 'will throw string' });
+      await messageHandler!(onnxMessage({ type: 'embed', id: 3, text: 'will throw string' }));
 
       expect(mockParentPort.postMessage).toHaveBeenCalledWith({
         type: 'error',
@@ -158,11 +195,13 @@ describe('EmbeddingWorker', () => {
 
       await loadWorker();
 
-      await messageHandler!({
-        type: 'embed_batch',
-        id: 4,
-        texts: ['text1', 'text2', 'text3'],
-      });
+      await messageHandler!(
+        onnxMessage({
+          type: 'embed_batch',
+          id: 4,
+          texts: ['text1', 'text2', 'text3'],
+        }),
+      );
 
       // One batched forward pass, not one call per text.
       expect(embedderFn).toHaveBeenCalledTimes(1);
@@ -195,11 +234,13 @@ describe('EmbeddingWorker', () => {
 
       await loadWorker();
 
-      await messageHandler!({
-        type: 'embed_batch',
-        id: 5,
-        texts: [],
-      });
+      await messageHandler!(
+        onnxMessage({
+          type: 'embed_batch',
+          id: 5,
+          texts: [],
+        }),
+      );
 
       expect(embedderFn).not.toHaveBeenCalled();
       expect(mockParentPort.postMessage).toHaveBeenCalledWith({
@@ -218,11 +259,13 @@ describe('EmbeddingWorker', () => {
 
       await loadWorker();
 
-      await messageHandler!({
-        type: 'embed_batch',
-        id: 6,
-        texts: ['ok', 'fail'],
-      });
+      await messageHandler!(
+        onnxMessage({
+          type: 'embed_batch',
+          id: 6,
+          texts: ['ok', 'fail'],
+        }),
+      );
 
       expect(mockParentPort.postMessage).toHaveBeenCalledWith({
         type: 'error',
@@ -242,11 +285,13 @@ describe('EmbeddingWorker', () => {
 
       await loadWorker();
 
-      await messageHandler!({
-        type: 'embed_batch',
-        id: 7,
-        texts: ['a', 'b'],
-      });
+      await messageHandler!(
+        onnxMessage({
+          type: 'embed_batch',
+          id: 7,
+          texts: ['a', 'b'],
+        }),
+      );
 
       expect(mockParentPort.postMessage).toHaveBeenCalledWith({
         type: 'result',
@@ -270,7 +315,7 @@ describe('EmbeddingWorker', () => {
       mockPipeline.mockResolvedValue(embedderFn);
 
       await loadWorker();
-      await messageHandler!({ type: 'embed', id: 7, text: 'test' });
+      await messageHandler!(onnxMessage({ type: 'embed', id: 7, text: 'test' }));
 
       // @ts-expect-error
       const resultArg = mockParentPort.postMessage.mock.calls[0][0];
@@ -287,7 +332,7 @@ describe('EmbeddingWorker', () => {
       mockPipeline.mockResolvedValue(embedderFn);
 
       await loadWorker();
-      await messageHandler!({ type: 'embed', id: 8, text: 'zero' });
+      await messageHandler!(onnxMessage({ type: 'embed', id: 8, text: 'zero' }));
 
       // @ts-expect-error
       const resultArg = mockParentPort.postMessage.mock.calls[0][0];
@@ -307,8 +352,8 @@ describe('EmbeddingWorker', () => {
 
       await loadWorker();
 
-      await messageHandler!({ type: 'embed', id: 10, text: 'first' });
-      await messageHandler!({ type: 'embed', id: 11, text: 'second' });
+      await messageHandler!(onnxMessage({ type: 'embed', id: 10, text: 'first' }));
+      await messageHandler!(onnxMessage({ type: 'embed', id: 11, text: 'second' }));
 
       // pipeline() should only be called once
       expect(mockPipeline).toHaveBeenCalledTimes(1);

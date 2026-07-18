@@ -6,6 +6,8 @@ import type { TabRegistry } from '@modules/browser/TabRegistry';
 import { getAllRegistrations, getAllKnownDomains } from '@server/registry/index';
 import { getSearchEngine } from '@server/MCPServer.search.helpers';
 import { getRuntimeState } from '@server/runtime/ServerRuntimeState';
+import { getEmbeddingDimensionHint } from '@server/search/EmbeddingModels';
+import { SEARCH_VECTOR_MODEL_ID } from '@src/constants/search';
 
 function asJsonResource(uri: string, payload: unknown) {
   return {
@@ -163,7 +165,9 @@ export function registerServerResources(ctx: MCPServerContext): void {
         trigramAvailable = true;
         embeddingAvailable = ctx.config.search.vectorEnabled ?? false;
         if (embeddingAvailable) {
-          embeddingDimension = 384;
+          embeddingDimension = getEmbeddingDimensionHint(
+            ctx.config.search.vectorModelId ?? SEARCH_VECTOR_MODEL_ID,
+          );
         }
         lastIndexedAt = new Date().toISOString();
       } catch {

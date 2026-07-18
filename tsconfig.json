@@ -5,6 +5,7 @@
     "lib": ["ES2023", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "paths": {
       "@src/*": ["./src/*"],
       "@extension-sdk/*": ["./packages/extension-sdk/src/*"],
